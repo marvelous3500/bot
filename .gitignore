@@ -1,0 +1,8 @@
+# Add this to .gitignore
+.env
+*.log
+trade_history/
+paper_trades.json
+__pycache__/
+*.pyc
+.DS_Store

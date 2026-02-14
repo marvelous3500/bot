@@ -1,0 +1,303 @@
+import time
+import config
+from datetime import datetime, timedelta
+from .connector_interface import get_connector, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
+from .paper_trading import PaperTrading
+from .trade_approver import TradeApprover
+from .strategies import ICTStrategy, LiquiditySweepStrategy, H1M5BOSStrategy, ConfluenceStrategy
+from .backtest import prepare_pdh_pdl
+from ai import get_signal_confidence, explain_trade, speak
+
+class LiveTradingEngine:
+    """Main live trading engine that runs strategies continuously."""
+
+    def __init__(self, strategy_name='pdh_pdl', paper_mode=True):
+        self.strategy_name = strategy_name
+        self.paper_mode = paper_mode
+        self.mt5 = get_connector(
+            login=config.MT5_LOGIN,
+            password=config.MT5_PASSWORD,
+            server=config.MT5_SERVER
+        )
+        if paper_mode:
+            self.paper = PaperTrading(
+                initial_balance=config.INITIAL_BALANCE,
+                log_file=config.PAPER_TRADING_LOG
+            )
+        if config.MANUAL_APPROVAL:
+            self.approver = TradeApprover()
+        self.trades_today = []
+        self.running = False
+
+    def connect(self):
+        return self.mt5.connect()
+
+    def disconnect(self):
+        self.mt5.disconnect()
+
+    def check_safety_limits(self):
+        today = datetime.now().date()
+        trades_count = len([t for t in self.trades_today if t['time'].date() == today])
+        if trades_count >= config.MAX_TRADES_PER_DAY:
+            print(f"[SAFETY] Daily trade limit reached ({config.MAX_TRADES_PER_DAY})")
+            return False
+        return True
+
+    def run_strategy(self):
+        symbol = list(config.LIVE_SYMBOLS.values())[0]
+        if self.strategy_name == 'pdh_pdl':
+            df_daily = self.mt5.get_bars(symbol, TIMEFRAME_D1, count=10)
+            df_5m = self.mt5.get_bars(symbol, TIMEFRAME_M5, count=500)
+            if df_daily is None or df_5m is None:
+                return []
+            strat = ICTStrategy(df_5m)
+            df_processed = strat.prepare_data()
+            pdh_series, pdl_series = prepare_pdh_pdl(df_processed, df_daily)
+            signals_df = strat.run_backtest(pdh_series, pdl_series)
+        elif self.strategy_name == 'liquidity_sweep':
+            df_4h = self.mt5.get_bars(symbol, TIMEFRAME_H4, count=100)
+            df_1h = self.mt5.get_bars(symbol, TIMEFRAME_H1, count=200)
+            df_15m = self.mt5.get_bars(symbol, TIMEFRAME_M15, count=500)
+            if df_4h is None or df_1h is None or df_15m is None:
+                return []
+            strat = LiquiditySweepStrategy(df_4h, df_1h, df_15m)
+            strat.prepare_data()
+            signals_df = strat.run_backtest()
+        elif self.strategy_name == 'h1_m5_bos':
+            df_h1 = self.mt5.get_bars(symbol, TIMEFRAME_H1, count=200)
+            df_5m = self.mt5.get_bars(symbol, TIMEFRAME_M5, count=1000)
+            if df_h1 is None or df_5m is None:
+                return []
+            strat = H1M5BOSStrategy(df_h1, df_5m)
+            strat.prepare_data()
+            signals_df = strat.run_backtest()
+        elif self.strategy_name == 'confluence':
+            df_4h = self.mt5.get_bars(symbol, TIMEFRAME_H4, count=100)
+            df_15m = self.mt5.get_bars(symbol, TIMEFRAME_M15, count=500)
+            if df_4h is None or df_15m is None:
+                return []
+            strat = ConfluenceStrategy(df_4h, df_15m)
+            strat.prepare_data()
+            signals_df = strat.run_backtest()
+        else:
+            print(f"Unknown strategy: {self.strategy_name}")
+            return []
+        if signals_df.empty:
+            return []
+        latest_signal = signals_df.iloc[-1].to_dict() if not signals_df.empty else None
+        if latest_signal:
+            tick = self.mt5.get_live_price(symbol)
+            if tick:
+                latest_signal['symbol'] = symbol
+                latest_signal['price'] = tick['ask'] if latest_signal['type'] == 'BUY' else tick['bid']
+                # Confluence: set SL from pips before lot calc (other strategies have sl from signal)
+                if self.strategy_name == 'confluence':
+                    sl_pips = getattr(config, 'CONFLUENCE_SL_PIPS', 50)
+                    info = self.mt5.get_symbol_info(symbol)
+                    pip_size = (info['point'] * 10) if info else 0.0001
+                    if 'XAU' in symbol.upper() or 'GOLD' in symbol.upper():
+                        pip_size = 0.1
+                    elif 'BTC' in symbol.upper():
+                        pip_size = 1.0
+                    elif 'NAS' in symbol.upper() or 'US100' in symbol.upper() or 'NDX' in symbol.upper():
+                        pip_size = 1.0
+                    sl_dist = sl_pips * pip_size
+                    if latest_signal['type'] == 'BUY':
+                        latest_signal['sl'] = latest_signal['price'] - sl_dist
+                    else:
+                        latest_signal['sl'] = latest_signal['price'] + sl_dist
+                sl_dist = abs(latest_signal['price'] - latest_signal.get('sl', 0))
+                if latest_signal['type'] == 'BUY':
+                    latest_signal['tp'] = latest_signal['price'] + (sl_dist * config.RISK_REWARD_RATIO)
+                else:
+                    latest_signal['tp'] = latest_signal['price'] - (sl_dist * config.RISK_REWARD_RATIO)
+                # Dynamic lot size: risk % of current balance (matches backtest)
+                use_dynamic = getattr(config, 'USE_DYNAMIC_POSITION_SIZING', True)
+                if use_dynamic and self.mt5.connected:
+                    account = self.paper.get_account_info() if self.paper_mode else self.mt5.get_account_info()
+                    balance = account['balance'] if account else 0
+                    sl = latest_signal.get('sl')
+                    if sl is not None and balance > 0:
+                        lot = self.mt5.calc_lot_size_from_risk(
+                            symbol, balance, latest_signal['price'], sl, config.RISK_PER_TRADE
+                        )
+                        if lot is not None:
+                            latest_signal['volume'] = lot
+                if latest_signal.get('volume') is None:
+                    latest_signal['volume'] = config.MAX_POSITION_SIZE
+                return [latest_signal]
+        return []
+
+    def _validate_signal_sl(self, signal):
+        sl = signal.get('sl')
+        if sl is None:
+            return False, "No stop loss"
+        try:
+            sl = float(sl)
+        except (TypeError, ValueError):
+            return False, "Stop loss invalid"
+        price = signal.get('price')
+        if price is None:
+            return True, None
+        try:
+            price = float(price)
+        except (TypeError, ValueError):
+            return True, None
+        order_type = signal.get('type')
+        if order_type == 'BUY' and sl >= price:
+            return False, "Stop loss invalid"
+        if order_type == 'SELL' and sl <= price:
+            return False, "Stop loss invalid"
+        return True, None
+
+    def execute_signal(self, signal):
+        valid, sl_reason = self._validate_signal_sl(signal)
+        if not valid:
+            print(f"[SAFETY] Rejected: {sl_reason}")
+            if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
+                speak(f"Trade rejected. Reason: {sl_reason}.")
+            return None
+        if not self.paper_mode and config.USE_MARGIN_CHECK:
+            account_info = self.mt5.get_account_info()
+            if account_info:
+                required = self.mt5.calc_required_margin(
+                    signal['symbol'], signal['type'], signal['volume'], signal['price']
+                )
+                if required is not None and account_info['free_margin'] < required:
+                    print(f"[SAFETY] Rejected: insufficient margin (free: {account_info['free_margin']:.2f}, required: {required:.2f})")
+                    if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
+                        speak("Trade rejected. Reason: Insufficient margin.")
+                    return None
+        if config.AI_ENABLED:
+            score = get_signal_confidence(signal)
+            if score is not None and score < config.AI_CONFIDENCE_THRESHOLD:
+                print(f"[AI] Rejected: confidence {score} below threshold {config.AI_CONFIDENCE_THRESHOLD}")
+                if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
+                    speak("Trade rejected. Reason: Below confidence threshold.")
+                return None
+        if config.MANUAL_APPROVAL:
+            account_info = self.paper.get_account_info() if self.paper_mode else self.mt5.get_account_info()
+            if not self.approver.request_approval(signal, account_info):
+                print("[REJECTED] Trade not approved by user")
+                if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
+                    speak("Trade rejected. Reason: Not approved by user.")
+                return None
+        if self.paper_mode:
+            result = self.paper.place_order(
+                symbol=signal['symbol'],
+                order_type=signal['type'],
+                volume=signal['volume'],
+                price=signal['price'],
+                sl=signal['sl'],
+                tp=signal['tp'],
+                comment=signal.get('reason', '')
+            )
+        else:
+            result = self.mt5.place_order(
+                symbol=signal['symbol'],
+                order_type=signal['type'],
+                volume=signal['volume'],
+                price=signal['price'],
+                sl=signal['sl'],
+                tp=signal['tp'],
+                comment=signal.get('reason', '')
+            )
+        if result:
+            result['time'] = datetime.now()
+            self.trades_today.append(result)
+            if config.VOICE_ALERTS and config.VOICE_ALERT_ON_SIGNAL:
+                speak(f"Trade executed. {signal['type']} {signal['symbol']} at {signal['price']}.")
+            if config.AI_EXPLAIN_TRADES:
+                summary = {
+                    'reason': signal.get('reason', ''),
+                    'symbol': signal.get('symbol', ''),
+                    'type': signal.get('type', ''),
+                    'price': signal.get('price'),
+                    'sl': signal.get('sl'),
+                    'tp': signal.get('tp'),
+                    'outcome': 'opened',
+                }
+                explanation = explain_trade(summary)
+                if explanation:
+                    result['ai_explain'] = explanation
+                    print(f"[AI] {explanation}")
+        return result
+
+    def update_positions(self):
+        if self.paper_mode:
+            closed = self.paper.update_positions(self.mt5)
+            if closed:
+                print(f"[UPDATE] {len(closed)} positions closed automatically")
+
+    def show_status(self):
+        if self.paper_mode:
+            account = self.paper.get_account_info()
+            stats = self.paper.get_stats()
+            print("\n" + "=" * 50)
+            print(f"PAPER TRADING STATUS - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            print("=" * 50)
+            print(f"Balance: ${account['balance']:.2f}")
+            print(f"Equity: ${account['equity']:.2f}")
+            print(f"Profit: ${account['profit']:.2f}")
+            print(f"\nOpen Positions: {len(self.paper.get_positions())}")
+            print(f"Total Trades: {stats['total_trades']}")
+            print(f"Win Rate: {stats['win_rate']:.1f}%")
+            print(f"Return: {stats['return_pct']:.2f}%")
+            print("=" * 50)
+        else:
+            account = self.mt5.get_account_info()
+            positions = self.mt5.get_positions()
+            print("\n" + "=" * 50)
+            print(f"LIVE TRADING STATUS - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            print("=" * 50)
+            print(f"Balance: ${account['balance']:.2f}")
+            print(f"Equity: ${account['equity']:.2f}")
+            print(f"Profit: ${account['profit']:.2f}")
+            print(f"Margin: ${account['margin']:.2f}")
+            print(f"Free Margin: ${account['free_margin']:.2f}")
+            print(f"\nOpen Positions: {len(positions)}")
+            print("=" * 50)
+
+    def run(self):
+        print(f"\nStarting {'PAPER' if self.paper_mode else 'LIVE'} trading engine...")
+        print(f"Strategy: {self.strategy_name}")
+        print(f"Check interval: {config.LIVE_CHECK_INTERVAL}s")
+        print(f"Manual approval: {'ON' if config.MANUAL_APPROVAL else 'OFF'}")
+        print(f"Max trades/day: {config.MAX_TRADES_PER_DAY}")
+        print("Press Ctrl+C to stop\n")
+        self.running = True
+        last_signal_time = None
+        try:
+            while self.running:
+                if not self.check_safety_limits():
+                    if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
+                        speak("Trade rejected. Reason: Daily trade limit reached.")
+                    print("Waiting... (daily limit reached)")
+                    time.sleep(config.LIVE_CHECK_INTERVAL)
+                    continue
+                self.update_positions()
+                signals = self.run_strategy()
+                for signal in signals:
+                    signal_time = signal.get('time', datetime.now())
+                    if last_signal_time and (signal_time - last_signal_time).total_seconds() < 300:
+                        continue
+                    print(f"\n[SIGNAL] {signal['type']} {signal['symbol']} @ {signal['price']:.5f}")
+                    if config.VOICE_ALERTS and config.VOICE_ALERT_ON_SIGNAL:
+                        reason = signal.get('reason', 'Strategy signal')
+                        speak(f"Trade found. {signal['type']} {signal['symbol']}. {reason}. Checking approval.")
+                    result = self.execute_signal(signal)
+                    if result:
+                        last_signal_time = datetime.now()
+                self.show_status()
+                print(f"\nNext check in {config.LIVE_CHECK_INTERVAL}s...")
+                time.sleep(config.LIVE_CHECK_INTERVAL)
+        except KeyboardInterrupt:
+            print("\n\nStopping trading engine...")
+            self.running = False
+        finally:
+            if config.MANUAL_APPROVAL and self.trades_today:
+                self.approver.show_daily_summary(self.trades_today)
+            self.show_status()
+            if self.paper_mode:
+                self.paper.save_session()
+            print("\nTrading engine stopped.")

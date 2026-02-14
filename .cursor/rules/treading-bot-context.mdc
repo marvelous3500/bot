@@ -1,0 +1,46 @@
+---
+description: ICT Trading Bot — project context, architecture, and patterns (always use for this codebase)
+alwaysApply: true
+---
+
+# Treading-Bot (ICT Trading Bot) — Context
+
+**Always use this rule when editing or discussing code in this project.**
+
+## Project Summary
+
+Python ICT-style trading bot: **backtest** (Yahoo/CSV), **paper**, **live** (MetaTrader 5), and **replay**. Four strategies: `pdh_pdl`, `liquidity_sweep`, `h1_m5_bos`, `confluence`. Optional **AI** (confidence + explain) and **voice** alerts. Single config in `config.py`. Code layout: **ai/** (AI + voice), **bot/** (strategies, backtest, data_loader, indicators, live_trading, replay_engine, etc.).
+
+## Architecture (Concise)
+
+- **Entry:** `main.py` CLI (`--mode`, `--strategy`, `--csv`, `--symbol`) → `bot.backtest` or `bot.live_trading.LiveTradingEngine` or `bot.replay_engine.run_replay`.
+- **Backtest:** `bot/backtest/` loads data via `bot/data_loader` → Strategy in `bot/strategies/` (`prepare_data()` → `run_backtest()`) → bar-by-bar SL/TP simulation → print results.
+- **Live/Paper:** `bot/live_trading.LiveTradingEngine` gets MT5 bars → runs same strategies → optional `TradeApprover` → `PaperTrading` or `MT5Connector`; optional AI confidence and voice; loop every `LIVE_CHECK_INTERVAL`.
+
+## Conventions
+
+- **Strategies:** Class with `prepare_data()` (indicators) and `run_backtest()` returning a DataFrame of signals: `time`, `type` ('BUY'|'SELL'), `price`, `sl`, `reason`.
+- **Indicators:** Functions in `bot/indicators.py` / `bot/indicators_bos.py` that take a DataFrame and return it with new columns (e.g. `fvg_bull`, `ob_bear`, `ema_50`). Strategies in `bot/strategies/` call them inside `prepare_data()`.
+- **Data:** OHLCV columns lowercase (`open`, `high`, `low`, `close`, `volume`); datetime index; timezone-naive in backtests.
+- **Config:** Use `config` module for all settings; secrets from `.env` via config (MT5_LOGIN, etc.).
+
+## File Roles
+
+| Area | Location |
+|------|----------|
+| Config / env | `config.py`, `.env.example` |
+| AI / voice | `ai/helper.py`, `ai/voice.py` |
+| Data | `bot/data_loader.py`, `bot/mt5_connector.py` |
+| Indicators | `bot/indicators.py`, `bot/indicators_bos.py` |
+| Strategies | `bot/strategies/` (strategy.py, strategy_liquidity.py, strategy_bos.py, strategy_confluence.py) |
+| Backtest | `bot/backtest/` (per-strategy runners) |
+| Live / paper / replay | `bot/live_trading.py`, `bot/paper_trading.py`, `bot/trade_approver.py`, `bot/replay_engine.py` |
+
+## When Changing Code
+
+- New strategy: add strategy class in `bot/strategies/` (`prepare_data` + `run_backtest`), add backtest runner in `bot/backtest/`, wire in `main.py` and `bot/live_trading.run_strategy()`.
+- New indicator: add function in `bot/indicators.py` (or new module) returning DataFrame with new columns; call from strategy `prepare_data()`.
+- **PDH/PDL (pdh_pdl):** `ICTStrategy` in `bot/strategies/strategy.py` expects one 5m DataFrame; PDH/PDL are passed as series to `run_backtest(pdh_series, pdl_series)`. Live engine uses `prepare_pdh_pdl()` from `bot.backtest` and calls `run_backtest(pdh_series, pdl_series)`.
+- **Live safety:** SL is enforced in `execute_signal()` (`_validate_signal_sl`); optional margin check and approval timeout. See `LIVE_TRADING_GUIDE.md`.
+
+**Full details:** `ONBOARDING.md`; live trading: `LIVE_TRADING_GUIDE.md`.

@@ -1,0 +1,31 @@
+# Install on Windows only (for paper/live trading). Not available on Mac.
+# First install base deps: pip install -r requirements.txt
+# Then: pip install -r requirements-windows.txt
+
+MetaTrader5>=5.0.45
+
+# --- Example commands ---
+#
+# Backtest (default: pdh_pdl, GC=F):
+#   python main.py --mode backtest
+#
+# Backtest specific strategy and symbol:
+#   python main.py --mode backtest --strategy liquidity_sweep --symbol "GC=F"
+#   python main.py --mode backtest --strategy confluence --symbol "GBPUSD=X"
+#
+# Replay (live-style flow on history, no MT5):
+#   python main.py --mode replay --strategy liquidity_sweep --symbol "GBPUSD=X"
+#
+# Paper trading (needs MT5 on Windows):
+#   python main.py --mode paper --strategy liquidity_sweep
+#
+# Live trading (real orders, needs MT5 on Windows):
+#   python main.py --mode live --strategy confluence
+#
+# --strategy: pdh_pdl | liquidity_sweep | h1_m5_bos | confluence
+# --symbol:   GC=F, GBPUSD=X, BTC-USD, ^NDX
+# --csv:      path to CSV for backtest/replay
+
+
+# to run the bot on production open MetaTrader5 and connect it then run the command bellow
+#python main.py --mode live

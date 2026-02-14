@@ -1,0 +1,103 @@
+# Trading Pairs (Yahoo Finance Tickers) — first is default for backtest/CLI
+# GBPUSD=X : GBP/USD (default)
+# GC=F : Gold Futures
+# BTC-USD : Bitcoin
+# ^NDX : Nasdaq 100 Index
+SYMBOLS = ['GBPUSD=X', 'GC=F', 'BTC-USD', '^NDX']
+
+# Timeframe settings
+TIMEFRAME = '15m'
+DAILY_TIMEFRAME = '1d'
+
+# Risk Management
+RISK_REWARD_RATIO =3.0  # 1:3 Risk:Reward
+
+# Backtesting
+INITIAL_BALANCE = 100
+RISK_PER_TRADE = 0.10  # 10% risk per trade
+BACKTEST_MAX_TRADES = None  # Stop after N trades (None = no limit)
+BACKTEST_PERIOD = '60d'  # Data period: 12d, 60d, 6mo (set before run)
+
+# Filters
+USE_EMA_FILTER = False
+EMA_PERIOD = 50 
+
+# Kill Zones (UTC Hour) - Full sessions for better sample size
+# London: 07:00 - 10:00  
+# NY: 13:00 - 16:00
+USE_KILL_ZONES = True
+KILL_ZONE_HOURS = [7, 8, 9, 10, 13, 14, 15, 16]
+
+# Advanced Filters for higher win rate  
+REQUIRE_BOTH_FVG_AND_OB = False  # FVG OR OB (requiring both is too strict)
+USE_DISPLACEMENT_FILTER = False   # Require strong institutional move  
+USE_MARKET_STRUCTURE_FILTER = False  # Degraded performance when enabled
+
+# Live Trading Settings
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # Load from .env file
+
+LIVE_MODE = False  # True = real money, False = paper trading
+MANUAL_APPROVAL = True  # Require confirmation before each trade
+MAX_TRADES_PER_DAY = 3
+MAX_POSITION_SIZE = 0.01  # Fallback lot size when dynamic calc fails
+USE_DYNAMIC_POSITION_SIZING = True  # Risk % of current balance per trade (matches backtest)
+PAPER_TRADING_LOG = 'paper_trades.json'
+
+# MT5 Settings (loaded from environment variables for security)
+MT5_LOGIN = os.getenv('MT5_LOGIN')  # Your MT5 account number
+MT5_PASSWORD = os.getenv('MT5_PASSWORD')  # Your MT5 password
+MT5_SERVER = os.getenv('MT5_SERVER', 'Exness-MT5Trial')  # Your Exness MT5 server
+
+# MetaApi (for Mac/Linux or when you prefer cloud API; get token at https://app.metaapi.cloud/token)
+USE_METAAPI = os.getenv('USE_METAAPI', 'false').lower() in ('true', '1', 'yes')
+METAAPI_TOKEN = os.getenv('METAAPI_TOKEN')  # Required when USE_METAAPI=True
+METAAPI_ACCOUNT_ID = os.getenv('METAAPI_ACCOUNT_ID')  # MT5 account UUID from https://app.metaapi.cloud/accounts
+METAAPI_REGION = os.getenv('METAAPI_REGION', 'new-york')  # Optional: new-york, london, singapore, etc.
+
+# Live Trading Symbols (MT5 format) — first is default for paper/live
+LIVE_SYMBOLS = {
+    'GBPUSD': 'GBPUSD',
+    'XAUUSD': 'XAUUSD',
+    'BTCUSD': 'BTCUSD',
+    'NAS100': 'NAS100'
+}
+
+# Trading Loop Settings
+LIVE_CHECK_INTERVAL = 60  # Seconds between strategy checks
+USE_MARGIN_CHECK = True   # Pre-trade margin check for live mode (skip if insufficient free margin)
+
+# Confluence strategy: fixed stop loss in pips (4H structure + 15m OB entry)
+CONFLUENCE_SL_PIPS = 50
+
+# Liquidity sweep (4H → 1H → 15m): max 1H bars to wait for confirmation after 4H sweep; max 15m bars for entry after 1H confirm
+LIQUIDITY_1H_CONFIRM_BARS = 12
+LIQUIDITY_15M_ENTRY_BARS = 12
+# Liquidity-specific: set False to ignore kill zone / EMA for more trades
+LIQUIDITY_USE_KILL_ZONES = True
+LIQUIDITY_USE_EMA_FILTER = True
+# Require 15m FVG/OB/rejection for entry; False = enter on any 15m candle in direction
+LIQUIDITY_REQUIRE_15M_CONFIRM = True
+# Require 1H sweep or rejection (not just any candle); True = stricter, fewer but higher-quality trades
+LIQUIDITY_STRICT_1H_CONFIRM = True
+
+# H1-M5 BOS: filters to reduce trades and improve win rate
+BOS_USE_KILL_ZONES = True   # Only trade during London/NY sessions
+BOS_USE_EMA_FILTER = True   # Require price in direction of EMA
+BOS_DISPLACEMENT_RATIO = 0.7  # Candle body must be 70% of range (stricter than 0.6)
+BOS_M5_WINDOW_HOURS = 2    # Max hours to wait for M5 entry after H1 BOS (was 4)
+
+# Replay mode: run strategy every N bars (1 = every bar, most trades; 4 = faster, may miss some)
+REPLAY_STEP_BARS = 1
+
+# AI (OpenAI key from .env OPENAI_API_KEY)
+AI_ENABLED = False
+AI_CONFIDENCE_THRESHOLD = 2.0  # 1-5 scale; skip trade if confidence below this
+AI_EXPLAIN_TRADES = False
+
+# Voice alerts (pyttsx3)
+VOICE_ALERTS = False
+VOICE_ALERT_ON_SIGNAL = True   # speak when trade found / about to take
+VOICE_ALERT_ON_REJECT = True   # speak when trade rejected and why

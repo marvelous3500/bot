@@ -1,0 +1,10 @@
+# Core dependencies (Mac + Windows). Backtest works with these only.
+pandas
+yfinance
+python-dotenv
+openai
+pyttsx3
+requests
+
+# MetaTrader5 is Windows-only. For paper/live on Windows: pip install -r requirements-windows.txt
+# For paper/live on Mac: set USE_METAAPI=true and METAAPI_TOKEN, METAAPI_ACCOUNT_ID in .env (no extra pip install)
