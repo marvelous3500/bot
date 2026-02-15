@@ -63,8 +63,9 @@ class MT5Connector:
                 if os.path.isfile(path_exe):
                     try:
                         subprocess.Popen([path_exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        print("Started MT5 terminal (same session), waiting 10s...")
+                        print("Started MT5 terminal (same session). Waiting 10s for it to load, then connecting...")
                         time.sleep(10)
+                        print("Connecting to MT5 now...")
                         started_terminal = True
                         continue  # retry initialize without counting as attempt
                     except Exception as e:
