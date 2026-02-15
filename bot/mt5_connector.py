@@ -26,6 +26,8 @@ def _print_mt5_hint(step, err):
         elif code == -10001:
             hints.append("  → MT5 terminal not found. Install MetaTrader 5 (from your broker, e.g. Exness) and run it at least once.")
     elif step == "login":
+        if code == -2 or "invalid" in msg or "param" in msg:
+            hints.append("  → Invalid argument: MT5_LOGIN must be a number (e.g. 298444944). MT5_PASSWORD and MT5_SERVER must be non-empty in .env.")
         if code == -6 or "auth" in msg or "invalid" in msg:
             hints.append("  → Exness Trial: MT5_SERVER=Exness-MT5Trial9. Exness Real: MT5_SERVER=Exness-MT5Real9. Login and Server must match the account type.")
             hints.append("  → Log in once in the MT5 app (File → Open an account / Login) with the same Login and Server — then use that exact Server name in .env.")
@@ -103,8 +105,16 @@ class MT5Connector:
             print(f"MT5 initialize() failed: {err}")
             _print_mt5_hint("initialize", err)
             return False
-        if self.login and self.password and self.server:
-            authorized = mt5.login(self.login, password=self.password, server=self.server)
+        if self.login is not None and self.password and self.server:
+            # MT5 API expects login as int; from .env it's a string
+            login_val = self.login
+            if isinstance(login_val, str):
+                login_val = login_val.strip()
+                try:
+                    login_val = int(login_val)
+                except (ValueError, TypeError):
+                    pass
+            authorized = mt5.login(login=login_val, password=self.password, server=self.server)
             if not authorized:
                 err = mt5.last_error()
                 print(f"MT5 login failed: {err}")
