@@ -13,7 +13,12 @@ def _print_mt5_hint(step, err):
     msg = (err[1] or "").lower() if isinstance(err, (tuple, list)) and len(err) >= 2 else ""
     hints = []
     if step == "initialize":
-        if code == -10005 or "ipc" in msg or "timeout" in msg:
+        if code == -6 or "auth" in msg or "authorization" in msg:
+            hints.append("  → Authorization failed: .env login/password/server must match an account that works in the MT5 app.")
+            hints.append("  → Exness Trial/demo: MT5_SERVER=Exness-MT5Trial9. Exness Real: MT5_SERVER=Exness-MT5Real9 (use the server name MT5 shows for your account).")
+            hints.append("  → In MT5: File → Open an account, or log in with your account — copy that exact Login and Server into .env.")
+            hints.append("  → Close MT5 completely, then run the bot again so it logs in with your .env credentials.")
+        elif code == -10005 or "ipc" in msg or "timeout" in msg:
             hints.append("  → Use Command Prompt or PowerShell (not Git Bash): cmd or powershell, then python main.py --mode live")
             hints.append("  → Close MT5 completely, then run the bot — it will start MT5 and try to connect (wait 15s).")
             hints.append("  → Or: start MT5 as Administrator (right-click → Run as administrator), then run the bot from an Administrator cmd/powershell.")
@@ -22,8 +27,9 @@ def _print_mt5_hint(step, err):
             hints.append("  → MT5 terminal not found. Install MetaTrader 5 (from your broker, e.g. Exness) and run it at least once.")
     elif step == "login":
         if code == -6 or "auth" in msg or "invalid" in msg:
-            hints.append("  → Check MT5_LOGIN, MT5_PASSWORD, MT5_SERVER in .env. Server must match exactly (e.g. Exness-MT5Trial vs Exness-MT5).")
-            hints.append("  → Log in once in the MT5 app with the same account to confirm credentials work.")
+            hints.append("  → Exness Trial: MT5_SERVER=Exness-MT5Trial9. Exness Real: MT5_SERVER=Exness-MT5Real9. Login and Server must match the account type.")
+            hints.append("  → Log in once in the MT5 app (File → Open an account / Login) with the same Login and Server — then use that exact Server name in .env.")
+            hints.append("  → Wrong server (e.g. Trial server for a real account) causes 'Invalid account' or 'Authorization failed'.")
     if hints:
         print("Troubleshooting:")
         for h in hints:
