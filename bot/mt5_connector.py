@@ -3,6 +3,28 @@ import pandas as pd
 from datetime import datetime
 import time
 
+
+def _print_mt5_hint(step, err):
+    """Print a short hint for common MT5 errors. err is (code, message) from mt5.last_error()."""
+    code = err[0] if isinstance(err, (tuple, list)) and len(err) >= 1 else None
+    msg = (err[1] or "").lower() if isinstance(err, (tuple, list)) and len(err) >= 2 else ""
+    hints = []
+    if step == "initialize":
+        if code == -10005 or "ipc" in msg or "timeout" in msg:
+            hints.append("  → MT5 terminal may not be running. Start MetaTrader 5 from the Start menu, then run the bot again.")
+            hints.append("  → If MT5 is installed in a custom path, set MT5_PATH in .env and use it in initialize (see docs).")
+        elif code == -10001:
+            hints.append("  → MT5 terminal not found. Install MetaTrader 5 (from your broker, e.g. Exness) and run it at least once.")
+    elif step == "login":
+        if code == -6 or "auth" in msg or "invalid" in msg:
+            hints.append("  → Check MT5_LOGIN, MT5_PASSWORD, MT5_SERVER in .env. Server must match exactly (e.g. Exness-MT5Trial vs Exness-MT5).")
+            hints.append("  → Log in once in the MT5 app with the same account to confirm credentials work.")
+    if hints:
+        print("Troubleshooting:")
+        for h in hints:
+            print(h)
+
+
 class MT5Connector:
     """Handles all interactions with MetaTrader 5 platform."""
 
@@ -19,13 +41,17 @@ class MT5Connector:
         print(f"  Password: {'****' if self.password else '(not set)'}")
         print("Connecting...")
         if not mt5.initialize():
-            print(f"MT5 initialize() failed, error code: {mt5.last_error()}")
+            err = mt5.last_error()
+            print(f"MT5 initialize() failed: {err}")
+            _print_mt5_hint("initialize", err)
             return False
         print("MT5 initialize() successful.")
         if self.login and self.password and self.server:
             authorized = mt5.login(self.login, password=self.password, server=self.server)
             if not authorized:
-                print(f"MT5 login failed, error code: {mt5.last_error()}")
+                err = mt5.last_error()
+                print(f"MT5 login failed: {err}")
+                _print_mt5_hint("login", err)
                 mt5.shutdown()
                 return False
             print(f"Connected to MT5 — account #{self.login} on {self.server}")
