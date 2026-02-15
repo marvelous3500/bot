@@ -11,8 +11,9 @@ def _print_mt5_hint(step, err):
     hints = []
     if step == "initialize":
         if code == -10005 or "ipc" in msg or "timeout" in msg:
-            hints.append("  → MT5 terminal may not be running. Start MetaTrader 5 from the Start menu, then run the bot again.")
-            hints.append("  → If MT5 is installed in a custom path, set MT5_PATH in .env and use it in initialize (see docs).")
+            hints.append("  → IPC timeout: run the bot from a NON-ADMINISTRATOR prompt (same user as MT5).")
+            hints.append("  → Do not run PowerShell/CMD as Administrator. Open a normal prompt and run: python main.py --mode paper")
+            hints.append("  → In MT5, enable 'Algo Trading' (button in the toolbar).")
         elif code == -10001:
             hints.append("  → MT5 terminal not found. Install MetaTrader 5 (from your broker, e.g. Exness) and run it at least once.")
     elif step == "login":
