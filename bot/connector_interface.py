@@ -29,7 +29,7 @@ def get_connector(login=None, password=None, server=None):
         from .mt5_connector import MT5Connector
         return MT5Connector(login=login, password=password, server=server)
     except ImportError:
-        if token:
+        if use_metaapi and token:
             from .metaapi_connector import MetaApiConnector
             return MetaApiConnector(login=login, password=password, server=server, token=token)
         raise ImportError(
