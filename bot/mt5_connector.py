@@ -13,6 +13,11 @@ class MT5Connector:
         self.connected = False
 
     def connect(self):
+        print("MT5 credentials (before connect):")
+        print(f"  Login:  {self.login}")
+        print(f"  Server: {self.server}")
+        print(f"  Password: {'****' if self.password else '(not set)'}")
+        print("Connecting...")
         if not mt5.initialize():
             print(f"MT5 initialize() failed, error code: {mt5.last_error()}")
             return False
@@ -22,7 +27,7 @@ class MT5Connector:
                 print(f"MT5 login failed, error code: {mt5.last_error()}")
                 mt5.shutdown()
                 return False
-            print(f"Connected to MT5 account #{self.login}")
+            print(f"Connected to MT5 — account #{self.login} on {self.server}")
         else:
             print("Connected to MT5 (no account login)")
         self.connected = True
