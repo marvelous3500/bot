@@ -50,6 +50,10 @@ PAPER_TRADING_LOG = 'paper_trades.json'
 MT5_LOGIN = os.getenv('MT5_LOGIN')  # Your MT5 account number
 MT5_PASSWORD = os.getenv('MT5_PASSWORD')  # Your MT5 password
 MT5_SERVER = os.getenv('MT5_SERVER', 'Exness-MT5Trial')  # Your Exness MT5 server
+# Optional: full path to terminal64.exe if connection fails (e.g. multiple MT5 installs or IPC timeout)
+# On Windows: right‑click MT5 shortcut → Open file location; path is like C:\Program Files\...\terminal64.exe
+# In .env use forward slashes: MT5_PATH=C:/Program Files/MetaTrader 5/terminal64.exe
+MT5_PATH = os.getenv('MT5_PATH')  # None = auto-detect
 
 # Live Trading Symbols (MT5 format) — first is default for paper/live
 LIVE_SYMBOLS = {

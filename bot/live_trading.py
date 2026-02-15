@@ -17,7 +17,8 @@ class LiveTradingEngine:
         self.mt5 = get_connector(
             login=config.MT5_LOGIN,
             password=config.MT5_PASSWORD,
-            server=config.MT5_SERVER
+            server=config.MT5_SERVER,
+            path=getattr(config, 'MT5_PATH', None)
         )
         if paper_mode:
             self.paper = PaperTrading(

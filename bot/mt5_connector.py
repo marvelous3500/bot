@@ -28,10 +28,11 @@ def _print_mt5_hint(step, err):
 class MT5Connector:
     """Handles all interactions with MetaTrader 5 platform."""
 
-    def __init__(self, login=None, password=None, server=None):
+    def __init__(self, login=None, password=None, server=None, path=None):
         self.login = login
         self.password = password
         self.server = server
+        self.path = path  # Optional path to terminal64.exe (use if connection fails)
         self.connected = False
 
     def connect(self):
@@ -39,8 +40,11 @@ class MT5Connector:
         print(f"  Login:  {self.login}")
         print(f"  Server: {self.server}")
         print(f"  Password: {'****' if self.password else '(not set)'}")
+        if self.path:
+            print(f"  Path:   {self.path}")
         print("Connecting...")
-        if not mt5.initialize():
+        init_kw = {"path": self.path} if self.path else {}
+        if not mt5.initialize(**init_kw):
             err = mt5.last_error()
             print(f"MT5 initialize() failed: {err}")
             _print_mt5_hint("initialize", err)
