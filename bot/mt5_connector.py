@@ -11,9 +11,9 @@ def _print_mt5_hint(step, err):
     hints = []
     if step == "initialize":
         if code == -10005 or "ipc" in msg or "timeout" in msg:
-            hints.append("  → IPC timeout: run the bot from a NON-ADMINISTRATOR prompt (same user as MT5).")
-            hints.append("  → Do not run PowerShell/CMD as Administrator. Open a normal prompt and run: python main.py --mode paper")
-            hints.append("  → In MT5, enable 'Algo Trading' (button in the toolbar).")
+            hints.append("  → Close MT5 completely (File → Exit). Then run the bot again — it will start MT5 via the API (same session).")
+            hints.append("  → Or run bot and MT5 in the same context: both as Administrator, or both from a normal (non-admin) prompt.")
+            hints.append("  → In MT5, enable 'Algo Trading' (toolbar). Ensure MT5_PATH in .env points to your terminal64.exe.")
         elif code == -10001:
             hints.append("  → MT5 terminal not found. Install MetaTrader 5 (from your broker, e.g. Exness) and run it at least once.")
     elif step == "login":
@@ -45,12 +45,20 @@ class MT5Connector:
             print(f"  Path:   {self.path}")
         print("Connecting...")
         init_kw = {"path": self.path} if self.path else {}
-        if not mt5.initialize(**init_kw):
+        max_tries = 3
+        for attempt in range(1, max_tries + 1):
+            if mt5.initialize(**init_kw):
+                print("MT5 initialize() successful.")
+                break
             err = mt5.last_error()
+            code = err[0] if isinstance(err, (tuple, list)) and len(err) >= 1 else None
+            if attempt < max_tries and code == -10005:
+                print(f"MT5 initialize() attempt {attempt}/{max_tries} failed (IPC timeout), retrying in 4s...")
+                time.sleep(4)
+                continue
             print(f"MT5 initialize() failed: {err}")
             _print_mt5_hint("initialize", err)
             return False
-        print("MT5 initialize() successful.")
         if self.login and self.password and self.server:
             authorized = mt5.login(self.login, password=self.password, server=self.server)
             if not authorized:
