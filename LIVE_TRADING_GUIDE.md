@@ -23,19 +23,7 @@ python main.py --mode live --strategy pdh_pdl
 
 **Requirements:** MT5 terminal must be running and logged in (or credentials in `.env`). The bot connects to MT5, runs the selected strategy every `LIVE_CHECK_INTERVAL` seconds, and executes or simulates trades when signals pass all safety checks.
 
-**Installation:** On **Mac**, `pip install -r requirements.txt` installs core deps only (MetaTrader5 is Windows-only on PyPI). Backtest works on Mac; for paper/live use **Windows** and run `pip install -r requirements-windows.txt` after the main requirements.
-
-### Running on Mac (MetaApi)
-
-You can run **paper** and **live** on Mac without a Windows VM by using the **MetaApi** cloud connector (same REST API as MT5, no local terminal).
-
-1. Get a token at [https://app.metaapi.cloud/token](https://app.metaapi.cloud/token).
-2. Add your MT5 account at [https://app.metaapi.cloud/accounts](https://app.metaapi.cloud/accounts) (login, password, server). Copy the **account ID** (UUID).
-3. In `.env` set:
-   - `USE_METAAPI=true`
-   - `METAAPI_TOKEN=<your token>`
-   - `METAAPI_ACCOUNT_ID=<account UUID>`
-4. Run as usual: `python main.py --mode paper` or `--mode live`. The bot will use MetaApi instead of the local MT5 package.
+**Installation:** On **Mac**, `pip install -r requirements.txt` installs core deps only (MetaTrader5 is Windows-only on PyPI). Backtest works on Mac; for paper/live use **Windows** or a **Windows VPS** and run `pip install -r requirements-windows.txt` after the main requirements.
 
 ---
 
@@ -53,8 +41,6 @@ You can run **paper** and **live** on Mac without a Windows VM by using the **Me
 | `LIVE_CHECK_INTERVAL` | Seconds between strategy runs | `60` |
 | `USE_MARGIN_CHECK` | Pre-trade margin check in live mode | `True` |
 | `MT5_LOGIN` / `MT5_PASSWORD` / `MT5_SERVER` | From `.env`; server default is **Exness-MT5Trial** | — |
-| `USE_METAAPI` | Use MetaApi cloud connector (Mac/Linux or optional on Windows) | `false` |
-| `METAAPI_TOKEN` / `METAAPI_ACCOUNT_ID` | From `.env` when `USE_METAAPI=true`; get token at app.metaapi.cloud | — |
 | `LIVE_SYMBOLS` | MT5 symbols (e.g. XAUUSD, GBPUSD) | `{'XAUUSD': 'XAUUSD', 'GBPUSD': 'GBPUSD'}` |
 
 #### AI (optional)

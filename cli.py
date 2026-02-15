@@ -150,10 +150,8 @@ def run_paper_or_live(args):
         from bot.live_trading import LiveTradingEngine
     except ImportError as e:
         err = str(e).lower()
-        if "metatrader5" in err or "metaapi" in err:
-            print("Paper/live on Mac/Linux: set USE_METAAPI=true and add METAAPI_TOKEN and METAAPI_ACCOUNT_ID to .env")
-            print("  Get a token at https://app.metaapi.cloud/token")
-            print("  Add your MT5 account at https://app.metaapi.cloud/accounts and copy the account ID")
+        if "metatrader5" in err:
+            print("Paper/live requires MetaTrader 5 (Windows only). Run on a Windows machine or Windows VPS with MT5 installed.")
             return
         raise
     paper_mode = args.mode == "paper"
@@ -162,8 +160,7 @@ def run_paper_or_live(args):
         paper_mode=paper_mode,
     )
     if not engine.connect():
-        print("Failed to connect. If using MetaApi: check METAAPI_TOKEN and METAAPI_ACCOUNT_ID in .env and that the account is deployed.")
-        print("If using MT5: ensure MT5 terminal is running and credentials in .env are correct.")
+        print("Failed to connect. Ensure MT5 terminal is installed/running and credentials in .env are correct.")
         return
     try:
         engine.run()

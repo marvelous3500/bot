@@ -51,12 +51,6 @@ MT5_LOGIN = os.getenv('MT5_LOGIN')  # Your MT5 account number
 MT5_PASSWORD = os.getenv('MT5_PASSWORD')  # Your MT5 password
 MT5_SERVER = os.getenv('MT5_SERVER', 'Exness-MT5Trial')  # Your Exness MT5 server
 
-# MetaApi (for Mac/Linux or when you prefer cloud API; get token at https://app.metaapi.cloud/token)
-USE_METAAPI = os.getenv('USE_METAAPI', 'false').lower() in ('true', '1', 'yes')
-METAAPI_TOKEN = os.getenv('METAAPI_TOKEN')  # Required when USE_METAAPI=True
-METAAPI_ACCOUNT_ID = os.getenv('METAAPI_ACCOUNT_ID')  # MT5 account UUID from https://app.metaapi.cloud/accounts
-METAAPI_REGION = os.getenv('METAAPI_REGION', 'new-york')  # Optional: new-york, london, singapore, etc.
-
 # Live Trading Symbols (MT5 format) — first is default for paper/live
 LIVE_SYMBOLS = {
     'GBPUSD': 'GBPUSD',

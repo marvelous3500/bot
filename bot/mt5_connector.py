@@ -21,6 +21,7 @@ class MT5Connector:
         if not mt5.initialize():
             print(f"MT5 initialize() failed, error code: {mt5.last_error()}")
             return False
+        print("MT5 initialize() successful.")
         if self.login and self.password and self.server:
             authorized = mt5.login(self.login, password=self.password, server=self.server)
             if not authorized:
@@ -115,7 +116,7 @@ class MT5Connector:
             'time': datetime.fromtimestamp(tick.time)
         }
 
-    # Map string timeframes (used when same code path as MetaApi) to MT5 constants
+    # Map string timeframes (used by live_trading) to MT5 constants
     _TIMEFRAME_MAP = {
         '1m': mt5.TIMEFRAME_M1,
         '5m': mt5.TIMEFRAME_M5,
