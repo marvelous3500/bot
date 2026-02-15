@@ -14,10 +14,10 @@ def _print_mt5_hint(step, err):
     hints = []
     if step == "initialize":
         if code == -10005 or "ipc" in msg or "timeout" in msg:
-            hints.append("  → Do NOT run from Git Bash. Use Command Prompt or PowerShell: open cmd or powershell, then python main.py --mode live")
-            hints.append("  → Close MT5 completely (File → Exit). Then run the bot again so it can start MT5 in the same session.")
-            hints.append("  → Run bot and MT5 in the same context: both as Administrator, or both from a normal (non-admin) prompt.")
-            hints.append("  → In MT5, enable 'Algo Trading' (toolbar). MT5_PATH in .env must point to your terminal64.exe.")
+            hints.append("  → Use Command Prompt or PowerShell (not Git Bash): cmd or powershell, then python main.py --mode live")
+            hints.append("  → Close MT5 completely, then run the bot — it will start MT5 and try to connect (wait 15s).")
+            hints.append("  → Or: start MT5 as Administrator (right-click → Run as administrator), then run the bot from an Administrator cmd/powershell.")
+            hints.append("  → In MT5 enable 'Algo Trading' (toolbar). Allow Python and terminal64.exe in Windows Firewall / antivirus if needed.")
         elif code == -10001:
             hints.append("  → MT5 terminal not found. Install MetaTrader 5 (from your broker, e.g. Exness) and run it at least once.")
     elif step == "login":
@@ -33,11 +33,12 @@ def _print_mt5_hint(step, err):
 class MT5Connector:
     """Handles all interactions with MetaTrader 5 platform."""
 
-    def __init__(self, login=None, password=None, server=None, path=None):
+    def __init__(self, login=None, password=None, server=None, path=None, auto_start=True):
         self.login = login
         self.password = password
         self.server = server
-        self.path = path  # Optional path to terminal64.exe (use if connection fails)
+        self.path = path
+        self.auto_start = auto_start  # When True and path set, start MT5 at the beginning (same session)
         self.connected = False
 
     def connect(self):
@@ -48,26 +49,45 @@ class MT5Connector:
         if self.path:
             print(f"  Path:   {self.path}")
         print("Connecting...")
-        init_kw = {"path": self.path} if self.path else {}
         max_tries = 3
         started_terminal = False
+        try_without_path = False
+        # Option: start MT5 at the beginning so the bot opens it (same session, often fixes IPC)
+        if self.auto_start and self.path and sys.platform == "win32":
+            path_exe = self.path.replace("/", os.sep)
+            if os.path.isfile(path_exe):
+                try:
+                    subprocess.Popen([path_exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    print("Starting MT5 terminal... Waiting 15s for it to load.")
+                    time.sleep(15)
+                    print("Connecting to MT5 (auto-detect)...")
+                    started_terminal = True
+                    try_without_path = True
+                except Exception as e:
+                    print(f"Could not start MT5: {e}")
         for attempt in range(1, max_tries + 1):
+            if try_without_path:
+                init_kw = {}
+                try_without_path = False
+            else:
+                init_kw = {"path": self.path} if self.path else {}
             if mt5.initialize(**init_kw):
                 print("MT5 initialize() successful.")
                 break
             err = mt5.last_error()
             code = err[0] if isinstance(err, (tuple, list)) and len(err) >= 1 else None
-            # On Windows, if IPC timeout and we have path, start the terminal ourselves (same session)
+            # If we didn't auto-start and get IPC timeout, start the terminal now and retry
             if code == -10005 and self.path and sys.platform == "win32" and not started_terminal:
                 path_exe = self.path.replace("/", os.sep)
                 if os.path.isfile(path_exe):
                     try:
                         subprocess.Popen([path_exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        print("Started MT5 terminal (same session). Waiting 10s for it to load, then connecting...")
-                        time.sleep(10)
-                        print("Connecting to MT5 now...")
+                        print("Started MT5 terminal (same session). Waiting 15s for it to load...")
+                        time.sleep(15)
+                        print("Connecting to MT5 (auto-detect)...")
                         started_terminal = True
-                        continue  # retry initialize without counting as attempt
+                        try_without_path = True
+                        continue
                     except Exception as e:
                         print(f"Could not start MT5: {e}")
             if attempt < max_tries and code == -10005:

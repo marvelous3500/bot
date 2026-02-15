@@ -11,14 +11,14 @@ TIMEFRAME_H4 = '4h'
 TIMEFRAME_D1 = '1d'
 
 
-def get_connector(login=None, password=None, server=None, path=None):
+def get_connector(login=None, password=None, server=None, path=None, auto_start=None):
     """
     Return MT5Connector for live/paper trading.
-    Requires MetaTrader 5 (Windows). path = optional path to terminal64.exe if connection fails.
+    path = optional path to terminal64.exe. auto_start = when True, bot starts MT5 automatically (default True).
     """
     try:
         from .mt5_connector import MT5Connector
-        return MT5Connector(login=login, password=password, server=server, path=path)
+        return MT5Connector(login=login, password=password, server=server, path=path, auto_start=auto_start)
     except ImportError as e:
         raise ImportError(
             "MetaTrader5 package is not available on this platform (MT5 is Windows-only). "

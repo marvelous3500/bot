@@ -18,7 +18,8 @@ class LiveTradingEngine:
             login=config.MT5_LOGIN,
             password=config.MT5_PASSWORD,
             server=config.MT5_SERVER,
-            path=getattr(config, 'MT5_PATH', None)
+            path=getattr(config, 'MT5_PATH', None),
+            auto_start=getattr(config, 'MT5_AUTO_START', True)
         )
         if paper_mode:
             self.paper = PaperTrading(
