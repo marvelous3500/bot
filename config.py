@@ -94,7 +94,7 @@ KINGSLEY_USE_EMA_FILTER = False
 KINGSLEY_15M_WINDOW_HOURS = 8   # Max hours to wait for 15m setup after H1 BOS
 KINGSLEY_DISPLACEMENT_RATIO = 0.6
 KINGSLEY_BACKTEST_SYMBOL = 'GC=F'   # Yahoo Finance
-KINGSLEY_LIVE_SYMBOL = 'XAUUSD'    # MT5
+KINGSLEY_LIVE_SYMBOL = 'XAUUSDm'    # MT5
 
 # Replay mode: run strategy every N bars (1 = every bar, most trades; 4 = faster, may miss some)
 REPLAY_STEP_BARS = 1
