@@ -43,6 +43,11 @@ def build_parser():
         default="both",
         help="Backtest period when --strategy all: 12d, 60d, or both (default)",
     )
+    parser.add_argument(
+        "--auto-approve",
+        action="store_true",
+        help="Bot auto-approves trades (no manual prompt). Use for server/headless runs.",
+    )
     return parser
 
 
@@ -154,6 +159,9 @@ def run_paper_or_live(args):
             print("Paper/live requires MetaTrader 5 (Windows only). Run on a Windows machine or Windows VPS with MT5 installed.")
             return
         raise
+    if args.auto_approve:
+        config.MANUAL_APPROVAL = False
+        print("Auto-approve ON: bot will execute trades without confirmation.")
     paper_mode = args.mode == "paper"
     engine = LiveTradingEngine(
         strategy_name=args.strategy,

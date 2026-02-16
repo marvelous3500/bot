@@ -1,5 +1,6 @@
 import time
 import config
+import pandas as pd
 from datetime import datetime, timedelta
 from .connector_interface import get_connector, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
 from .paper_trading import PaperTrading
@@ -69,10 +70,18 @@ class LiveTradingEngine:
             df_h1 = self.mt5.get_bars(symbol, TIMEFRAME_H1, count=200)
             df_5m = self.mt5.get_bars(symbol, TIMEFRAME_M5, count=1000)
             if df_h1 is None or df_5m is None:
+                if getattr(config, 'LIVE_DEBUG', False):
+                    print(f"[LIVE_DEBUG] No data: H1={df_h1 is not None}, M5={df_5m is not None}")
                 return []
+            if getattr(config, 'LIVE_DEBUG', False):
+                last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
+                last_m5 = df_5m.index[-1] if len(df_5m) > 0 else None
+                print(f"[LIVE_DEBUG] {symbol} H1: {len(df_h1)} bars, last={last_h1} | M5: {len(df_5m)} bars, last={last_m5}")
             strat = H1M5BOSStrategy(df_h1, df_5m)
             strat.prepare_data()
             signals_df = strat.run_backtest()
+            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
+                print(f"[LIVE_DEBUG] Strategy returned 0 signals (no BOS + kill zone + entry)")
         elif self.strategy_name == 'confluence':
             df_4h = self.mt5.get_bars(symbol, TIMEFRAME_H4, count=100)
             df_15m = self.mt5.get_bars(symbol, TIMEFRAME_M15, count=500)
@@ -89,7 +98,10 @@ class LiveTradingEngine:
         latest_signal = signals_df.iloc[-1].to_dict() if not signals_df.empty else None
         if latest_signal:
             tick = self.mt5.get_live_price(symbol)
-            if tick:
+            if tick is None:
+                if getattr(config, 'LIVE_DEBUG', False):
+                    print(f"[LIVE_DEBUG] No live tick for {symbol} - cannot get entry price")
+            elif tick:
                 latest_signal['symbol'] = symbol
                 latest_signal['price'] = tick['ask'] if latest_signal['type'] == 'BUY' else tick['bid']
                 # Confluence: set SL from pips before lot calc (other strategies have sl from signal)
@@ -281,7 +293,11 @@ class LiveTradingEngine:
                 signals = self.run_strategy()
                 for signal in signals:
                     signal_time = signal.get('time', datetime.now())
-                    if last_signal_time and (signal_time - last_signal_time).total_seconds() < 300:
+                    if isinstance(signal_time, pd.Timestamp):
+                        signal_time = signal_time.to_pydatetime()
+                    if last_signal_time and abs((signal_time - last_signal_time).total_seconds()) < 300:
+                        if getattr(config, 'LIVE_DEBUG', False):
+                            print(f"[LIVE_DEBUG] Skipping signal (within 5 min of last execution)")
                         continue
                     print(f"\n[SIGNAL] {signal['type']} {signal['symbol']} @ {signal['price']:.5f}")
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_SIGNAL:

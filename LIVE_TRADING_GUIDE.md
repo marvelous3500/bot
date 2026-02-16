@@ -16,10 +16,17 @@ python main.py --mode paper --strategy pdh_pdl
 python main.py --mode live --strategy pdh_pdl
 ```
 
+**Auto-approve (for server/headless runs):** Bot executes trades without manual y/n prompt:
+```bash
+python main.py --mode paper --auto-approve
+python main.py --mode live --auto-approve
+```
+
 **Options:**
 - `--mode`: `backtest` | `paper` | `live`
 - `--strategy`: `pdh_pdl` | `liquidity_sweep` | `h1_m5_bos` | `confluence`
 - `--symbol`: used for backtest only; live/paper use the first symbol from `config.LIVE_SYMBOLS`
+- `--auto-approve`: bot auto-approves trades (no manual prompt); use for server/headless
 
 **Requirements:** MT5 terminal must be running and logged in (or credentials in `.env`). The bot connects to MT5, runs the selected strategy every `LIVE_CHECK_INTERVAL` seconds, and executes or simulates trades when signals pass all safety checks.
 
@@ -34,7 +41,7 @@ python main.py --mode live --strategy pdh_pdl
 | Setting | Description | Default |
 |--------|-------------|---------|
 | `LIVE_MODE` | `False` = paper, `True` = real money | `False` |
-| `MANUAL_APPROVAL` | Require y/n confirmation before each trade | `True` |
+| `MANUAL_APPROVAL` | Require y/n confirmation before each trade; `False` = bot auto-approves. Or use `--auto-approve` CLI flag. | `True` |
 | `MAX_TRADES_PER_DAY` | Daily trade limit (in-memory; resets at midnight **local time**) | `5` |
 | `MAX_POSITION_SIZE` | Lot size (e.g. 0.01 = micro lot) | `0.01` |
 | `PAPER_TRADING_LOG` | JSON file for paper session persistence | `paper_trades.json` |
