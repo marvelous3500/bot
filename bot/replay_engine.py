@@ -4,7 +4,7 @@ Replay engine: runs the full live flow on historical data. No MT5 required.
 import pandas as pd
 import config
 from .data_loader import fetch_data_yfinance, fetch_daily_data_yfinance, load_data_csv
-from .strategies import ICTStrategy, LiquiditySweepStrategy, H1M5BOSStrategy, ConfluenceStrategy
+from .strategies import ICTStrategy, LiquiditySweepStrategy, H1M5BOSStrategy, ConfluenceStrategy, KingsleyGoldStrategy
 from .backtest import prepare_pdh_pdl, _pip_size_for_symbol
 from ai import get_signal_confidence, explain_trade, speak
 
@@ -74,6 +74,19 @@ def load_replay_data(strategy_name, symbol, csv_path):
         df_m5 = _strip_tz(df_m5)
         return df_m5, {'df_h1': df_h1, 'df_m5': df_m5, 'symbol': symbol}
 
+    if strategy_name == 'kingsely_gold':
+        agg = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
+        symbol = symbol or 'GC=F'
+        if csv_path:
+            df_h1 = df.resample('1h').agg(agg).dropna()
+            df_15m = df.resample('15min').agg(agg).dropna()
+        else:
+            df_h1 = fetch_data_yfinance(symbol, period='60d', interval='1h')
+            df_15m = fetch_data_yfinance(symbol, period='60d', interval='15m')
+        df_h1 = _strip_tz(df_h1)
+        df_15m = _strip_tz(df_15m)
+        return df_15m, {'df_h1': df_h1, 'df_15m': df_15m, 'symbol': symbol}
+
     raise ValueError(f"Unknown strategy: {strategy_name}")
 
 
@@ -130,6 +143,16 @@ def run_strategy_at_time(strategy_name, data, current_time):
         signals_df = strat.run_backtest()
         if not signals_df.empty:
             signal = signals_df.iloc[-1].to_dict()
+    elif strategy_name == 'kingsely_gold':
+        df_h1 = data['df_h1'].loc[data['df_h1'].index <= current_time]
+        df_15m = data['df_15m'].loc[data['df_15m'].index <= current_time]
+        if len(df_h1) < 20 or len(df_15m) < 100:
+            return None
+        strat = KingsleyGoldStrategy(df_h1, df_15m)
+        strat.prepare_data()
+        signals_df = strat.run_backtest()
+        if not signals_df.empty:
+            signal = signals_df.iloc[-1].to_dict()
     if signal is None:
         return None
     signal['symbol'] = symbol
@@ -143,6 +166,8 @@ def run_strategy_at_time(strategy_name, data, current_time):
 
 
 def run_replay(strategy_name, symbol=None, csv_path=None, auto_approve=True):
+    if strategy_name == 'kingsely_gold':
+        symbol = symbol or 'GC=F'
     print(f"Loading replay data for {strategy_name}...")
     entry_df, data = load_replay_data(strategy_name, symbol, csv_path)
     symbol = data.get('symbol', symbol or config.SYMBOLS[0])

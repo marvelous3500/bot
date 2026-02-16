@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from .connector_interface import get_connector, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
 from .paper_trading import PaperTrading
 from .trade_approver import TradeApprover
-from .strategies import ICTStrategy, LiquiditySweepStrategy, H1M5BOSStrategy, ConfluenceStrategy
+from .strategies import ICTStrategy, LiquiditySweepStrategy, H1M5BOSStrategy, ConfluenceStrategy, KingsleyGoldStrategy
 from .backtest import prepare_pdh_pdl
 from ai import get_signal_confidence, explain_trade, speak
 
@@ -47,7 +47,15 @@ class LiveTradingEngine:
         return True
 
     def run_strategy(self):
-        symbol = list(config.LIVE_SYMBOLS.values())[0]
+        if self.strategy_name == 'kingsely_gold':
+            symbol = (
+                config.LIVE_SYMBOLS.get('XAUUSD') or
+                config.LIVE_SYMBOLS.get('GOLD') or
+                next((v for k, v in config.LIVE_SYMBOLS.items() if 'XAU' in k.upper() or 'GOLD' in k.upper()), None) or
+                list(config.LIVE_SYMBOLS.values())[0]
+            )
+        else:
+            symbol = list(config.LIVE_SYMBOLS.values())[0]
         if self.strategy_name == 'pdh_pdl':
             df_daily = self.mt5.get_bars(symbol, TIMEFRAME_D1, count=10)
             df_5m = self.mt5.get_bars(symbol, TIMEFRAME_M5, count=500)
@@ -90,6 +98,22 @@ class LiveTradingEngine:
             strat = ConfluenceStrategy(df_4h, df_15m)
             strat.prepare_data()
             signals_df = strat.run_backtest()
+        elif self.strategy_name == 'kingsely_gold':
+            df_h1 = self.mt5.get_bars(symbol, TIMEFRAME_H1, count=200)
+            df_15m = self.mt5.get_bars(symbol, TIMEFRAME_M15, count=1000)
+            if df_h1 is None or df_15m is None:
+                if getattr(config, 'LIVE_DEBUG', False):
+                    print(f"[LIVE_DEBUG] kingsely_gold: No data H1={df_h1 is not None}, 15m={df_15m is not None}")
+                return []
+            if getattr(config, 'LIVE_DEBUG', False):
+                last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
+                last_15m = df_15m.index[-1] if len(df_15m) > 0 else None
+                print(f"[LIVE_DEBUG] {symbol} H1: {len(df_h1)} bars, last={last_h1} | 15m: {len(df_15m)} bars, last={last_15m}")
+            strat = KingsleyGoldStrategy(df_h1, df_15m, verbose=False)
+            strat.prepare_data()
+            signals_df = strat.run_backtest()
+            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
+                print(f"[LIVE_DEBUG] kingsely_gold: 0 signals (no H1+15m BOS + OB tap + Liq sweep + OB test)")
         else:
             print(f"Unknown strategy: {self.strategy_name}")
             return []

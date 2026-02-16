@@ -21,7 +21,7 @@ def build_parser():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["pdh_pdl", "liquidity_sweep", "h1_m5_bos", "confluence", "all"],
+        choices=["pdh_pdl", "liquidity_sweep", "h1_m5_bos", "confluence", "kingsely_gold", "gold_compare", "all"],
         default="h1_m5_bos",
         help="Strategy to use ('all' = run every strategy in backtest mode)",
     )
@@ -49,6 +49,37 @@ def build_parser():
         help="Bot auto-approves trades (no manual prompt). Use for server/headless runs.",
     )
     return parser
+
+
+def _run_gold_compare(args):
+    """Run kingsely_gold and h1_m5_bos on gold (GC=F), display in same table."""
+    import sys
+    import io
+    from bot.backtest import run_bos_backtest, run_kingsley_backtest
+
+    # Suppress fetch/strategy prints during run
+    old_stdout = sys.stdout
+    sys.stdout = io.StringIO()
+    try:
+        s_kingsley = run_kingsley_backtest(symbol="GC=F", period=args.period if args.period != "both" else "60d", return_stats=True)
+        s_bos = run_bos_backtest(symbol="GC=F", period=args.period if args.period != "both" else "60d", return_stats=True)
+    finally:
+        sys.stdout = old_stdout
+
+    period = args.period if args.period != "both" else "60d"
+    print()
+    print("Backtest Parameters:")
+    print("  Asset: GC=F (Gold)")
+    print("  Risk per trade: 10%")
+    print("  Trade Limit: No trade limit")
+    print("  Duration:", period)
+    print()
+    print("| Strategy          | Trades | Wins | Losses | Win rate  | Final balance | Return      |")
+    print("| :---------------- | :----- | :--- | :----- | :-------- | :------------ | :---------- |")
+    for r in sorted([s_kingsley, s_bos], key=lambda x: x["return_pct"], reverse=True):
+        wr = f"{r['win_rate']:.2f}%"
+        ret_str = f"{'+' if r['return_pct'] >= 0 else ''}{r['return_pct']:,.2f}%"
+        print(f"| {r['strategy']:<17} | {r['trades']:>5} | {r['wins']:>4} | {r['losses']:>6} | {wr:>9} | ${r['final_balance']:>11,.2f} | {ret_str:>10} |")
 
 
 def _fmt_money(x):
@@ -95,9 +126,14 @@ def run_backtest(args):
         run_liquidity_sweep_backtest,
         run_bos_backtest,
         run_confluence_backtest,
+        run_kingsley_backtest,
     )
+    if args.strategy == "gold_compare":
+        _run_gold_compare(args)
+        return
+
     strategies = (
-        ["pdh_pdl", "liquidity_sweep", "h1_m5_bos", "confluence"]
+        ["pdh_pdl", "liquidity_sweep", "h1_m5_bos", "confluence", "kingsely_gold"]
         if args.strategy == "all"
         else [args.strategy]
     )
@@ -119,21 +155,27 @@ def run_backtest(args):
                     s = run_liquidity_sweep_backtest(**kwargs)
                 elif name == "h1_m5_bos":
                     s = run_bos_backtest(**kwargs)
+                elif name == "kingsely_gold":
+                    s = run_kingsley_backtest(symbol="GC=F", period=period, return_stats=True)
                 else:
                     s = run_confluence_backtest(**kwargs)
                 rows.append(s)
             _print_summary_table(period_label, rows)
         return
 
+    period = args.period if args.period != "both" else "60d"
     for name in strategies:
         print(f"\n{'='*60}\nBacktesting {name} on {args.symbol}\n{'='*60}")
-        kwargs = dict(csv_path=args.csv, symbol=args.symbol)
+        kwargs = dict(csv_path=args.csv, symbol=args.symbol, period=period)
         if name == "pdh_pdl":
             run_backtest_simulation(**kwargs)
         elif name == "liquidity_sweep":
             run_liquidity_sweep_backtest(**kwargs)
         elif name == "h1_m5_bos":
             run_bos_backtest(**kwargs)
+        elif name == "kingsely_gold":
+            kwargs["symbol"] = kwargs.get("symbol") or "GC=F"
+            run_kingsley_backtest(**kwargs)
         elif name == "confluence":
             run_confluence_backtest(**kwargs)
 

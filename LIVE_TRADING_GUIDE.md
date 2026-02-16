@@ -9,11 +9,13 @@ This guide describes how to configure and run the bot in **paper** and **live** 
 **Paper trading (recommended first):**
 ```bash
 python main.py --mode paper --strategy pdh_pdl
+python main.py --mode paper --strategy kingsely_gold   # Gold (XAUUSD) only
 ```
 
 **Live trading (real money):**
 ```bash
 python main.py --mode live --strategy pdh_pdl
+python main.py --mode live --strategy kingsely_gold    # Gold (XAUUSD) only
 ```
 
 **Auto-approve (for server/headless runs):** Bot executes trades without manual y/n prompt:
@@ -24,7 +26,7 @@ python main.py --mode live --auto-approve
 
 **Options:**
 - `--mode`: `backtest` | `paper` | `live`
-- `--strategy`: `pdh_pdl` | `liquidity_sweep` | `h1_m5_bos` | `confluence`
+- `--strategy`: `pdh_pdl` | `liquidity_sweep` | `h1_m5_bos` | `confluence` | `kingsely_gold`
 - `--symbol`: used for backtest only; live/paper use the first symbol from `config.LIVE_SYMBOLS`
 - `--auto-approve`: bot auto-approves trades (no manual prompt); use for server/headless
 
@@ -48,7 +50,7 @@ python main.py --mode live --auto-approve
 | `LIVE_CHECK_INTERVAL` | Seconds between strategy runs | `60` |
 | `USE_MARGIN_CHECK` | Pre-trade margin check in live mode | `True` |
 | `MT5_LOGIN` / `MT5_PASSWORD` / `MT5_SERVER` | From `.env`; server default is **Exness-MT5Trial** | — |
-| `LIVE_SYMBOLS` | MT5 symbols (e.g. XAUUSD, GBPUSD) | `{'XAUUSD': 'XAUUSD', 'GBPUSD': 'GBPUSD'}` |
+| `LIVE_SYMBOLS` | MT5 symbols (e.g. XAUUSD, GBPUSD). **kingsely_gold** requires XAUUSD. | `{'GBPUSD': 'GBPUSD', 'XAUUSD': 'XAUUSD', ...}` |
 
 #### AI (optional)
 
@@ -69,6 +71,17 @@ The OpenAI API key is read from `.env` as `OPENAI_API_KEY`. If the key is missin
 | `VOICE_ALERT_ON_REJECT` | Speak when a trade is rejected and why | `True` |
 
 When voice is on, the bot speaks: **trade found** (direction, symbol, reason, “Checking approval”); **trade rejected** (concrete reason: no stop loss, stop loss invalid, insufficient margin, below confidence threshold, daily limit reached, not approved by user); **trade executed** (direction, symbol, price).
+
+#### Kingsley Gold (kingsely_gold strategy)
+
+| Setting | Description | Default |
+|--------|-------------|---------|
+| `KINGSLEY_USE_KILL_ZONES` | Only trade during London/NY sessions | `True` |
+| `KINGSLEY_USE_EMA_FILTER` | Require price in direction of EMA | `False` |
+| `KINGSLEY_15M_WINDOW_HOURS` | Max hours to wait for 15m setup after H1 BOS | `8` |
+| `KINGSLEY_DISPLACEMENT_RATIO` | Candle body must be this fraction of range | `0.6` |
+| `KINGSLEY_BACKTEST_SYMBOL` | Yahoo symbol for backtest (e.g. GC=F) | `GC=F` |
+| `KINGSLEY_LIVE_SYMBOL` | MT5 symbol for live/paper (e.g. XAUUSD) | `XAUUSD` |
 
 ### 2.2 Environment (.env)
 
