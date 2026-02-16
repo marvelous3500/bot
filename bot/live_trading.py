@@ -99,11 +99,22 @@ class LiveTradingEngine:
             strat.prepare_data()
             signals_df = strat.run_backtest()
         elif self.strategy_name == 'kingsely_gold':
-            df_h1 = self.mt5.get_bars(symbol, TIMEFRAME_H1, count=200)
-            df_15m = self.mt5.get_bars(symbol, TIMEFRAME_M15, count=1000)
+            gold_symbols = list(dict.fromkeys([
+                symbol, getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSD'), 'GOLD', 'XAUUSD'
+            ]))
+            df_h1, df_15m = None, None
+            for sym in gold_symbols:
+                df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
+                df_15m = self.mt5.get_bars(sym, TIMEFRAME_M15, count=1000)
+                if df_h1 is not None and df_15m is not None:
+                    symbol = sym
+                    break
             if df_h1 is None or df_15m is None:
                 if getattr(config, 'LIVE_DEBUG', False):
-                    print(f"[LIVE_DEBUG] kingsely_gold: No data H1={df_h1 is not None}, 15m={df_15m is not None}")
+                    h1_ok = "OK" if df_h1 is not None else "MISSING"
+                    m15_ok = "OK" if df_15m is not None else "MISSING"
+                    print(f"[LIVE_DEBUG] kingsely_gold: Bar data missing — H1={h1_ok}, 15m={m15_ok} (tried: {gold_symbols})")
+                    print(f"[LIVE_DEBUG]   → Check: symbol in MT5 Market Watch, market open (not weekend), broker symbol name")
                 return []
             if getattr(config, 'LIVE_DEBUG', False):
                 last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None

@@ -121,6 +121,14 @@ For a real Exness account you may use a server like `Exness-MT5`; override `MT5_
 - **MT5 server default:** If `MT5_SERVER` is not set in `.env`, the code uses **Exness-MT5Trial**. Override in `.env` for real accounts.
 - **pdh_pdl in live/paper:** The engine uses the 5m DataFrame only for `ICTStrategy`, computes PDH/PDL from daily data (same logic as backtest), and calls `run_backtest(pdh_series, pdl_series)` so the strategy behaves correctly.
 
+### 4.1 Troubleshooting: kingsely_gold "Bar data missing"
+
+If you see `[LIVE_DEBUG] kingsely_gold: Bar data missing for XAUUSD — H1=MISSING, 15m=MISSING`:
+
+1. **Symbol in Market Watch:** In MT5, open Market Watch (Ctrl+M), right-click → Symbols, add **XAUUSD** or **GOLD** (broker-dependent). The bot now auto-selects the symbol if it exists but is not visible.
+2. **Symbol name:** Some brokers use `GOLD`, `XAUUSDm`, or `XAUUSD.a`. Check MT5’s symbol list and add the matching key to `LIVE_SYMBOLS` in `config.py`.
+3. **Market hours:** Forex/gold is closed on weekends. If it’s Saturday or Sunday, bar data may be unavailable until the market reopens.
+
 ---
 
 ## 5. Implementation Status

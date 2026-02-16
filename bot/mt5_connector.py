@@ -222,6 +222,10 @@ class MT5Connector:
     def get_bars(self, symbol, timeframe, count=100):
         if isinstance(timeframe, str):
             timeframe = self._TIMEFRAME_MAP.get(timeframe, mt5.TIMEFRAME_M5)
+        # Ensure symbol is in Market Watch (required for copy_rates on some brokers)
+        info = mt5.symbol_info(symbol)
+        if info is not None and not info.visible:
+            mt5.symbol_select(symbol, True)
         rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
         if rates is None or len(rates) == 0:
             return None
