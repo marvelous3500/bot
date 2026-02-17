@@ -99,6 +99,13 @@ KINGSLEY_SL_BUFFER = 1.0   # Price units buffer below/above lq_level for live ex
 KINGSLEY_USE_SL_FALLBACK = True   # When True: use fallback SL when live price invalidates lq_level. When False: reject invalid signals.
 KINGSLEY_SL_FALLBACK_DISTANCE = 5.0  # Price units for fallback (e.g. $5 for gold). Only used when KINGSLEY_USE_SL_FALLBACK=True.
 
+# Test strategy (gold, verify live execution - takes trade immediately)
+TEST_SL_DISTANCE = 5.0   # Price units (e.g. $5 for gold)
+TEST_TP_DISTANCE = 15.0  # Price units
+TEST_USE_KILL_ZONES = False  # False = always emit, take trade on first run
+TEST_BACKTEST_SYMBOL = 'GC=F'
+TEST_LIVE_SYMBOL = 'XAUUSD'
+
 # Replay mode: run strategy every N bars (1 = every bar, most trades; 4 = faster, may miss some)
 REPLAY_STEP_BARS = 1
 

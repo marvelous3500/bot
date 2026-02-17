@@ -21,7 +21,7 @@ def build_parser():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["pdh_pdl", "liquidity_sweep", "h1_m5_bos", "confluence", "kingsely_gold", "gold_compare", "all"],
+        choices=["pdh_pdl", "liquidity_sweep", "h1_m5_bos", "confluence", "kingsely_gold", "test", "gold_compare", "all"],
         default="h1_m5_bos",
         help="Strategy to use ('all' = run every strategy in backtest mode)",
     )
@@ -127,13 +127,14 @@ def run_backtest(args):
         run_bos_backtest,
         run_confluence_backtest,
         run_kingsley_backtest,
+        run_test_backtest,
     )
     if args.strategy == "gold_compare":
         _run_gold_compare(args)
         return
 
     strategies = (
-        ["pdh_pdl", "liquidity_sweep", "h1_m5_bos", "confluence", "kingsely_gold"]
+        ["pdh_pdl", "liquidity_sweep", "h1_m5_bos", "confluence", "kingsely_gold", "test"]
         if args.strategy == "all"
         else [args.strategy]
     )
@@ -157,6 +158,8 @@ def run_backtest(args):
                     s = run_bos_backtest(**kwargs)
                 elif name == "kingsely_gold":
                     s = run_kingsley_backtest(symbol="GC=F", period=period, return_stats=True)
+                elif name == "test":
+                    s = run_test_backtest(symbol="GC=F", period=period, return_stats=True)
                 else:
                     s = run_confluence_backtest(**kwargs)
                 rows.append(s)
@@ -176,6 +179,9 @@ def run_backtest(args):
         elif name == "kingsely_gold":
             kwargs["symbol"] = kwargs.get("symbol") or "GC=F"
             run_kingsley_backtest(**kwargs)
+        elif name == "test":
+            kwargs["symbol"] = kwargs.get("symbol") or "GC=F"
+            run_test_backtest(**kwargs)
         elif name == "confluence":
             run_confluence_backtest(**kwargs)
 

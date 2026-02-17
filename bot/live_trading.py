@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from .connector_interface import get_connector, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
 from .paper_trading import PaperTrading
 from .trade_approver import TradeApprover
-from .strategies import ICTStrategy, LiquiditySweepStrategy, H1M5BOSStrategy, ConfluenceStrategy, KingsleyGoldStrategy
+from .strategies import ICTStrategy, LiquiditySweepStrategy, H1M5BOSStrategy, ConfluenceStrategy, KingsleyGoldStrategy, TestStrategy
 from .backtest import prepare_pdh_pdl
 from ai import get_signal_confidence, explain_trade, speak
 
@@ -47,7 +47,7 @@ class LiveTradingEngine:
         return True
 
     def run_strategy(self):
-        if self.strategy_name == 'kingsely_gold':
+        if self.strategy_name in ('kingsely_gold', 'test'):
             symbol = (
                 config.LIVE_SYMBOLS.get('XAUUSD') or
                 config.LIVE_SYMBOLS.get('GOLD') or
@@ -125,6 +125,28 @@ class LiveTradingEngine:
             signals_df = strat.run_backtest()
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] kingsely_gold: 0 signals (no H1+15m BOS + OB tap + Liq sweep + OB test)")
+        elif self.strategy_name == 'test':
+            gold_symbols = list(dict.fromkeys([
+                symbol, getattr(config, 'TEST_LIVE_SYMBOL', 'XAUUSD'), 'GOLD', 'XAUUSD'
+            ]))
+            df_h1 = None
+            for sym in gold_symbols:
+                df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
+                if df_h1 is not None:
+                    symbol = sym
+                    break
+            if df_h1 is None:
+                if getattr(config, 'LIVE_DEBUG', False):
+                    print(f"[LIVE_DEBUG] test: No H1 data (tried: {gold_symbols})")
+                return []
+            if getattr(config, 'LIVE_DEBUG', False):
+                last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
+                print(f"[LIVE_DEBUG] {symbol} H1: {len(df_h1)} bars, last={last_h1}")
+            strat = TestStrategy(df_h1, verbose=False)
+            strat.prepare_data()
+            signals_df = strat.run_backtest()
+            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
+                print(f"[LIVE_DEBUG] test: 0 signals (need at least 4 H1 bars)")
         else:
             print(f"Unknown strategy: {self.strategy_name}")
             return []

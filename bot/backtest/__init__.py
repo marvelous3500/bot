@@ -4,6 +4,7 @@ from .backtest_liquidity import run_liquidity_sweep_backtest
 from .backtest_bos import run_bos_backtest
 from .backtest_confluence import run_confluence_backtest, _pip_size_for_symbol
 from .backtest_kingsley import run_kingsley_backtest
+from .backtest_test import run_test_backtest
 
 __all__ = [
     "prepare_pdh_pdl",
@@ -13,6 +14,7 @@ __all__ = [
     "run_bos_backtest",
     "run_confluence_backtest",
     "run_kingsley_backtest",
+    "run_test_backtest",
     "_pip_size_for_symbol",
 ]
 
