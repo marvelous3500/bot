@@ -369,8 +369,12 @@ class MT5Connector:
             volume = round(v, 2)
         except (TypeError, ValueError):
             volume = vol_min
-        # MT5 comment max 31 chars; strip invalid chars
-        safe_comment = (str(comment).replace("\x00", "")[:31]) if comment else ""
+        # MT5 comment max 31 chars; strip invalid chars (some brokers reject : + ( ) etc.)
+        raw = str(comment).replace("\x00", "") if comment else ""
+        for ch in ':+()[]{}<>':
+            raw = raw.replace(ch, ' ')
+        safe_comment = ' '.join(raw.split())[:31]  # collapse spaces, truncate
+        safe_comment = safe_comment.strip() or "ICT"
 
         # Filling mode: try FOK, IOC, RETURN (Exness gold often needs FOK or IOC, not RETURN)
         filling_modes = [
