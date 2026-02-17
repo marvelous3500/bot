@@ -199,6 +199,7 @@ def run_replay_cmd(args):
 
 def run_paper_or_live(args):
     """Run paper or live trading engine."""
+    import sys
     try:
         from bot.live_trading import LiveTradingEngine
     except ImportError as e:
@@ -222,6 +223,9 @@ def run_paper_or_live(args):
         engine.run()
     finally:
         engine.disconnect()
+    # Test strategy single-run: force process exit (MT5 may keep threads alive)
+    if args.strategy == "test" and getattr(config, "TEST_SINGLE_RUN", False):
+        sys.exit(0)
 
 
 def run(args):

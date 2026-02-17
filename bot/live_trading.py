@@ -393,6 +393,10 @@ class LiveTradingEngine:
         try:
             while self.running:
                 if not self.check_safety_limits():
+                    if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
+                        print("Daily limit reached. Exiting.")
+                        self.running = False
+                        break
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
                         speak("Trade rejected. Reason: Daily trade limit reached.")
                     print("Waiting... (daily limit reached)")
@@ -433,7 +437,7 @@ class LiveTradingEngine:
                     if result:
                         last_signal_time = datetime.now()
                 self.show_status()
-                # Test strategy: single-run mode — take one trade and exit
+                # Test strategy: single-run mode — always exit after one check
                 if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
                     if not signals:
                         print("\nTest strategy: no signal (check XAUUSDm in Market Watch, market open). Exiting.")
