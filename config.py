@@ -97,6 +97,8 @@ BOS_M5_WINDOW_HOURS = 2    # Max hours to wait for M5 entry after H1 BOS (was 4)
 
 # Kingsley Gold: H1 trend + 15m BOS/ChoCH + zone→LQ + OB test (XAUUSD/GC=F only)
 KINGSLEY_USE_KILL_ZONES = True
+KINGSLEY_USE_ASIAN_SESSION = True   # When True, also allow trades during Asian session
+KINGSLEY_ASIAN_SESSION_HOURS = [0, 1, 2, 3, 4]   # Tokyo session (UTC): 00:00-04:00
 KINGSLEY_USE_EMA_FILTER = False
 KINGSLEY_15M_WINDOW_HOURS = 8   # Max hours to wait for 15m setup after H1 BOS
 KINGSLEY_DISPLACEMENT_RATIO = 0.6

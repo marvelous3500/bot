@@ -47,6 +47,10 @@ class KingsleyGoldStrategy:
             return pd.DataFrame()
         signals = []
         use_kill_zone = getattr(config, 'KINGSLEY_USE_KILL_ZONES', True)
+        use_asian = getattr(config, 'KINGSLEY_USE_ASIAN_SESSION', False)
+        asian_hours = getattr(config, 'KINGSLEY_ASIAN_SESSION_HOURS', [0, 1, 2, 3, 4])
+        allowed_hours = list(config.KILL_ZONE_HOURS) + (list(asian_hours) if use_asian else [])
+        allowed_hours = sorted(set(allowed_hours))
         use_ema = getattr(config, 'KINGSLEY_USE_EMA_FILTER', False)
         window_hours = getattr(config, 'KINGSLEY_15M_WINDOW_HOURS', 8)
         disp_ratio = getattr(config, 'KINGSLEY_DISPLACEMENT_RATIO', 0.6)
@@ -76,7 +80,7 @@ class KingsleyGoldStrategy:
             ob_tested = False  # Rule 4: tests unmitigated OB
 
             for idx_15, row_15 in m15_window.iterrows():
-                if use_kill_zone and idx_15.hour not in config.KILL_ZONE_HOURS:
+                if use_kill_zone and idx_15.hour not in allowed_hours:
                     continue
 
                 # Rule 2: 15m BOS/ChoCH aligned with H1 bias
