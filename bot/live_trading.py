@@ -139,6 +139,19 @@ class LiveTradingEngine:
             elif tick:
                 latest_signal['symbol'] = symbol
                 latest_signal['price'] = tick['ask'] if latest_signal['type'] == 'BUY' else tick['bid']
+                # Kingsley Gold: add buffer below/above lq_level so slight price move doesn't invalidate SL
+                if self.strategy_name == 'kingsely_gold':
+                    sl = latest_signal.get('sl')
+                    if sl is not None:
+                        buf = getattr(config, 'KINGSLEY_SL_BUFFER', 1.0)
+                        try:
+                            sl_f = float(sl)
+                            if latest_signal['type'] == 'BUY':
+                                latest_signal['sl'] = sl_f - buf  # Move SL lower for BUY
+                            else:
+                                latest_signal['sl'] = sl_f + buf  # Move SL higher for SELL
+                        except (TypeError, ValueError):
+                            pass
                 # Confluence: set SL from pips before lot calc (other strategies have sl from signal)
                 if self.strategy_name == 'confluence':
                     sl_pips = getattr(config, 'CONFLUENCE_SL_PIPS', 50)
@@ -203,6 +216,15 @@ class LiveTradingEngine:
         valid, sl_reason = self._validate_signal_sl(signal)
         if not valid:
             print(f"[SAFETY] Rejected: {sl_reason}")
+            if getattr(config, 'LIVE_DEBUG', False) and "Stop loss" in sl_reason:
+                price = signal.get('price')
+                sl = signal.get('sl')
+                order_type = signal.get('type')
+                try:
+                    dist = abs(float(price) - float(sl)) if price is not None and sl is not None else None
+                    print(f"[LIVE_DEBUG]   price={price} sl={sl} type={order_type} dist={dist:.2f}" if dist is not None else f"[LIVE_DEBUG]   price={price} sl={sl} type={order_type}")
+                except (TypeError, ValueError):
+                    print(f"[LIVE_DEBUG]   price={price} sl={sl} type={order_type}")
             if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
                 speak(f"Trade rejected. Reason: {sl_reason}.")
             return None
@@ -334,7 +356,19 @@ class LiveTradingEngine:
                         if getattr(config, 'LIVE_DEBUG', False):
                             print(f"[LIVE_DEBUG] Skipping signal (within 5 min of last execution)")
                         continue
-                    print(f"\n[SIGNAL] {signal['type']} {signal['symbol']} @ {signal['price']:.5f}")
+                    sl = signal.get('sl')
+                    sl_dist = abs(float(signal['price']) - float(sl)) if sl is not None else None
+                    dollar_risk = self.mt5.calc_dollar_risk(
+                        signal['symbol'], signal['price'], sl, signal.get('volume', 0)
+                    ) if sl is not None else None
+                    sl_info = ""
+                    if sl is not None:
+                        sl_info = f" | SL: {float(sl):.2f}"
+                        if sl_dist is not None:
+                            sl_info += f" (dist: {sl_dist:.2f})"
+                        if dollar_risk is not None:
+                            sl_info += f" | Risk: ${dollar_risk:.2f}"
+                    print(f"\n[SIGNAL] {signal['type']} {signal['symbol']} @ {signal['price']:.5f}{sl_info}")
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_SIGNAL:
                         reason = signal.get('reason', 'Strategy signal')
                         speak(f"Trade found. {signal['type']} {signal['symbol']}. {reason}. Checking approval.")

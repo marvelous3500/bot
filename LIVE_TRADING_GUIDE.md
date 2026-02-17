@@ -82,6 +82,7 @@ When voice is on, the bot speaks: **trade found** (direction, symbol, reason, â€
 | `KINGSLEY_DISPLACEMENT_RATIO` | Candle body must be this fraction of range | `0.6` |
 | `KINGSLEY_BACKTEST_SYMBOL` | Yahoo symbol for backtest (e.g. GC=F) | `GC=F` |
 | `KINGSLEY_LIVE_SYMBOL` | MT5 symbol for live/paper (e.g. XAUUSD) | `XAUUSD` |
+| `KINGSLEY_SL_BUFFER` | Price units buffer below/above lq_level for live execution (reduces "Stop loss invalid" when market moves) | `1.0` |
 
 ### 2.2 Environment (.env)
 

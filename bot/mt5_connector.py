@@ -199,6 +199,26 @@ class MT5Connector:
         lot_size = max(info.volume_min, min(info.volume_max, lot_size))
         return round(lot_size, 2)
 
+    def calc_dollar_risk(self, symbol, entry_price, sl_price, volume):
+        """Return dollar amount at risk if SL hits, or None if calc fails."""
+        if not self.connected:
+            return None
+        info = mt5.symbol_info(symbol)
+        if info is None:
+            return None
+        tick_size = getattr(info, 'trade_tick_size', info.point) or info.point
+        tick_value = getattr(info, 'trade_tick_value', 0)
+        if tick_size <= 0 or tick_value <= 0:
+            return None
+        sl_distance = abs(float(entry_price) - float(sl_price))
+        risk_ticks = sl_distance / tick_size
+        if risk_ticks <= 0:
+            return None
+        loss_per_lot = risk_ticks * tick_value
+        if loss_per_lot <= 0:
+            return None
+        return round(loss_per_lot * float(volume), 2)
+
     def get_live_price(self, symbol):
         tick = mt5.symbol_info_tick(symbol)
         if tick is None:
