@@ -397,6 +397,15 @@ class LiveTradingEngine:
         self._last_run_errors = []  # Capture why trade wasn't executed
         try:
             while self.running:
+                # Pre-check: Algo Trading must be enabled for live orders
+                if not self.paper_mode and not self.mt5.is_algo_trading_enabled():
+                    print("\n" + "=" * 50)
+                    print("BLOCKED: Algo Trading is DISABLED in MT5.")
+                    print("  Enable it: click the 'Algo Trading' button in the MT5 toolbar (it must be GREEN).")
+                    print("  Then run the bot again.")
+                    print("=" * 50)
+                    self.running = False
+                    break
                 if not self.check_safety_limits():
                     if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
                         print("Daily limit reached. Exiting.")

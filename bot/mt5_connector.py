@@ -198,6 +198,13 @@ class MT5Connector:
         self.connected = False
         print("[MT5] Disconnected from server.")
 
+    def is_algo_trading_enabled(self):
+        """Return True if Algo Trading is enabled (required for order_send)."""
+        if not self.connected:
+            return False
+        ti = mt5.terminal_info()
+        return ti is not None and getattr(ti, "trade_allowed", False)
+
     def get_account_info(self):
         if not self.connected:
             return None
