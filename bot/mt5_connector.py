@@ -369,6 +369,9 @@ class MT5Connector:
             volume = round(v, 2)
         except (TypeError, ValueError):
             volume = vol_min
+        # MT5 comment max 31 chars; strip invalid chars
+        safe_comment = (str(comment).replace("\x00", "")[:31]) if comment else ""
+
         # Filling mode: try FOK, IOC, RETURN (Exness gold often needs FOK or IOC, not RETURN)
         filling_modes = [
             ("FOK", mt5.ORDER_FILLING_FOK),
@@ -386,7 +389,7 @@ class MT5Connector:
                 "price": execution_price,
                 "deviation": 20,
                 "magic": 234000,
-                "comment": comment,
+                "comment": safe_comment,
                 "type_time": mt5.ORDER_TIME_GTC,
                 "type_filling": type_filling,
             }
@@ -418,6 +421,8 @@ class MT5Connector:
                     print("  → Invalid order (check SL/TP distance, volume, symbol). Gold: try volume 0.01.")
                 elif result.retcode == 10030:  # Invalid fill
                     print("  → Tried FOK, IOC, RETURN — none supported. Check broker/symbol in MT5 Market Watch.")
+                elif result.retcode == -2:  # Invalid comment
+                    print("  → Comment too long or invalid. MT5 allows max 31 chars.")
             return None, err_msg
         print(f"Order executed: {order_type} {volume} {symbol} @ {result.price} (filling={fill_name})")
         return {
