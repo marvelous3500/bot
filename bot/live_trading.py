@@ -349,6 +349,12 @@ class LiveTradingEngine:
                 self.update_positions()
                 signals = self.run_strategy()
                 for signal in signals:
+                    # Skip signals that would fail SL validation (e.g. strategy emitted SL on wrong side)
+                    valid, sl_reason = self._validate_signal_sl(signal)
+                    if not valid:
+                        if getattr(config, 'LIVE_DEBUG', False):
+                            print(f"[LIVE_DEBUG] Skipping invalid signal: {sl_reason} (price={signal.get('price')} sl={signal.get('sl')} type={signal.get('type')})")
+                        continue
                     signal_time = signal.get('time', datetime.now())
                     if isinstance(signal_time, pd.Timestamp):
                         signal_time = signal_time.to_pydatetime()

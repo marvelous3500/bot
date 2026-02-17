@@ -177,9 +177,9 @@ class KingsleyGoldStrategy:
                 if current_bias == 'BULLISH':
                     is_bullish = row_15['close'] > row_15['open']
                     entry = row_15['close']
-                    # SL must be below entry for BUY
+                    # SL must be below entry for BUY (strict: lq_level < entry)
                     if is_bullish and is_displacement and row_15['close'] > current_ob['low']:
-                        if lq_level is None or lq_level >= entry:
+                        if lq_level is None or float(lq_level) >= float(entry):
                             continue
                         future_highs = self.df_15m[
                             (self.df_15m.index > idx_15) & (self.df_15m['swing_high'] == True)
@@ -198,9 +198,9 @@ class KingsleyGoldStrategy:
                 elif current_bias == 'BEARISH':
                     is_bearish = row_15['close'] < row_15['open']
                     entry = row_15['close']
-                    # SL must be above entry for SELL
+                    # SL must be above entry for SELL (strict: lq_level > entry)
                     if is_bearish and is_displacement and row_15['close'] < current_ob['high']:
-                        if lq_level is None or lq_level <= entry:
+                        if lq_level is None or float(lq_level) <= float(entry):
                             continue
                         future_lows = self.df_15m[
                             (self.df_15m.index > idx_15) & (self.df_15m['swing_low'] == True)
