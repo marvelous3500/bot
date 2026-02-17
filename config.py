@@ -54,6 +54,10 @@ MT5_SERVER = os.getenv('MT5_SERVER', 'Exness-MT5Trial')  # Your Exness MT5 serve
 MT5_PATH = os.getenv('MT5_PATH')  # None = auto-detect
 # When True and MT5_PATH is set, the bot starts Exness MT5 automatically when you run paper/live.
 MT5_AUTO_START = os.getenv('MT5_AUTO_START', 'true').lower() in ('true', '1', 'yes')
+# Connection retries and logging
+MT5_CONNECT_RETRIES = 5       # Max attempts for initialize + login
+MT5_CONNECT_DELAY = 5         # Seconds between retries
+MT5_VERBOSE = True            # Log connection steps, data fetches, etc.
 
 # Live Trading Symbols (MT5 format) — first is default for paper/live
 LIVE_SYMBOLS = {

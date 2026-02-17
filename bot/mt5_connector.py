@@ -6,6 +6,18 @@ import subprocess
 import sys
 import os
 
+try:
+    import config
+except ImportError:
+    config = None
+
+
+def _log(msg, verbose_only=True):
+    """Print log message. Set verbose_only=False to always print."""
+    if verbose_only and config and not getattr(config, "MT5_VERBOSE", True):
+        return
+    print(f"[MT5] {msg}")
+
 
 def _print_mt5_hint(step, err):
     """Print a short hint for common MT5 errors. err is (code, message) from mt5.last_error()."""
@@ -50,63 +62,87 @@ class MT5Connector:
         self.connected = False
 
     def connect(self):
-        print("MT5 credentials (before connect):")
-        print(f"  Login:  {self.login}")
-        print(f"  Server: {self.server}")
+        max_tries = getattr(config, "MT5_CONNECT_RETRIES", 5) if config else 5
+        retry_delay = getattr(config, "MT5_CONNECT_DELAY", 5) if config else 5
+
+        print("\n" + "=" * 50)
+        print("MT5 CONNECTION")
+        print("=" * 50)
+        print(f"  Login:   {self.login}")
+        print(f"  Server:  {self.server}")
         print(f"  Password: {'****' if self.password else '(not set)'}")
         if self.path:
-            print(f"  Path:   {self.path}")
-        print("Connecting...")
-        max_tries = 3
+            print(f"  Path:    {self.path}")
+        else:
+            print(f"  Path:    (auto-detect)")
+        print(f"  Retries: {max_tries} (delay {retry_delay}s)")
+        print("=" * 50)
+
         started_terminal = False
         try_without_path = False
-        # Option: start MT5 at the beginning so the bot opens it (same session, often fixes IPC)
+
+        # Step 1: Start MT5 terminal if needed
         if self.auto_start and self.path and sys.platform == "win32":
             path_exe = self.path.replace("/", os.sep)
             if os.path.isfile(path_exe):
                 try:
+                    _log("Starting MT5 terminal...")
                     subprocess.Popen([path_exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    print("Starting MT5 terminal... Waiting 15s for it to load.")
+                    print("  → MT5 terminal launched. Waiting 15s for it to load...")
                     time.sleep(15)
-                    print("Connecting to MT5 (auto-detect)...")
+                    _log("Terminal should be ready. Connecting (auto-detect)...")
                     started_terminal = True
                     try_without_path = True
                 except Exception as e:
-                    print(f"Could not start MT5: {e}")
+                    print(f"  → Could not start MT5: {e}")
+            else:
+                print(f"  → Path not found: {path_exe}")
+
+        # Step 2: Initialize MT5 (with retries)
         for attempt in range(1, max_tries + 1):
             if try_without_path:
                 init_kw = {}
                 try_without_path = False
+                _log(f"  → Attempt {attempt}/{max_tries}: initialize (auto-detect)")
             else:
                 init_kw = {"path": self.path} if self.path else {}
+                _log(f"  → Attempt {attempt}/{max_tries}: initialize(path={self.path or 'auto'})")
+
             if mt5.initialize(**init_kw):
-                print("MT5 initialize() successful.")
+                print(f"  → MT5 initialize() OK (attempt {attempt})")
                 break
+
             err = mt5.last_error()
             code = err[0] if isinstance(err, (tuple, list)) and len(err) >= 1 else None
-            # If we didn't auto-start and get IPC timeout, start the terminal now and retry
+            msg = err[1] if isinstance(err, (tuple, list)) and len(err) >= 2 else ""
+            print(f"  → initialize() failed: retcode={code} {msg}")
+
+            # If IPC timeout, try starting terminal and retry
             if code == -10005 and self.path and sys.platform == "win32" and not started_terminal:
                 path_exe = self.path.replace("/", os.sep)
                 if os.path.isfile(path_exe):
                     try:
+                        _log("  → IPC timeout. Starting MT5 terminal...")
                         subprocess.Popen([path_exe], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        print("Started MT5 terminal (same session). Waiting 15s for it to load...")
+                        print("  → Waiting 15s for terminal to load...")
                         time.sleep(15)
-                        print("Connecting to MT5 (auto-detect)...")
                         started_terminal = True
                         try_without_path = True
                         continue
                     except Exception as e:
-                        print(f"Could not start MT5: {e}")
-            if attempt < max_tries and code == -10005:
-                print(f"MT5 initialize() attempt {attempt}/{max_tries} failed (IPC timeout), retrying in 4s...")
-                time.sleep(4)
+                        print(f"  → Could not start MT5: {e}")
+
+            if attempt < max_tries:
+                print(f"  → Retrying in {retry_delay}s...")
+                time.sleep(retry_delay)
                 continue
-            print(f"MT5 initialize() failed: {err}")
+
+            print(f"  → initialize() failed after {max_tries} attempts.")
             _print_mt5_hint("initialize", err)
             return False
+
+        # Step 3: Login to account (with retries)
         if self.login is not None and self.password and self.server:
-            # MT5 API expects login as int; from .env it's a string
             login_val = self.login
             if isinstance(login_val, str):
                 login_val = login_val.strip()
@@ -114,23 +150,45 @@ class MT5Connector:
                     login_val = int(login_val)
                 except (ValueError, TypeError):
                     pass
-            authorized = mt5.login(login=login_val, password=self.password, server=self.server)
-            if not authorized:
+
+            for attempt in range(1, max_tries + 1):
+                _log(f"  → Login attempt {attempt}/{max_tries} (server={self.server})")
+                authorized = mt5.login(login=login_val, password=self.password, server=self.server)
+                if authorized:
+                    print(f"  → Login OK (attempt {attempt})")
+                    break
                 err = mt5.last_error()
-                print(f"MT5 login failed: {err}")
-                _print_mt5_hint("login", err)
-                mt5.shutdown()
-                return False
-            print(f"Connected to MT5 — account #{self.login} on {self.server}")
+                code = err[0] if isinstance(err, (tuple, list)) and len(err) >= 1 else None
+                msg = err[1] if isinstance(err, (tuple, list)) and len(err) >= 2 else ""
+                print(f"  → Login failed: retcode={code} {msg}")
+                if attempt < max_tries:
+                    print(f"  → Retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                else:
+                    print(f"  → Login failed after {max_tries} attempts.")
+                    _print_mt5_hint("login", err)
+                    mt5.shutdown()
+                    return False
+
+            # Print account info
+            acc = mt5.account_info()
+            if acc:
+                print(f"  → Account: {acc.login} | {acc.server} | Balance: {acc.balance} {acc.currency}")
+            else:
+                print(f"  → Connected to MT5 — account #{self.login} on {self.server}")
         else:
-            print("Connected to MT5 (no account login)")
+            print("  → Connected to MT5 (no account login)")
+
         self.connected = True
+        print("  → Connection ready.")
+        print("=" * 50 + "\n")
         return True
 
     def disconnect(self):
+        _log("Shutting down MT5...")
         mt5.shutdown()
         self.connected = False
-        print("Disconnected from MT5")
+        print("[MT5] Disconnected from server.")
 
     def get_account_info(self):
         if not self.connected:
@@ -222,7 +280,10 @@ class MT5Connector:
     def get_live_price(self, symbol):
         tick = mt5.symbol_info_tick(symbol)
         if tick is None:
+            err = mt5.last_error()
+            _log(f"get_live_price({symbol}): no tick — {err}")
             return None
+        _log(f"get_live_price({symbol}): bid={tick.bid} ask={tick.ask}")
         return {
             'bid': tick.bid,
             'ask': tick.ask,
@@ -242,13 +303,21 @@ class MT5Connector:
     def get_bars(self, symbol, timeframe, count=100):
         if isinstance(timeframe, str):
             timeframe = self._TIMEFRAME_MAP.get(timeframe, mt5.TIMEFRAME_M5)
+        _log(f"get_bars({symbol}, {timeframe}, count={count})...")
         # Ensure symbol is in Market Watch (required for copy_rates on some brokers)
         info = mt5.symbol_info(symbol)
-        if info is not None and not info.visible:
+        if info is None:
+            _log(f"  → Symbol {symbol} not found.")
+            return None
+        if not info.visible:
+            _log(f"  → Adding {symbol} to Market Watch...")
             mt5.symbol_select(symbol, True)
         rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
         if rates is None or len(rates) == 0:
+            err = mt5.last_error()
+            _log(f"  → No data: {err}")
             return None
+        _log(f"  → Got {len(rates)} bars")
         df = pd.DataFrame(rates)
         df['time'] = pd.to_datetime(df['time'], unit='s')
         df.set_index('time', inplace=True)
@@ -303,6 +372,7 @@ class MT5Connector:
             request["sl"] = sl
         if tp is not None:
             request["tp"] = tp
+        _log(f"order_send: {order_type} {volume} {symbol} @ {execution_price} sl={sl} tp={tp}")
         result = mt5.order_send(request)
         if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
             err = mt5.last_error()

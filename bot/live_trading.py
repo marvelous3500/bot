@@ -145,9 +145,9 @@ class LiveTradingEngine:
                     print(f"[LIVE_DEBUG] test: No H1 data (tried: {gold_symbols})")
                     print(f"[LIVE_DEBUG]   → Check: symbol in MT5 Market Watch, market open (not weekend), broker symbol name")
                 return []
-            if getattr(config, 'LIVE_DEBUG', False):
+            if getattr(config, 'LIVE_DEBUG', False) or getattr(config, 'MT5_VERBOSE', False):
                 last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
-                print(f"[LIVE_DEBUG] {symbol} H1: {len(df_h1)} bars, last={last_h1}")
+                print(f"[MT5] test: {symbol} H1: {len(df_h1)} bars, last={last_h1}")
             strat = TestStrategy(df_h1, verbose=False)
             strat.prepare_data()
             signals_df = strat.run_backtest()
@@ -403,6 +403,8 @@ class LiveTradingEngine:
                     time.sleep(config.LIVE_CHECK_INTERVAL)
                     continue
                 self.update_positions()
+                if getattr(config, "MT5_VERBOSE", False):
+                    print(f"[MT5] Running strategy check...")
                 signals = self.run_strategy()
                 for signal in signals:
                     # Skip signals that would fail SL validation (e.g. strategy emitted SL on wrong side)
