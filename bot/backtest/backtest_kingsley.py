@@ -31,6 +31,22 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
     strat.df_h1 = df_h1_processed
     strat.df_15m = df_15m_processed
     signals = strat.run_backtest()
+    # Validate SL (same as live): BUY needs sl < price, SELL needs sl > price
+    def _valid_sl(trade):
+        sl, price = trade.get('sl'), trade.get('price')
+        if sl is None or price is None:
+            return False
+        try:
+            sl_f, price_f = float(sl), float(price)
+        except (TypeError, ValueError):
+            return False
+        if trade['type'] == 'BUY' and sl_f >= price_f:
+            return False
+        if trade['type'] == 'SELL' and sl_f <= price_f:
+            return False
+        return True
+    invalid_sl = signals[~signals.apply(_valid_sl, axis=1)]
+    signals = signals[signals.apply(_valid_sl, axis=1)]
     if signals.empty:
         if return_stats:
             return _stats_dict("kingsely_gold", 0, 0, 0, 0.0, 0.0, config.INITIAL_BALANCE)
@@ -46,6 +62,11 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
         print("| Strategy          | Trades | Wins | Losses | Win rate  | Final balance | Return      |")
         print("| :---------------- | :----- | :--- | :----- | :-------- | :------------ | :---------- |")
         print("| kingsely_gold     |      0 |    0 |      0 |     0.00% | $      100.00 |      0.00% |")
+        print()
+        print(f"Invalid SL (rejected, would fail in live): {len(invalid_sl)}")
+        if not invalid_sl.empty:
+            for _, row in invalid_sl.iterrows():
+                print(f"  {row['type']} @ {row['price']:.2f} sl={row['sl']:.2f} ({row['time']})")
         return
     balance = config.INITIAL_BALANCE
     wins = 0
@@ -130,6 +151,11 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
     print("| :---------------- | :----- | :--- | :----- | :-------- | :------------ | :---------- |")
     ret_str = f"{'+' if return_pct >= 0 else ''}{return_pct:,.2f}%"
     print(f"| kingsely_gold     | {wins + losses:>5} | {wins:>4} | {losses:>6} | {win_rate:>8.2f}% | ${balance:>11,.2f} | {ret_str:>10} |")
+    print()
+    print(f"Invalid SL (rejected, would fail in live): {len(invalid_sl)}")
+    if not invalid_sl.empty:
+        for _, row in invalid_sl.iterrows():
+            print(f"  {row['type']} @ {row['price']:.2f} sl={row['sl']:.2f} ({row['time']})")
 
 if __name__ == "__main__":
     run_kingsley_backtest()

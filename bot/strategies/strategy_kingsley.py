@@ -177,7 +177,7 @@ class KingsleyGoldStrategy:
                 if current_bias == 'BULLISH':
                     is_bullish = row_15['close'] > row_15['open']
                     entry = row_15['close']
-                    # SL must be below entry for BUY (strict: lq_level < entry)
+                    # SL must be below entry for BUY
                     if is_bullish and is_displacement and row_15['close'] > current_ob['low']:
                         if lq_level is None or float(lq_level) >= float(entry):
                             continue
@@ -198,7 +198,7 @@ class KingsleyGoldStrategy:
                 elif current_bias == 'BEARISH':
                     is_bearish = row_15['close'] < row_15['open']
                     entry = row_15['close']
-                    # SL must be above entry for SELL (strict: lq_level > entry)
+                    # SL must be above entry for SELL
                     if is_bearish and is_displacement and row_15['close'] < current_ob['high']:
                         if lq_level is None or float(lq_level) <= float(entry):
                             continue

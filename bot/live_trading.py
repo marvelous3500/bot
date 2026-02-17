@@ -152,6 +152,20 @@ class LiveTradingEngine:
                                 latest_signal['sl'] = sl_f + buf  # Move SL higher for SELL
                         except (TypeError, ValueError):
                             pass
+                # Kingsley Gold: if live price invalidated SL and fallback enabled, use fallback SL
+                if self.strategy_name == 'kingsely_gold' and getattr(config, 'KINGSLEY_USE_SL_FALLBACK', False):
+                    sl = latest_signal.get('sl')
+                    price = latest_signal['price']
+                    if sl is not None:
+                        try:
+                            sl_f, price_f = float(sl), float(price)
+                            fallback_dist = getattr(config, 'KINGSLEY_SL_FALLBACK_DISTANCE', 5.0)
+                            if latest_signal['type'] == 'BUY' and sl_f >= price_f:
+                                latest_signal['sl'] = price_f - fallback_dist
+                            elif latest_signal['type'] == 'SELL' and sl_f <= price_f:
+                                latest_signal['sl'] = price_f + fallback_dist
+                        except (TypeError, ValueError):
+                            pass
                 # Confluence: set SL from pips before lot calc (other strategies have sl from signal)
                 if self.strategy_name == 'confluence':
                     sl_pips = getattr(config, 'CONFLUENCE_SL_PIPS', 50)

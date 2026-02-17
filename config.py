@@ -96,6 +96,8 @@ KINGSLEY_DISPLACEMENT_RATIO = 0.6
 KINGSLEY_BACKTEST_SYMBOL = 'GC=F'   # Yahoo Finance
 KINGSLEY_LIVE_SYMBOL = 'XAUUSDm'    # MT5
 KINGSLEY_SL_BUFFER = 1.0   # Price units buffer below/above lq_level for live execution (reduces "Stop loss invalid" when market moves)
+KINGSLEY_USE_SL_FALLBACK = True   # When True: use fallback SL when live price invalidates lq_level. When False: reject invalid signals.
+KINGSLEY_SL_FALLBACK_DISTANCE = 5.0  # Price units for fallback (e.g. $5 for gold). Only used when KINGSLEY_USE_SL_FALLBACK=True.
 
 # Replay mode: run strategy every N bars (1 = every bar, most trades; 4 = faster, may miss some)
 REPLAY_STEP_BARS = 1
