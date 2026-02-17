@@ -64,7 +64,7 @@ LIVE_SYMBOLS = {
 }
 
 # Trading Loop Settings
-LIVE_CHECK_INTERVAL = 60  # Seconds between strategy checks
+LIVE_CHECK_INTERVAL = 30  # Seconds between strategy checks
 USE_MARGIN_CHECK = True   # Pre-trade margin check for live mode (skip if insufficient free margin)
 LIVE_DEBUG = True         # Log when no signals (data range, bar counts) to diagnose why live misses trades
 
