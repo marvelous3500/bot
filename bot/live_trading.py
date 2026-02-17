@@ -377,7 +377,14 @@ class LiveTradingEngine:
         print(f"Check interval: {config.LIVE_CHECK_INTERVAL}s")
         print(f"Manual approval: {'ON' if config.MANUAL_APPROVAL else 'OFF'}")
         print(f"Max trades/day: {config.MAX_TRADES_PER_DAY}")
-        print("Press Ctrl+C to stop\n")
+        if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
+            print("Test strategy: single-run mode (take one trade and exit)")
+            if config.MANUAL_APPROVAL:
+                print("  Use --auto-approve to skip confirmation prompt.\n")
+            else:
+                print()
+        else:
+            print("Press Ctrl+C to stop\n")
         self.running = True
         last_signal_time = None
         try:
@@ -424,6 +431,14 @@ class LiveTradingEngine:
                     if result:
                         last_signal_time = datetime.now()
                 self.show_status()
+                # Test strategy: single-run mode — take one trade and exit
+                if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
+                    if not signals:
+                        print("\nTest strategy: no signal (check XAUUSDm in Market Watch, market open). Exiting.")
+                    else:
+                        print("\nTest strategy: single run complete. Exiting.")
+                    self.running = False
+                    break
                 print(f"\nNext check in {config.LIVE_CHECK_INTERVAL}s...")
                 time.sleep(config.LIVE_CHECK_INTERVAL)
         except KeyboardInterrupt:

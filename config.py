@@ -104,6 +104,7 @@ KINGSLEY_SL_FALLBACK_DISTANCE = 5.0  # Price units for fallback (e.g. $5 for gol
 TEST_SL_DISTANCE = 5.0   # Price units (e.g. $5 for gold)
 TEST_TP_DISTANCE = 15.0  # Price units
 TEST_USE_KILL_ZONES = False  # False = always emit, take trade on first run
+TEST_SINGLE_RUN = True   # True = run once, take one trade, exit (verify bot can execute)
 TEST_BACKTEST_SYMBOL = 'GC=F'
 TEST_LIVE_SYMBOL = 'XAUUSDm'
 
