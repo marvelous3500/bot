@@ -57,10 +57,10 @@ MT5_AUTO_START = os.getenv('MT5_AUTO_START', 'true').lower() in ('true', '1', 'y
 
 # Live Trading Symbols (MT5 format) — first is default for paper/live
 LIVE_SYMBOLS = {
-    'GBPUSD': 'GBPUSD',
+    'GBPUSD': 'GBPUSDm',
     'XAUUSD': 'XAUUSDm',  # Exness gold symbol
-    'BTCUSD': 'BTCUSD',
-    'NAS100': 'NAS100'
+    'BTCUSD': 'BTCUSDm',
+    'NAS100': 'NAS100m'
 }
 
 
