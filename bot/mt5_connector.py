@@ -180,12 +180,14 @@ class MT5Connector:
             print("  → Connected to MT5 (no account login)")
 
         self.connected = True
-        # Check if Algo Trading is enabled (required for order_send)
+        # Check Algo Trading status first — print before doing anything else
         ti = mt5.terminal_info()
-        if ti is not None and getattr(ti, "trade_allowed", True) is False:
-            print("  → WARNING: Algo Trading is DISABLED in MT5.")
-            print("  → Enable it: click the 'Algo Trading' button in the MT5 toolbar (it must be green).")
-            print("  → Orders will fail with retcode 10027 until you enable it.")
+        if ti is not None:
+            if getattr(ti, "trade_allowed", True):
+                print("  → Algo Trading: ENABLED (orders will execute)")
+            else:
+                print("  → Algo Trading: DISABLED — orders will fail.")
+                print("  → Enable it: click the 'Algo Trading' button in the MT5 toolbar (it must be green).")
         print("  → Connection ready.")
         print("=" * 50 + "\n")
         return True
@@ -332,16 +334,16 @@ class MT5Connector:
 
     def place_order(self, symbol, order_type, volume, price=None, sl=None, tp=None, comment=""):
         if not self.connected:
-            return None
+            return None, "Not connected"
         symbol_info = mt5.symbol_info(symbol)
         if symbol_info is None:
-            return None
+            return None, "Symbol not found"
         if not symbol_info.visible:
             if not mt5.symbol_select(symbol, True):
-                return None
+                return None, "Could not add symbol to Market Watch"
         tick = mt5.symbol_info_tick(symbol)
         if tick is None:
-            return None
+            return None, "No tick data"
         if order_type == 'BUY':
             trade_type = mt5.ORDER_TYPE_BUY
             execution_price = tick.ask if price is None else price
@@ -349,7 +351,7 @@ class MT5Connector:
             trade_type = mt5.ORDER_TYPE_SELL
             execution_price = tick.bid if price is None else price
         else:
-            return None
+            return None, "Invalid order type"
         # Normalize volume to symbol's step (e.g. 0.01 for gold)
         vol_min = getattr(symbol_info, 'volume_min', 0.01)
         vol_max = getattr(symbol_info, 'volume_max', 100)
@@ -384,7 +386,8 @@ class MT5Connector:
             err = mt5.last_error()
             retcode = result.retcode if result is not None else (err[0] if err else "?")
             comment = getattr(result, 'comment', None) if result is not None else (err[1] if err and len(err) > 1 else "")
-            print(f"[MT5] Order failed: retcode={retcode} comment={comment}")
+            err_msg = f"retcode={retcode} comment={comment}"
+            print(f"[MT5] Order failed: {err_msg}")
             if result is not None and hasattr(result, 'retcode') and result.retcode:
                 if result.retcode == 10027:  # AutoTrading disabled by client
                     print("  → Enable 'Algo Trading' in MT5: click the button in the top toolbar (it must be green/on).")
@@ -394,7 +397,7 @@ class MT5Connector:
                     print("  → Invalid order (check SL/TP distance, volume, symbol). Gold: try volume 0.01.")
                 elif result.retcode == 10030:  # Invalid fill
                     print("  → Invalid filling mode for symbol. Check broker requirements.")
-            return None
+            return None, err_msg
         print(f"Order executed: {order_type} {volume} {symbol} @ {result.price}")
         return {
             'ticket': result.order,
@@ -405,7 +408,7 @@ class MT5Connector:
             'sl': sl,
             'tp': tp,
             'time': datetime.now()
-        }
+        }, None
 
     def get_positions(self):
         positions = mt5.positions_get()

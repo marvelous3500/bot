@@ -272,7 +272,7 @@ class LiveTradingEngine:
                     print(f"[LIVE_DEBUG]   price={price} sl={sl} type={order_type}")
             if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
                 speak(f"Trade rejected. Reason: {sl_reason}.")
-            return None
+            return None, sl_reason
         if not self.paper_mode and config.USE_MARGIN_CHECK:
             account_info = self.mt5.get_account_info()
             if account_info:
@@ -280,24 +280,26 @@ class LiveTradingEngine:
                     signal['symbol'], signal['type'], signal['volume'], signal['price']
                 )
                 if required is not None and account_info['free_margin'] < required:
-                    print(f"[SAFETY] Rejected: insufficient margin (free: {account_info['free_margin']:.2f}, required: {required:.2f})")
+                    err = f"Insufficient margin (free: {account_info['free_margin']:.2f}, required: {required:.2f})"
+                    print(f"[SAFETY] Rejected: {err}")
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
                         speak("Trade rejected. Reason: Insufficient margin.")
-                    return None
+                    return None, err
         if config.AI_ENABLED:
             score = get_signal_confidence(signal)
             if score is not None and score < config.AI_CONFIDENCE_THRESHOLD:
-                print(f"[AI] Rejected: confidence {score} below threshold {config.AI_CONFIDENCE_THRESHOLD}")
+                err = f"AI confidence {score} below threshold"
+                print(f"[AI] Rejected: {err}")
                 if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
                     speak("Trade rejected. Reason: Below confidence threshold.")
-                return None
+                return None, err
         if config.MANUAL_APPROVAL:
             account_info = self.paper.get_account_info() if self.paper_mode else self.mt5.get_account_info()
             if not self.approver.request_approval(signal, account_info):
                 print("[REJECTED] Trade not approved by user")
                 if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
                     speak("Trade rejected. Reason: Not approved by user.")
-                return None
+                return None, "User rejected"
         if self.paper_mode:
             result = self.paper.place_order(
                 symbol=signal['symbol'],
@@ -308,8 +310,9 @@ class LiveTradingEngine:
                 tp=signal['tp'],
                 comment=signal.get('reason', '')
             )
+            mt5_err = None
         else:
-            result = self.mt5.place_order(
+            result, mt5_err = self.mt5.place_order(
                 symbol=signal['symbol'],
                 order_type=signal['type'],
                 volume=signal['volume'],
@@ -337,7 +340,8 @@ class LiveTradingEngine:
                 if explanation:
                     result['ai_explain'] = explanation
                     print(f"[AI] {explanation}")
-        return result
+            return result, None
+        return None, mt5_err if not self.paper_mode else "Paper order failed"
 
     def update_positions(self):
         if self.paper_mode:
@@ -390,6 +394,7 @@ class LiveTradingEngine:
             print("Press Ctrl+C to stop\n")
         self.running = True
         last_signal_time = None
+        self._last_run_errors = []  # Capture why trade wasn't executed
         try:
             while self.running:
                 if not self.check_safety_limits():
@@ -403,6 +408,7 @@ class LiveTradingEngine:
                     time.sleep(config.LIVE_CHECK_INTERVAL)
                     continue
                 self.update_positions()
+                self._last_run_errors = []
                 if getattr(config, "MT5_VERBOSE", False):
                     print(f"[MT5] Running strategy check...")
                 signals = self.run_strategy()
@@ -412,12 +418,15 @@ class LiveTradingEngine:
                     # Skip signals that would fail SL validation (e.g. strategy emitted SL on wrong side)
                     valid, sl_reason = self._validate_signal_sl(signal)
                     if not valid:
+                        err = f"Invalid SL: {sl_reason}"
+                        self._last_run_errors.append(err)
                         print(f"[SKIP] Invalid signal: {sl_reason} (price={signal.get('price')} sl={signal.get('sl')} type={signal.get('type')})")
                         continue
                     signal_time = signal.get('time', datetime.now())
                     if isinstance(signal_time, pd.Timestamp):
                         signal_time = signal_time.to_pydatetime()
                     if last_signal_time and abs((signal_time - last_signal_time).total_seconds()) < 300:
+                        self._last_run_errors.append("5 min cooldown")
                         print(f"[SKIP] Signal within 5 min of last execution (cooldown)")
                         continue
                     sl = signal.get('sl')
@@ -436,11 +445,13 @@ class LiveTradingEngine:
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_SIGNAL:
                         reason = signal.get('reason', 'Strategy signal')
                         speak(f"Trade found. {signal['type']} {signal['symbol']}. {reason}. Checking approval.")
-                    result = self.execute_signal(signal)
+                    result, exec_err = self.execute_signal(signal)
                     if result:
                         last_signal_time = datetime.now()
                         print(f"[EXECUTE] Order placed: {result.get('type')} {result.get('volume')} {result.get('symbol')} @ {result.get('price')}")
                     else:
+                        if exec_err:
+                            self._last_run_errors.append(exec_err)
                         print(f"[EXECUTE] Order failed — check [MT5] or [SAFETY] message above for reason.")
                 self.show_status()
                 # Test strategy: single-run mode — always exit after one check
@@ -450,8 +461,15 @@ class LiveTradingEngine:
                     else:
                         trades_done = len(self.trades_today)
                         if trades_done == 0:
-                            print("\nTest strategy: single run complete — but NO TRADE was executed.")
-                            print("  Check [SKIP], [SAFETY], or [MT5] Order failed messages above for the reason.")
+                            print("\n" + "=" * 50)
+                            print("Test strategy: single run complete — but NO TRADE was executed.")
+                            if self._last_run_errors:
+                                print("Reason(s):")
+                                for e in self._last_run_errors:
+                                    print(f"  • {e}")
+                            else:
+                                print("  (No signal was generated — check data/symbol)")
+                            print("=" * 50)
                         else:
                             print(f"\nTest strategy: single run complete. {trades_done} trade(s) executed.")
                     self.running = False
