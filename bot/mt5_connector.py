@@ -180,6 +180,12 @@ class MT5Connector:
             print("  → Connected to MT5 (no account login)")
 
         self.connected = True
+        # Check if Algo Trading is enabled (required for order_send)
+        ti = mt5.terminal_info()
+        if ti is not None and getattr(ti, "trade_allowed", True) is False:
+            print("  → WARNING: Algo Trading is DISABLED in MT5.")
+            print("  → Enable it: click the 'Algo Trading' button in the MT5 toolbar (it must be green).")
+            print("  → Orders will fail with retcode 10027 until you enable it.")
         print("  → Connection ready.")
         print("=" * 50 + "\n")
         return True
@@ -380,7 +386,9 @@ class MT5Connector:
             comment = getattr(result, 'comment', None) if result is not None else (err[1] if err and len(err) > 1 else "")
             print(f"[MT5] Order failed: retcode={retcode} comment={comment}")
             if result is not None and hasattr(result, 'retcode') and result.retcode:
-                if result.retcode == 10019:  # Not enough money
+                if result.retcode == 10027:  # AutoTrading disabled by client
+                    print("  → Enable 'Algo Trading' in MT5: click the button in the top toolbar (it must be green/on).")
+                elif result.retcode == 10019:  # Not enough money
                     print("  → Insufficient margin. Reduce lot size or add funds.")
                 elif result.retcode == 10016:  # Invalid request
                     print("  → Invalid order (check SL/TP distance, volume, symbol). Gold: try volume 0.01.")
