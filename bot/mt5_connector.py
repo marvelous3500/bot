@@ -275,6 +275,18 @@ class MT5Connector:
             execution_price = tick.bid if price is None else price
         else:
             return None
+        # Normalize volume to symbol's step (e.g. 0.01 for gold)
+        vol_min = getattr(symbol_info, 'volume_min', 0.01)
+        vol_max = getattr(symbol_info, 'volume_max', 100)
+        vol_step = getattr(symbol_info, 'volume_step', 0.01)
+        try:
+            v = float(volume)
+            v = max(vol_min, min(vol_max, round(v / vol_step) * vol_step))
+            volume = round(v, 2)
+        except (TypeError, ValueError):
+            volume = vol_min
+        # Filling: RETURN (0) preferred for market orders; fallback to IOC
+        type_filling = getattr(mt5, 'ORDER_FILLING_RETURN', mt5.ORDER_FILLING_IOC)
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": symbol,
@@ -285,7 +297,7 @@ class MT5Connector:
             "magic": 234000,
             "comment": comment,
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC,
+            "type_filling": type_filling,
         }
         if sl is not None:
             request["sl"] = sl
@@ -293,6 +305,17 @@ class MT5Connector:
             request["tp"] = tp
         result = mt5.order_send(request)
         if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+            err = mt5.last_error()
+            retcode = result.retcode if result is not None else (err[0] if err else "?")
+            comment = getattr(result, 'comment', None) if result is not None else (err[1] if err and len(err) > 1 else "")
+            print(f"[MT5] Order failed: retcode={retcode} comment={comment}")
+            if result is not None and hasattr(result, 'retcode') and result.retcode:
+                if result.retcode == 10019:  # Not enough money
+                    print("  → Insufficient margin. Reduce lot size or add funds.")
+                elif result.retcode == 10016:  # Invalid request
+                    print("  → Invalid order (check SL/TP distance, volume, symbol). Gold: try volume 0.01.")
+                elif result.retcode == 10030:  # Invalid fill
+                    print("  → Invalid filling mode for symbol. Check broker requirements.")
             return None
         print(f"Order executed: {order_type} {volume} {symbol} @ {result.price}")
         return {

@@ -105,6 +105,7 @@ TEST_SL_DISTANCE = 5.0   # Price units (e.g. $5 for gold)
 TEST_TP_DISTANCE = 15.0  # Price units
 TEST_USE_KILL_ZONES = False  # False = always emit, take trade on first run
 TEST_SINGLE_RUN = True   # True = run once, take one trade, exit (verify bot can execute)
+TEST_FIXED_LOT = 0.01    # Fixed lot for test (avoids lot calc issues; 0.01 = min for most brokers)
 TEST_BACKTEST_SYMBOL = 'GC=F'
 TEST_LIVE_SYMBOL = 'XAUUSDm'
 

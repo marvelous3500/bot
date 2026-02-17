@@ -215,9 +215,12 @@ class LiveTradingEngine:
                     latest_signal['tp'] = latest_signal['price'] + (sl_dist * config.RISK_REWARD_RATIO)
                 else:
                     latest_signal['tp'] = latest_signal['price'] - (sl_dist * config.RISK_REWARD_RATIO)
+                # Test strategy: use fixed small lot to ensure order goes through
+                if self.strategy_name == 'test':
+                    lot = getattr(config, 'TEST_FIXED_LOT', 0.01) or 0.01
+                    latest_signal['volume'] = max(0.01, float(lot))
                 # Dynamic lot size: risk % of current balance (matches backtest)
-                use_dynamic = getattr(config, 'USE_DYNAMIC_POSITION_SIZING', True)
-                if use_dynamic and self.mt5.connected:
+                elif getattr(config, 'USE_DYNAMIC_POSITION_SIZING', True) and self.mt5.connected:
                     account = self.paper.get_account_info() if self.paper_mode else self.mt5.get_account_info()
                     balance = account['balance'] if account else 0
                     sl = latest_signal.get('sl')
@@ -401,8 +404,7 @@ class LiveTradingEngine:
                     # Skip signals that would fail SL validation (e.g. strategy emitted SL on wrong side)
                     valid, sl_reason = self._validate_signal_sl(signal)
                     if not valid:
-                        if getattr(config, 'LIVE_DEBUG', False):
-                            print(f"[LIVE_DEBUG] Skipping invalid signal: {sl_reason} (price={signal.get('price')} sl={signal.get('sl')} type={signal.get('type')})")
+                        print(f"[SKIP] Invalid signal: {sl_reason} (price={signal.get('price')} sl={signal.get('sl')} type={signal.get('type')})")
                         continue
                     signal_time = signal.get('time', datetime.now())
                     if isinstance(signal_time, pd.Timestamp):
