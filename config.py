@@ -58,7 +58,7 @@ MT5_AUTO_START = os.getenv('MT5_AUTO_START', 'true').lower() in ('true', '1', 'y
 # Live Trading Symbols (MT5 format) — first is default for paper/live
 LIVE_SYMBOLS = {
     'GBPUSD': 'GBPUSD',
-    'XAUUSD': 'XAUUSD',
+    'XAUUSD': 'XAUUSDm',  # Exness gold symbol
     'BTCUSD': 'BTCUSD',
     'NAS100': 'NAS100'
 }
@@ -104,7 +104,7 @@ TEST_SL_DISTANCE = 5.0   # Price units (e.g. $5 for gold)
 TEST_TP_DISTANCE = 15.0  # Price units
 TEST_USE_KILL_ZONES = False  # False = always emit, take trade on first run
 TEST_BACKTEST_SYMBOL = 'GC=F'
-TEST_LIVE_SYMBOL = 'XAUUSD'
+TEST_LIVE_SYMBOL = 'XAUUSDm'
 
 # Replay mode: run strategy every N bars (1 = every bar, most trades; 4 = faster, may miss some)
 REPLAY_STEP_BARS = 1

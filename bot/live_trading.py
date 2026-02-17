@@ -127,7 +127,12 @@ class LiveTradingEngine:
                 print(f"[LIVE_DEBUG] kingsely_gold: 0 signals (no H1+15m BOS + OB tap + Liq sweep + OB test)")
         elif self.strategy_name == 'test':
             gold_symbols = list(dict.fromkeys([
-                symbol, getattr(config, 'TEST_LIVE_SYMBOL', 'XAUUSD'), 'GOLD', 'XAUUSD'
+                symbol,
+                getattr(config, 'TEST_LIVE_SYMBOL', 'XAUUSD'),
+                getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSDm'),  # Exness uses XAUUSDm
+                'GOLD',
+                'XAUUSD',
+                'XAUUSDm',
             ]))
             df_h1 = None
             for sym in gold_symbols:
@@ -138,6 +143,7 @@ class LiveTradingEngine:
             if df_h1 is None:
                 if getattr(config, 'LIVE_DEBUG', False):
                     print(f"[LIVE_DEBUG] test: No H1 data (tried: {gold_symbols})")
+                    print(f"[LIVE_DEBUG]   → Check: symbol in MT5 Market Watch, market open (not weekend), broker symbol name")
                 return []
             if getattr(config, 'LIVE_DEBUG', False):
                 last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
