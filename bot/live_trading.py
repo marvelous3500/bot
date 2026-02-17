@@ -406,6 +406,8 @@ class LiveTradingEngine:
                 if getattr(config, "MT5_VERBOSE", False):
                     print(f"[MT5] Running strategy check...")
                 signals = self.run_strategy()
+                if signals:
+                    print(f"\n[MT5] Got {len(signals)} signal(s). Attempting execution...")
                 for signal in signals:
                     # Skip signals that would fail SL validation (e.g. strategy emitted SL on wrong side)
                     valid, sl_reason = self._validate_signal_sl(signal)
@@ -416,8 +418,7 @@ class LiveTradingEngine:
                     if isinstance(signal_time, pd.Timestamp):
                         signal_time = signal_time.to_pydatetime()
                     if last_signal_time and abs((signal_time - last_signal_time).total_seconds()) < 300:
-                        if getattr(config, 'LIVE_DEBUG', False):
-                            print(f"[LIVE_DEBUG] Skipping signal (within 5 min of last execution)")
+                        print(f"[SKIP] Signal within 5 min of last execution (cooldown)")
                         continue
                     sl = signal.get('sl')
                     sl_dist = abs(float(signal['price']) - float(sl)) if sl is not None else None
@@ -438,13 +439,21 @@ class LiveTradingEngine:
                     result = self.execute_signal(signal)
                     if result:
                         last_signal_time = datetime.now()
+                        print(f"[EXECUTE] Order placed: {result.get('type')} {result.get('volume')} {result.get('symbol')} @ {result.get('price')}")
+                    else:
+                        print(f"[EXECUTE] Order failed — check [MT5] or [SAFETY] message above for reason.")
                 self.show_status()
                 # Test strategy: single-run mode — always exit after one check
                 if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
                     if not signals:
                         print("\nTest strategy: no signal (check XAUUSDm in Market Watch, market open). Exiting.")
                     else:
-                        print("\nTest strategy: single run complete. Exiting.")
+                        trades_done = len(self.trades_today)
+                        if trades_done == 0:
+                            print("\nTest strategy: single run complete — but NO TRADE was executed.")
+                            print("  Check [SKIP], [SAFETY], or [MT5] Order failed messages above for the reason.")
+                        else:
+                            print(f"\nTest strategy: single run complete. {trades_done} trade(s) executed.")
                     self.running = False
                     break
                 print(f"\nNext check in {config.LIVE_CHECK_INTERVAL}s...")
