@@ -362,29 +362,43 @@ class MT5Connector:
             volume = round(v, 2)
         except (TypeError, ValueError):
             volume = vol_min
-        # Filling: RETURN (0) preferred for market orders; fallback to IOC
-        type_filling = getattr(mt5, 'ORDER_FILLING_RETURN', mt5.ORDER_FILLING_IOC)
-        request = {
-            "action": mt5.TRADE_ACTION_DEAL,
-            "symbol": symbol,
-            "volume": volume,
-            "type": trade_type,
-            "price": execution_price,
-            "deviation": 20,
-            "magic": 234000,
-            "comment": comment,
-            "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": type_filling,
-        }
-        if sl is not None:
-            request["sl"] = sl
-        if tp is not None:
-            request["tp"] = tp
-        _log(f"order_send: {order_type} {volume} {symbol} @ {execution_price} sl={sl} tp={tp}")
-        result = mt5.order_send(request)
-        if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+        # Filling mode: try FOK, IOC, RETURN (Exness gold often needs FOK or IOC, not RETURN)
+        filling_modes = [
+            ("FOK", mt5.ORDER_FILLING_FOK),
+            ("IOC", mt5.ORDER_FILLING_IOC),
+            ("RETURN", getattr(mt5, "ORDER_FILLING_RETURN", 0)),
+        ]
+        result = None
+        last_err = None
+        for fill_name, type_filling in filling_modes:
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": symbol,
+                "volume": volume,
+                "type": trade_type,
+                "price": execution_price,
+                "deviation": 20,
+                "magic": 234000,
+                "comment": comment,
+                "type_time": mt5.ORDER_TIME_GTC,
+                "type_filling": type_filling,
+            }
+            if sl is not None:
+                request["sl"] = sl
+            if tp is not None:
+                request["tp"] = tp
+            _log(f"order_send: {order_type} {volume} {symbol} @ {execution_price} (filling={fill_name}) sl={sl} tp={tp}")
+            result = mt5.order_send(request)
+            if result is not None and result.retcode == mt5.TRADE_RETCODE_DONE:
+                break
+            if result is not None and result.retcode == 10030:
+                _log(f"  → Filling {fill_name} not supported, trying next...")
+                last_err = result
+                continue
+            break
+        if result is None or getattr(result, "retcode", -1) != mt5.TRADE_RETCODE_DONE:
             err = mt5.last_error()
-            retcode = result.retcode if result is not None else (err[0] if err else "?")
+            retcode = getattr(result, "retcode", err[0] if err else "?")
             comment = getattr(result, 'comment', None) if result is not None else (err[1] if err and len(err) > 1 else "")
             err_msg = f"retcode={retcode} comment={comment}"
             print(f"[MT5] Order failed: {err_msg}")
@@ -396,9 +410,9 @@ class MT5Connector:
                 elif result.retcode == 10016:  # Invalid request
                     print("  → Invalid order (check SL/TP distance, volume, symbol). Gold: try volume 0.01.")
                 elif result.retcode == 10030:  # Invalid fill
-                    print("  → Invalid filling mode for symbol. Check broker requirements.")
+                    print("  → Tried FOK, IOC, RETURN — none supported. Check broker/symbol in MT5 Market Watch.")
             return None, err_msg
-        print(f"Order executed: {order_type} {volume} {symbol} @ {result.price}")
+        print(f"Order executed: {order_type} {volume} {symbol} @ {result.price} (filling={fill_name})")
         return {
             'ticket': result.order,
             'symbol': symbol,
