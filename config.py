@@ -41,7 +41,7 @@ load_dotenv()  # Load from .env file
 
 LIVE_MODE = True   # True = real money, False = paper trading
 MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
-MAX_TRADES_PER_DAY = 3
+MAX_TRADES_PER_DAY = 10
 MAX_POSITION_SIZE = 0.10  # Fallback lot size when dynamic calc fails
 USE_DYNAMIC_POSITION_SIZING = True  # Risk % of current balance per trade (matches backtest)
 PAPER_TRADING_LOG = 'paper_trades.json'
@@ -79,6 +79,9 @@ LIVE_SYMBOLS = {
 LIVE_CHECK_INTERVAL = 30  # Seconds between strategy checks
 USE_MARGIN_CHECK = True   # Pre-trade margin check for live mode (skip if insufficient free margin)
 LIVE_DEBUG = True         # Log when no signals (data range, bar counts) to diagnose why live misses trades
+# Same symbol: do not take a new trade if we already have an open position on that pair, except when adding at TP1/TP2
+ALLOW_SAME_SYMBOL_AT_TP = True   # If True, allow new entry on same symbol only when price is at/near existing position's TP
+AT_TP_POINTS = 5.0               # Consider "at TP" when entry price is within this many points of position's TP (e.g. 5 for XAUUSD)
 
 # Confluence strategy: fixed stop loss in pips (4H structure + 15m OB entry)
 CONFLUENCE_SL_PIPS = 50

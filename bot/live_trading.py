@@ -257,6 +257,51 @@ class LiveTradingEngine:
             return False, "Stop loss invalid"
         return True, None
 
+    def _allowed_same_symbol_entry(self, signal):
+        """Allow new entry on same symbol only when we have no position or when adding at TP1/TP2."""
+        symbol = signal.get('symbol')
+        if not symbol:
+            return True, None
+        entry_price = signal.get('price')
+        if entry_price is None:
+            return True, None
+        try:
+            entry_price = float(entry_price)
+        except (TypeError, ValueError):
+            return True, None
+        if self.paper_mode:
+            positions = [p for p in self.paper.get_positions() if p.get('symbol') == symbol]
+        else:
+            positions = [p for p in self.mt5.get_positions() if p.get('symbol') == symbol]
+        if not positions:
+            return True, None
+        if not getattr(config, 'ALLOW_SAME_SYMBOL_AT_TP', True):
+            return False, "Same symbol has open position (ALLOW_SAME_SYMBOL_AT_TP is False)"
+        threshold = getattr(config, 'AT_TP_POINTS', 5.0)
+        for pos in positions:
+            tp = pos.get('tp')
+            if tp is None:
+                continue
+            try:
+                tp = float(tp)
+                price_open = pos.get('price_open')
+                if price_open is not None:
+                    price_open = float(price_open)
+                    # TP2 = same direction as TP1, double the distance from open to TP1
+                    if pos.get('type') == 'BUY':
+                        tp2 = price_open + 2.0 * (tp - price_open)
+                    else:
+                        tp2 = price_open - 2.0 * (price_open - tp)
+                else:
+                    tp2 = None
+            except (TypeError, ValueError):
+                tp2 = None
+            if abs(entry_price - tp) <= threshold:
+                return True, None
+            if tp2 is not None and abs(entry_price - tp2) <= threshold:
+                return True, None
+        return False, "Same symbol has open position; add only at TP1/TP2"
+
     def execute_signal(self, signal):
         valid, sl_reason = self._validate_signal_sl(signal)
         if not valid:
@@ -273,6 +318,12 @@ class LiveTradingEngine:
             if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
                 speak(f"Trade rejected. Reason: {sl_reason}.")
             return None, sl_reason
+        allowed, same_symbol_reason = self._allowed_same_symbol_entry(signal)
+        if not allowed:
+            print(f"[SAFETY] Rejected: {same_symbol_reason}")
+            if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
+                speak(f"Trade rejected. Reason: {same_symbol_reason}.")
+            return None, same_symbol_reason
         if not self.paper_mode and config.USE_MARGIN_CHECK:
             account_info = self.mt5.get_account_info()
             if account_info:
@@ -452,6 +503,8 @@ class LiveTradingEngine:
                         if dollar_risk is not None:
                             sl_info += f" | Risk: ${dollar_risk:.2f}"
                     print(f"\n[SIGNAL] {signal['type']} {signal['symbol']} @ {signal['price']:.5f}{sl_info}")
+                    if sl is not None:
+                        print(f"[SL] Stop loss: {float(sl):.5f} | Risk in dollars: ${dollar_risk:.2f}" if dollar_risk is not None else f"[SL] Stop loss: {float(sl):.5f} | Risk in dollars: n/a")
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_SIGNAL:
                         reason = signal.get('reason', 'Strategy signal')
                         speak(f"Trade found. {signal['type']} {signal['symbol']}. {reason}. Checking approval.")
