@@ -27,6 +27,13 @@ python main.py --mode backtest --strategy all --period 60d
 
 **Strategies:** `h1_m5_bos` | `kingsely_gold` | `test` | `gold_compare` | `all`
 
+### Parameter sweep (Kingsley fine-tuning)
+
+```bash
+# Run sweep with different config values, print results side by side
+python scripts/sweep_kingsley.py
+```
+
 ---
 
 ## Paper trading (MT5 required, no real orders)

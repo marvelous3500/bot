@@ -47,6 +47,9 @@ python main.py --mode live --auto-approve
 | `MAX_TRADES_PER_DAY` | Daily trade limit (in-memory; resets at midnight **local time**) | `5` |
 | `MAX_POSITION_SIZE` | Lot size (e.g. 0.01 = micro lot) | `0.01` |
 | `PAPER_TRADING_LOG` | JSON file for paper session persistence | `paper_trades.json` |
+| `LIVE_CONFIRM_ON_START` | Require typing 'yes' before live loop starts | `True` |
+| `MAX_LOT_LIVE` | Cap lot size in live mode | `0.01` |
+| `LIVE_TRADE_LOG` | Append trades to `logs/trades_YYYYMMDD.json` | `True` |
 | `LIVE_CHECK_INTERVAL` | Seconds between strategy runs | `60` |
 | `USE_MARGIN_CHECK` | Pre-trade margin check in live mode | `True` |
 | `MT5_LOGIN` / `MT5_PASSWORD` / `MT5_SERVER` | From `.env`; server default is **Exness-MT5Trial** | — |
@@ -145,11 +148,16 @@ If you see `[LIVE_DEBUG] kingsely_gold: Bar data missing for XAUUSD — H1=MISSI
 
 ---
 
-## 6. Testing Plan
+## 6. Testing Plan and Real Money Readiness
 
+See [REAL_MONEY_CHECKLIST.md](REAL_MONEY_CHECKLIST.md) for the full checklist before going live.
+
+**Phased rollout:**
 - **Phase 1 — Paper (1–2 weeks):** Run all strategies in paper mode (`--mode paper`). Verify signals, safety (daily limit, SL rejection, approval timeout), and simulated P&L. Review `paper_trades.json`.
-- **Phase 2 — Live micro lots:** Use 0.01 lots, keep `MANUAL_APPROVAL=True`, limit to 2–3 trades per day. Monitor slippage and spreads.
+- **Phase 2 — Live micro lots:** Use 0.01 lots (`MAX_LOT_LIVE=0.01`), keep `MANUAL_APPROVAL=True`, limit to 2–3 trades per day. Monitor slippage and spreads.
 - **Phase 3 — Scale (if profitable):** Consider gradual position size increase and whether to keep or relax manual approval.
+
+**Safeguards:** `LIVE_CONFIRM_ON_START=True` prompts "Type 'yes' to continue" before the live loop. `MAX_LOT_LIVE` caps lot size in live mode. Strategy validation: see [STRATEGY_VALIDATION.md](STRATEGY_VALIDATION.md).
 
 ---
 

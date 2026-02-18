@@ -3,7 +3,7 @@ import pandas as pd
 import config
 from ..data_loader import fetch_data_yfinance, load_data_csv
 from ..strategies import TestStrategy
-from .common import _stats_dict
+from .common import _stats_dict, _apply_backtest_realism
 
 TEST_BACKTEST_SYMBOL = 'GC=F'
 TEST_LIVE_SYMBOL = 'XAUUSD'
@@ -69,56 +69,61 @@ def run_test_backtest(csv_path=None, symbol=None, period=None, return_stats=Fals
     total_profit = 0.0
     total_loss = 0.0
     risk = getattr(config, 'RISK_REWARD_RATIO', 3.0)
+    used_symbol = symbol or getattr(config, 'TEST_BACKTEST_SYMBOL', TEST_BACKTEST_SYMBOL)
     for _, trade in signals.iterrows():
         entry_price = trade['price']
         stop_loss = trade['sl']
         trade_time = trade['time']
+        adj_entry, adj_sl, commission = _apply_backtest_realism(
+            entry_price, stop_loss, trade['type'], used_symbol, entry_price
+        )
+        spread_cost = abs(adj_entry - entry_price)
         future_prices = df_h1.loc[df_h1.index > trade_time]
         if future_prices.empty:
             continue
         if trade['type'] == 'BUY':
-            sl_dist = entry_price - stop_loss
+            sl_dist = adj_entry - adj_sl
             tp_price = trade.get('tp')
-            if tp_price is None or tp_price <= entry_price:
-                tp_price = entry_price + (sl_dist * risk)
+            if tp_price is None or tp_price <= adj_entry:
+                tp_price = adj_entry + (sl_dist * risk)
             outcome = None
             for idx, bar in future_prices.iterrows():
-                if bar['low'] <= stop_loss:
+                if bar['low'] <= adj_sl:
                     outcome = 'LOSS'
                     break
                 if bar['high'] >= tp_price:
                     outcome = 'WIN'
                     break
             if outcome == 'WIN':
-                profit = (balance * config.RISK_PER_TRADE) * risk
+                profit = (balance * config.RISK_PER_TRADE) * risk - spread_cost - commission
                 total_profit += profit
                 balance += profit
                 wins += 1
             elif outcome == 'LOSS':
-                loss = (balance * config.RISK_PER_TRADE)
+                loss = (balance * config.RISK_PER_TRADE) + spread_cost + commission
                 total_loss += loss
                 balance -= loss
                 losses += 1
         elif trade['type'] == 'SELL':
-            sl_dist = stop_loss - entry_price
+            sl_dist = adj_sl - adj_entry
             tp_price = trade.get('tp')
-            if tp_price is None or tp_price >= entry_price:
-                tp_price = entry_price - (sl_dist * risk)
+            if tp_price is None or tp_price >= adj_entry:
+                tp_price = adj_entry - (sl_dist * risk)
             outcome = None
             for idx, bar in future_prices.iterrows():
-                if bar['high'] >= stop_loss:
+                if bar['high'] >= adj_sl:
                     outcome = 'LOSS'
                     break
                 if bar['low'] <= tp_price:
                     outcome = 'WIN'
                     break
             if outcome == 'WIN':
-                profit = (balance * config.RISK_PER_TRADE) * risk
+                profit = (balance * config.RISK_PER_TRADE) * risk - spread_cost - commission
                 total_profit += profit
                 balance += profit
                 wins += 1
             elif outcome == 'LOSS':
-                loss = (balance * config.RISK_PER_TRADE)
+                loss = (balance * config.RISK_PER_TRADE) + spread_cost + commission
                 total_loss += loss
                 balance -= loss
                 losses += 1

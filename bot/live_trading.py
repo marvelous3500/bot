@@ -1,3 +1,4 @@
+import os
 import time
 import config
 import pandas as pd
@@ -349,11 +350,17 @@ class LiveTradingEngine:
                 if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
                     speak("Trade rejected. Reason: Not approved by user.")
                 return None, "User rejected"
+        vol = signal['volume']
+        if not self.paper_mode:
+            max_lot = getattr(config, 'MAX_LOT_LIVE', None)
+            if max_lot is not None and vol > max_lot:
+                vol = max_lot
+                signal = {**signal, 'volume': vol}
         if self.paper_mode:
             result = self.paper.place_order(
                 symbol=signal['symbol'],
                 order_type=signal['type'],
-                volume=signal['volume'],
+                volume=vol,
                 price=signal['price'],
                 sl=signal['sl'],
                 tp=signal['tp'],
@@ -365,7 +372,7 @@ class LiveTradingEngine:
             result, mt5_err = self.mt5.place_order(
                 symbol=signal['symbol'],
                 order_type=signal['type'],
-                volume=signal['volume'],
+                volume=vol,
                 price=signal['price'],
                 sl=signal['sl'],
                 tp=signal['tp'],
@@ -374,6 +381,8 @@ class LiveTradingEngine:
         if result:
             result['time'] = datetime.now()
             self.trades_today.append(result)
+            if not self.paper_mode and getattr(config, 'LIVE_TRADE_LOG', False):
+                self._log_trade(signal, result)
             if config.VOICE_ALERTS and config.VOICE_ALERT_ON_SIGNAL:
                 speak(f"Trade executed. {signal['type']} {signal['symbol']} at {signal['price']}.")
             if config.AI_EXPLAIN_TRADES:
@@ -452,6 +461,95 @@ class LiveTradingEngine:
             elif getattr(config, 'MT5_VERBOSE', False):
                 print(f"[BREAKEVEN] Failed to move SL for {ticket}: {err}")
 
+    def _log_trade(self, signal, result):
+        """Append trade to logs/trades_YYYYMMDD.json."""
+        import json
+        log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        today = datetime.now().strftime('%Y%m%d')
+        log_path = os.path.join(log_dir, f'trades_{today}.json')
+        entry = {
+            'time': result.get('time', datetime.now()).isoformat() if hasattr(result.get('time', datetime.now()), 'isoformat') else str(result.get('time')),
+            'symbol': signal.get('symbol', ''),
+            'type': signal.get('type', ''),
+            'price': signal.get('price'),
+            'sl': signal.get('sl'),
+            'tp': signal.get('tp'),
+            'volume': signal.get('volume'),
+            'ticket': result.get('ticket') or result.get('order') or result.get('deal'),
+        }
+        try:
+            if os.path.exists(log_path):
+                with open(log_path, 'r') as f:
+                    data = json.load(f)
+                if not isinstance(data, list):
+                    data = [data]
+            else:
+                data = []
+            data.append(entry)
+            with open(log_path, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            if getattr(config, 'MT5_VERBOSE', False):
+                print(f"[LOG] Failed to write trade log: {e}")
+
+    def _check_tp1_sl_to_entry(self):
+        """When price reaches TP1, move SL to entry (breakeven). Live only."""
+        if self.paper_mode or not getattr(config, 'TP1_SL_TO_ENTRY_ENABLED', False):
+            return
+        ratio = getattr(config, 'TP1_RATIO', 0.5)
+        positions = self.mt5.get_positions()
+        for pos in positions:
+            ticket = pos.get('ticket')
+            symbol = pos.get('symbol')
+            price_open = pos.get('price_open')
+            tp = pos.get('tp')
+            sl = pos.get('sl')
+            pos_type = pos.get('type')
+            if ticket is None or symbol is None or price_open is None or tp is None:
+                continue
+            try:
+                price_open = float(price_open)
+                tp = float(tp)
+            except (TypeError, ValueError):
+                continue
+            pip_size = self.mt5.get_pip_size(symbol)
+            if pip_size is None or pip_size <= 0:
+                pip_size = 0.0001
+            tolerance = pip_size
+            if pos_type == 'BUY':
+                tp1 = price_open + (tp - price_open) * ratio
+                sl_at_entry = sl is not None and sl != 0 and abs(float(sl) - price_open) <= tolerance
+            else:
+                tp1 = price_open - (price_open - tp) * ratio
+                sl_at_entry = sl is not None and sl != 0 and abs(float(sl) - price_open) <= tolerance
+            if sl_at_entry:
+                continue
+            tick = self.mt5.get_live_price(symbol)
+            if not tick:
+                continue
+            if pos_type == 'BUY':
+                current = tick.get('bid')
+            else:
+                current = tick.get('ask')
+            if current is None:
+                continue
+            try:
+                current = float(current)
+            except (TypeError, ValueError):
+                continue
+            if pos_type == 'BUY':
+                tp1_reached = current >= tp1
+            else:
+                tp1_reached = current <= tp1
+            if not tp1_reached:
+                continue
+            ok, err = self.mt5.modify_position(ticket, sl=price_open, tp=tp)
+            if ok:
+                print(f"[TP1] Position {ticket} SL moved to entry (breakeven) at TP1")
+            elif getattr(config, 'MT5_VERBOSE', False):
+                print(f"[TP1] Failed to move SL for {ticket}: {err}")
+
     def show_status(self):
         if self.paper_mode:
             account = self.paper.get_account_info()
@@ -487,6 +585,11 @@ class LiveTradingEngine:
         print(f"Check interval: {config.LIVE_CHECK_INTERVAL}s")
         print(f"Manual approval: {'ON' if config.MANUAL_APPROVAL else 'OFF'}")
         print(f"Max trades/day: {config.MAX_TRADES_PER_DAY}")
+        if not self.paper_mode and getattr(config, 'LIVE_CONFIRM_ON_START', False):
+            resp = input("LIVE MODE — REAL MONEY. Type 'yes' to continue: ").strip().lower()
+            if resp != 'yes':
+                print("Aborted.")
+                return
         if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
             print("Test strategy: single-run mode (take one trade and exit)")
             if config.MANUAL_APPROVAL:
@@ -521,6 +624,7 @@ class LiveTradingEngine:
                     continue
                 self.update_positions()
                 self._check_breakeven()
+                self._check_tp1_sl_to_entry()
                 self._last_run_errors = []
                 if getattr(config, "SHOW_BIAS_OF_DAY", False) and not self.paper_mode and self.mt5.connected:
                     sym = self._get_symbol_for_bias()

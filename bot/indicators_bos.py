@@ -68,7 +68,7 @@ def detect_break_of_structure(df):
             last_swing_low = row['low']
     return df
 
-def identify_order_block(df, bos_index):
+def identify_order_block(df, bos_index, ob_lookback=20):
     """Identifies the order block before a BOS."""
     if bos_index <= 0:
         return None
@@ -76,7 +76,7 @@ def identify_order_block(df, bos_index):
     bos_direction = bos_row['bos_direction']
     if pd.isna(bos_direction):
         return None
-    for i in range(bos_index - 1, max(0, bos_index - 20), -1):
+    for i in range(bos_index - 1, max(0, bos_index - ob_lookback), -1):
         candle = df.iloc[i]
         if bos_direction == 'BULLISH':
             if candle['close'] < candle['open']:

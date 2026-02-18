@@ -1,5 +1,6 @@
 # Core dependencies (Mac + Windows). Backtest works with these only.
 pandas
+pytest
 yfinance
 python-dotenv
 openai

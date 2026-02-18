@@ -5,18 +5,29 @@
 # ^NDX : Nasdaq 100 Index
 SYMBOLS = ['GBPUSD=X', 'GC=F', 'BTC-USD', '^NDX']
 
+KINGSLEY_AGGRESSIVE = False  # True = swing=2 + disp=0.5 (more trades, sweep-tuned)
+# Generic 4H/Daily bias filters — apply to all strategies that use H1 or 4H
+USE_4H_BIAS_FILTER = False   # When True, require 4H bias to match H1/entry timeframe (Kingsley, H1-M5 BOS, etc.)
+USE_DAILY_BIAS_FILTER = False  # When True, require Daily bias to match H1/4H (Kingsley, H1-M5 BOS)
+
+TP1_SL_TO_ENTRY_ENABLED = False   # True = move SL to entry when TP1 hit
+TP1_RATIO = 0.5   
+
 # Timeframe settings
 TIMEFRAME = '15m'
 DAILY_TIMEFRAME = '1d'
 
 # Risk Management
-RISK_REWARD_RATIO = 5.0  # 1:5 Risk:Reward (win = 5× risk)
+RISK_REWARD_RATIO = 3.0  # 1:5 Risk:Reward (win = 5× risk)
 
 # Backtesting
 INITIAL_BALANCE = 100
 RISK_PER_TRADE = 0.10  # 10% risk per trade
 BACKTEST_MAX_TRADES = None  # Stop after N trades (None = no limit)
 BACKTEST_PERIOD = '60d'  # Data period: 12d, 60d, 6mo (set before run)
+BACKTEST_SPREAD_PIPS = 2.0       # e.g. 2.0 for gold, 1.0 for forex
+BACKTEST_COMMISSION_PER_LOT = 7.0  # round-trip per lot (e.g. 7.0)
+BACKTEST_SLIPPAGE_PIPS = 0.5     # e.g. 0.5
 
 # Filters
 USE_EMA_FILTER = False
@@ -41,10 +52,13 @@ load_dotenv()  # Load from .env file
 
 LIVE_MODE = True   # True = real money, False = paper trading
 MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
+LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
+MAX_LOT_LIVE = 0.01   # Cap lot size in live mode (safety)
 MAX_TRADES_PER_DAY = 3
 MAX_POSITION_SIZE = 0.10  # Fallback lot size when dynamic calc fails
 USE_DYNAMIC_POSITION_SIZING = True  # Risk % of current balance per trade (matches backtest)
 PAPER_TRADING_LOG = 'paper_trades.json'
+LIVE_TRADE_LOG = True   # Append trades to logs/trades_YYYYMMDD.json
 
 # MT5 Settings (loaded from environment variables for security)
 MT5_LOGIN = os.getenv('MT5_LOGIN')  # Your MT5 account number
@@ -84,8 +98,9 @@ ALLOW_SAME_SYMBOL_AT_TP = True   # If True, allow new entry on same symbol only 
 AT_TP_POINTS = 5.0               # Consider "at TP" when entry price is within this many points of position's TP (e.g. 5 for XAUUSD)
 
 # Breakeven: when position is in profit by BREAKEVEN_PIPS, move SL to half that (lock in half the pips)
-BREAKEVEN_ENABLED = True         # If True, move SL to half breakeven once profit reaches BREAKEVEN_PIPS
+BREAKEVEN_ENABLED = False         # If True, move SL to half breakeven once profit reaches BREAKEVEN_PIPS
 BREAKEVEN_PIPS = 10.0            # Trigger when trade is in profit by this many pips; SL moves to entry + half (e.g. 10 → 5 pips locked)
+
 
 # Bias of the day (ICT-style): show Daily + H1 BOS bias in live loop when True
 SHOW_BIAS_OF_DAY = True          # If True, print [BIAS OF DAY] Daily: X | H1: Y each cycle
@@ -101,12 +116,18 @@ USE_4H_BIAS_FILTER = False   # When True, require 4H bias to match H1/entry time
 USE_DAILY_BIAS_FILTER = False  # When True, require Daily bias to match H1/4H (Kingsley, H1-M5 BOS)
 
 # Kingsley Gold: 4H + H1 trend + 15m BOS/ChoCH + zone→LQ + OB test (XAUUSD/GC=F only)
+
 KINGSLEY_USE_KILL_ZONES = True
 KINGSLEY_USE_ASIAN_SESSION = True   # When True, also allow trades during Asian session
 KINGSLEY_ASIAN_SESSION_HOURS = [0, 1, 2, 3, 4]   # Tokyo session (UTC): 00:00-04:00
 KINGSLEY_USE_EMA_FILTER = False
 KINGSLEY_15M_WINDOW_HOURS = 8   # Max hours to wait for 15m setup after H1 BOS
 KINGSLEY_DISPLACEMENT_RATIO = 0.6
+# Option A fine-tuning (swing detection, liquidity, TP target)
+KINGSLEY_SWING_LENGTH = 3        # Fractal lookback: 2=more swings, 5=fewer/cleaner
+KINGSLEY_LIQ_SWEEP_LOOKBACK = 5  # Recent swing highs/lows for liquidity sweep
+KINGSLEY_TP_SWING_LOOKAHEAD = 3  # Next N swing points for TP target
+KINGSLEY_OB_LOOKBACK = 20       # Bars to look back for order block before BOS
 KINGSLEY_BACKTEST_SYMBOL = 'GC=F'   # Yahoo Finance
 KINGSLEY_LIVE_SYMBOL = 'XAUUSDm'    # MT5
 KINGSLEY_SL_BUFFER = 1.0   # Price units buffer below/above lq_level for live execution (reduces "Stop loss invalid" when market moves)

@@ -3,6 +3,11 @@ from datetime import datetime
 import json
 import os
 
+try:
+    import config
+except ImportError:
+    config = None
+
 class PaperTrading:
     """Simulates live trading without risking real money."""
 
@@ -46,6 +51,8 @@ class PaperTrading:
 
     def update_positions(self, mt5_connector):
         closed_positions = []
+        tp1_enabled = config and getattr(config, 'TP1_SL_TO_ENTRY_ENABLED', False)
+        tp1_ratio = getattr(config, 'TP1_RATIO', 0.5) if config else 0.5
         for position in self.positions[:]:
             symbol = position['symbol']
             tick = mt5_connector.get_live_price(symbol)
@@ -54,6 +61,17 @@ class PaperTrading:
             if position['type'] == 'BUY':
                 current_price = tick['bid']
                 price_diff = current_price - position['price_open']
+                if tp1_enabled and position.get('tp'):
+                    price_open = position['price_open']
+                    tp = position['tp']
+                    tp1 = price_open + (tp - price_open) * tp1_ratio
+                    sl = position.get('sl')
+                    pip_size = mt5_connector.get_pip_size(symbol) if mt5_connector else None
+                    tolerance = (pip_size or 0.0001) * 2
+                    sl_at_entry = sl is not None and abs(float(sl) - float(price_open)) <= tolerance
+                    if current_price >= tp1 and not sl_at_entry:
+                        position['sl'] = price_open
+                        print(f"[PAPER] Position {position['ticket']} SL moved to entry (TP1 hit)")
                 if position['tp'] and current_price >= position['tp']:
                     self.close_position(position['ticket'], position['tp'], 'TP Hit')
                     closed_positions.append(position['ticket'])
@@ -65,6 +83,17 @@ class PaperTrading:
             else:
                 current_price = tick['ask']
                 price_diff = position['price_open'] - current_price
+                if tp1_enabled and position.get('tp'):
+                    price_open = position['price_open']
+                    tp = position['tp']
+                    tp1 = price_open - (price_open - tp) * tp1_ratio
+                    sl = position.get('sl')
+                    pip_size = mt5_connector.get_pip_size(symbol) if mt5_connector else None
+                    tolerance = (pip_size or 0.0001) * 2
+                    sl_at_entry = sl is not None and abs(float(sl) - float(price_open)) <= tolerance
+                    if current_price <= tp1 and not sl_at_entry:
+                        position['sl'] = price_open
+                        print(f"[PAPER] Position {position['ticket']} SL moved to entry (TP1 hit)")
                 if position['tp'] and current_price <= position['tp']:
                     self.close_position(position['ticket'], position['tp'], 'TP Hit')
                     closed_positions.append(position['ticket'])

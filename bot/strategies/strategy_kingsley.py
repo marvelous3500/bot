@@ -31,21 +31,25 @@ class KingsleyGoldStrategy:
             print(msg)
 
     def prepare_data(self):
+        if getattr(config, 'KINGSLEY_AGGRESSIVE', False):
+            swing_len = 2
+        else:
+            swing_len = getattr(config, 'KINGSLEY_SWING_LENGTH', 3)
         self._log("Detecting swing highs/lows on 4H...")
-        self.df_4h = detect_swing_highs_lows(self.df_4h, swing_length=3)
+        self.df_4h = detect_swing_highs_lows(self.df_4h, swing_length=swing_len)
         self._log("Detecting Break of Structure on 4H...")
         self.df_4h = detect_break_of_structure(self.df_4h)
         if self.df_daily is not None:
             self._log("Detecting swing highs/lows on Daily...")
-            self.df_daily = detect_swing_highs_lows(self.df_daily, swing_length=3)
+            self.df_daily = detect_swing_highs_lows(self.df_daily, swing_length=swing_len)
             self._log("Detecting Break of Structure on Daily...")
             self.df_daily = detect_break_of_structure(self.df_daily)
         self._log("Detecting swing highs/lows on H1...")
-        self.df_h1 = detect_swing_highs_lows(self.df_h1, swing_length=3)
+        self.df_h1 = detect_swing_highs_lows(self.df_h1, swing_length=swing_len)
         self._log("Detecting Break of Structure on H1...")
         self.df_h1 = detect_break_of_structure(self.df_h1)
         self._log("Detecting swing highs/lows on 15m...")
-        self.df_15m = detect_swing_highs_lows(self.df_15m, swing_length=3)
+        self.df_15m = detect_swing_highs_lows(self.df_15m, swing_length=swing_len)
         self._log("Detecting Break of Structure on 15m...")
         self.df_15m = detect_break_of_structure(self.df_15m)
         if getattr(config, 'KINGSLEY_USE_EMA_FILTER', False):
@@ -66,9 +70,15 @@ class KingsleyGoldStrategy:
         allowed_hours = sorted(set(allowed_hours))
         use_ema = getattr(config, 'KINGSLEY_USE_EMA_FILTER', False)
         window_hours = getattr(config, 'KINGSLEY_15M_WINDOW_HOURS', 8)
-        disp_ratio = getattr(config, 'KINGSLEY_DISPLACEMENT_RATIO', 0.6)
+        if getattr(config, 'KINGSLEY_AGGRESSIVE', False):
+            disp_ratio = 0.5
+        else:
+            disp_ratio = getattr(config, 'KINGSLEY_DISPLACEMENT_RATIO', 0.6)
         use_4h_filter = getattr(config, 'USE_4H_BIAS_FILTER', False)
         use_daily_filter = getattr(config, 'USE_DAILY_BIAS_FILTER', False)
+        liq_lookback = getattr(config, 'KINGSLEY_LIQ_SWEEP_LOOKBACK', 5)
+        tp_lookahead = getattr(config, 'KINGSLEY_TP_SWING_LOOKAHEAD', 3)
+        ob_lookback = getattr(config, 'KINGSLEY_OB_LOOKBACK', 20)
 
         for i_h1 in range(len(self.df_h1)):
             h1_idx = self.df_h1.index[i_h1]
@@ -90,7 +100,7 @@ class KingsleyGoldStrategy:
                 self._log(f"[4H+H1] {h1_bias} bias aligned at {h1_idx}")
             
             current_bias = h1_bias
-            h1_ob = identify_order_block(self.df_h1, i_h1)
+            h1_ob = identify_order_block(self.df_h1, i_h1, ob_lookback=ob_lookback)
             if h1_ob is None:
                 continue
             self._log(f"[H1] {current_bias} BOS/ChoCH at {h1_idx}, OB: {h1_ob}")
@@ -121,10 +131,10 @@ class KingsleyGoldStrategy:
                         continue
                     if current_bias == 'BULLISH' and row_15.get('bos_bull'):
                         m15_bos_seen = True
-                        current_ob = identify_order_block(self.df_15m, i_15)
+                        current_ob = identify_order_block(self.df_15m, i_15, ob_lookback=ob_lookback)
                     elif current_bias == 'BEARISH' and row_15.get('bos_bear'):
                         m15_bos_seen = True
-                        current_ob = identify_order_block(self.df_15m, i_15)
+                        current_ob = identify_order_block(self.df_15m, i_15, ob_lookback=ob_lookback)
                     if not m15_bos_seen or current_ob is None:
                         continue
                     self._log(f"[15m] BOS/ChoCH at {idx_15}, OB: {current_ob}")
@@ -148,7 +158,7 @@ class KingsleyGoldStrategy:
                     if current_bias == 'BULLISH':
                         recent_highs = self.df_15m[
                             (self.df_15m.index < idx_15) & (self.df_15m['swing_high'] == True)
-                        ].tail(5)
+                        ].tail(liq_lookback)
                         if not recent_highs.empty:
                             liq_high = recent_highs.iloc[-1]['swing_high_price']
                             if row_15['high'] > liq_high:
@@ -158,7 +168,7 @@ class KingsleyGoldStrategy:
                     elif current_bias == 'BEARISH':
                         recent_lows = self.df_15m[
                             (self.df_15m.index < idx_15) & (self.df_15m['swing_low'] == True)
-                        ].tail(5)
+                        ].tail(liq_lookback)
                         if not recent_lows.empty:
                             liq_low = recent_lows.iloc[-1]['swing_low_price']
                             if row_15['low'] < liq_low:
@@ -216,7 +226,7 @@ class KingsleyGoldStrategy:
                             continue
                         future_highs = self.df_15m[
                             (self.df_15m.index > idx_15) & (self.df_15m['swing_high'] == True)
-                        ].head(3)
+                        ].head(tp_lookahead)
                         tp_price = future_highs.iloc[0]['swing_high_price'] if not future_highs.empty else None
                         signals.append({
                             'time': idx_15,
@@ -237,7 +247,7 @@ class KingsleyGoldStrategy:
                             continue
                         future_lows = self.df_15m[
                             (self.df_15m.index > idx_15) & (self.df_15m['swing_low'] == True)
-                        ].head(3)
+                        ].head(tp_lookahead)
                         tp_price = future_lows.iloc[0]['swing_low_price'] if not future_lows.empty else None
                         signals.append({
                             'time': idx_15,

@@ -3,23 +3,28 @@ import pandas as pd
 import config
 from ..data_loader import fetch_data_yfinance, load_data_csv
 from ..strategies import KingsleyGoldStrategy
-from .common import _stats_dict
+from .common import _stats_dict, get_pip_size_for_symbol, _apply_backtest_realism
 
 # Gold symbols: Yahoo uses GC=F, MT5 uses XAUUSD
 KINGSLEY_BACKTEST_SYMBOL = 'GC=F'
 KINGSLEY_LIVE_SYMBOL = 'XAUUSD'
 
 
-def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=False):
+def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=False, df_4h=None, df_h1=None, df_15m=None, df_daily=None):
+    """Run Kingsley backtest. Pass df_4h, df_h1, df_15m, df_daily to reuse data (for sweeps)."""
     agg = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
     display_period = period or getattr(config, 'BACKTEST_PERIOD', '60d')
     period_note = ""
-    # Silent mode for clean image-format output (no strategy debug prints)
-    if csv_path:
+    # Reuse pre-fetched data (for parameter sweeps)
+    if df_4h is not None and df_h1 is not None and df_15m is not None:
+        if df_daily is None:
+            df_daily = df_h1.resample('1D').agg(agg).dropna()
+    elif csv_path:
         df = load_data_csv(csv_path)
         df_h1 = df.resample('1h').agg(agg).dropna()
         df_4h = df_h1.resample('4h').agg(agg).dropna()
         df_15m = df.resample('15min').agg(agg).dropna()
+        df_daily = df_h1.resample('1D').agg(agg).dropna()
     else:
         symbol = symbol or getattr(config, 'KINGSLEY_BACKTEST_SYMBOL', KINGSLEY_BACKTEST_SYMBOL)
         period = period or getattr(config, 'BACKTEST_PERIOD', '60d')
@@ -31,7 +36,7 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
         df_h1 = fetch_data_yfinance(symbol, period=fetch_period, interval='1h')
         df_4h = df_h1.resample('4h').agg(agg).dropna()
         df_15m = fetch_data_yfinance(symbol, period=fetch_period, interval='15m')
-    df_daily = df_h1.resample('1D').agg(agg).dropna()
+        df_daily = df_h1.resample('1D').agg(agg).dropna()
     if df_4h.index.tz is not None:
         df_4h.index = df_4h.index.tz_convert(None)
     if df_h1.index.tz is not None:
@@ -89,56 +94,61 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
     losses = 0
     total_profit = 0.0
     total_loss = 0.0
+    used_symbol = symbol or getattr(config, 'KINGSLEY_BACKTEST_SYMBOL', KINGSLEY_BACKTEST_SYMBOL)
     for _, trade in signals.iterrows():
         entry_price = trade['price']
         stop_loss = trade['sl']
         trade_time = trade['time']
+        adj_entry, adj_sl, commission = _apply_backtest_realism(
+            entry_price, stop_loss, trade['type'], used_symbol, entry_price
+        )
+        spread_cost = abs(adj_entry - entry_price)
         future_prices = df_15m.loc[df_15m.index > trade_time]
         if future_prices.empty:
             continue
         if trade['type'] == 'BUY':
-            sl_dist = entry_price - stop_loss
+            sl_dist = adj_entry - adj_sl
             tp_price = trade.get('tp')
-            if tp_price is None or tp_price <= entry_price:
-                tp_price = entry_price + (sl_dist * risk)
+            if tp_price is None or tp_price <= adj_entry:
+                tp_price = adj_entry + (sl_dist * risk)
             outcome = None
             for idx, bar in future_prices.iterrows():
-                if bar['low'] <= stop_loss:
+                if bar['low'] <= adj_sl:
                     outcome = 'LOSS'
                     break
                 if bar['high'] >= tp_price:
                     outcome = 'WIN'
                     break
             if outcome == 'WIN':
-                profit = (balance * config.RISK_PER_TRADE) * risk
+                profit = (balance * config.RISK_PER_TRADE) * risk - spread_cost - commission
                 total_profit += profit
                 balance += profit
                 wins += 1
             elif outcome == 'LOSS':
-                loss = (balance * config.RISK_PER_TRADE)
+                loss = (balance * config.RISK_PER_TRADE) + spread_cost + commission
                 total_loss += loss
                 balance -= loss
                 losses += 1
         elif trade['type'] == 'SELL':
-            sl_dist = stop_loss - entry_price
+            sl_dist = adj_sl - adj_entry
             tp_price = trade.get('tp')
-            if tp_price is None or tp_price >= entry_price:
-                tp_price = entry_price - (sl_dist * risk)
+            if tp_price is None or tp_price >= adj_entry:
+                tp_price = adj_entry - (sl_dist * risk)
             outcome = None
             for idx, bar in future_prices.iterrows():
-                if bar['high'] >= stop_loss:
+                if bar['high'] >= adj_sl:
                     outcome = 'LOSS'
                     break
                 if bar['low'] <= tp_price:
                     outcome = 'WIN'
                     break
             if outcome == 'WIN':
-                profit = (balance * config.RISK_PER_TRADE) * risk
+                profit = (balance * config.RISK_PER_TRADE) * risk - spread_cost - commission
                 total_profit += profit
                 balance += profit
                 wins += 1
             elif outcome == 'LOSS':
-                loss = (balance * config.RISK_PER_TRADE)
+                loss = (balance * config.RISK_PER_TRADE) + spread_cost + commission
                 total_loss += loss
                 balance -= loss
                 losses += 1
