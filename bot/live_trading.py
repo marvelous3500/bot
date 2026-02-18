@@ -557,6 +557,9 @@ class LiveTradingEngine:
                         if dollar_risk is not None:
                             sl_info += f" | Risk: ${dollar_risk:.2f}"
                     print(f"\n[SIGNAL] {signal['type']} {signal['symbol']} @ {signal['price']:.5f}{sl_info}")
+                    reason = signal.get('reason', '')
+                    if reason:
+                        print(f"[REASON] {reason}")
                     if sl is not None:
                         print(f"[SL] Stop loss: {float(sl):.5f} | Risk in dollars: ${dollar_risk:.2f}" if dollar_risk is not None else f"[SL] Stop loss: {float(sl):.5f} | Risk in dollars: n/a")
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_SIGNAL:
@@ -565,7 +568,10 @@ class LiveTradingEngine:
                     result, exec_err = self.execute_signal(signal)
                     if result:
                         last_signal_time = datetime.now()
+                        exec_reason = signal.get('reason', '')
                         print(f"[EXECUTE] Order placed: {result.get('type')} {result.get('volume')} {result.get('symbol')} @ {result.get('price')}")
+                        if exec_reason:
+                            print(f"[EXECUTE] Reason: {exec_reason}")
                     else:
                         if exec_err:
                             self._last_run_errors.append(exec_err)
