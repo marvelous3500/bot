@@ -308,7 +308,7 @@ class LiveTradingEngine:
                 price=signal['price'],
                 sl=signal['sl'],
                 tp=signal['tp'],
-                comment=signal.get('reason', '')
+                comment=config.MT5_ORDER_COMMENT or signal.get('reason', '')
             )
             mt5_err = None
         else:
@@ -319,7 +319,7 @@ class LiveTradingEngine:
                 price=signal['price'],
                 sl=signal['sl'],
                 tp=signal['tp'],
-                comment=signal.get('reason', '')
+                comment=config.MT5_ORDER_COMMENT or signal.get('reason', '')
             )
         if result:
             result['time'] = datetime.now()

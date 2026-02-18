@@ -58,6 +58,9 @@ MT5_AUTO_START = os.getenv('MT5_AUTO_START', 'true').lower() in ('true', '1', 'y
 MT5_CONNECT_RETRIES = 5       # Max attempts for initialize + login
 MT5_CONNECT_DELAY = 5         # Seconds between retries
 MT5_VERBOSE = True            # Log connection steps, data fetches, etc.
+# Optional: fixed order comment (max 31 chars, alphanumeric + space hyphen underscore).
+# Set e.g. MT5_ORDER_COMMENT=ICT in .env to avoid "Invalid comment" on strict brokers (Exness etc).
+MT5_ORDER_COMMENT = (os.getenv('MT5_ORDER_COMMENT') or '').strip() or None
 
 
 # Live Trading Symbols (MT5 format) — first is default for paper/live

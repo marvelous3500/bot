@@ -369,8 +369,12 @@ class MT5Connector:
             volume = round(v, 2)
         except (TypeError, ValueError):
             volume = vol_min
-        # MT5 comment max 31 chars; many brokers allow only alphanumeric, space, hyphen, underscore
+        # MT5 comment max 31 chars; many brokers allow only ASCII alphanumeric, space, hyphen, underscore
         raw = str(comment).replace("\x00", "") if comment else ""
+        try:
+            raw = raw.encode("ascii", "replace").decode("ascii")  # drop non-ASCII
+        except Exception:
+            raw = ""
         allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 _-")
         safe_comment = "".join(c if c in allowed else " " for c in raw)
         safe_comment = " ".join(safe_comment.split())[:31].strip() or "ICT"
