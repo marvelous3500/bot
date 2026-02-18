@@ -102,3 +102,17 @@ def detect_shallow_tap(price_low, price_high, ob_high, ob_low, ob_midpoint):
     """Checks if price tapped into the OB."""
     entered_ob = price_low <= ob_high and price_high >= ob_low
     return entered_ob
+
+
+def higher_tf_bias_aligned(df_higher, idx, bias_str):
+    """Check if higher TF has BOS matching bias at idx. Returns True if aligned, False if not."""
+    if df_higher is None or df_higher.empty:
+        return True
+    bars = df_higher[df_higher.index <= idx]
+    if bars.empty:
+        return False
+    row = bars.iloc[-1]
+    if not row.get('bos_bull') and not row.get('bos_bear'):
+        return False
+    higher_bias = 'BULLISH' if row.get('bos_bull') else 'BEARISH'
+    return higher_bias == bias_str

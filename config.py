@@ -10,7 +10,7 @@ TIMEFRAME = '15m'
 DAILY_TIMEFRAME = '1d'
 
 # Risk Management
-RISK_REWARD_RATIO =3.0  # 1:3 Risk:Reward
+RISK_REWARD_RATIO = 5.0  # 1:5 Risk:Reward (win = 5× risk)
 
 # Backtesting
 INITIAL_BALANCE = 100
@@ -87,19 +87,8 @@ AT_TP_POINTS = 5.0               # Consider "at TP" when entry price is within t
 BREAKEVEN_ENABLED = True         # If True, move SL to half breakeven once profit reaches BREAKEVEN_PIPS
 BREAKEVEN_PIPS = 10.0            # Trigger when trade is in profit by this many pips; SL moves to entry + half (e.g. 10 → 5 pips locked)
 
-# Confluence strategy: fixed stop loss in pips (4H structure + 15m OB entry)
-CONFLUENCE_SL_PIPS = 50
-
-# Liquidity sweep (4H → 1H → 15m): max 1H bars to wait for confirmation after 4H sweep; max 15m bars for entry after 1H confirm
-LIQUIDITY_1H_CONFIRM_BARS = 12
-LIQUIDITY_15M_ENTRY_BARS = 12
-# Liquidity-specific: set False to ignore kill zone / EMA for more trades
-LIQUIDITY_USE_KILL_ZONES = True
-LIQUIDITY_USE_EMA_FILTER = True
-# Require 15m FVG/OB/rejection for entry; False = enter on any 15m candle in direction
-LIQUIDITY_REQUIRE_15M_CONFIRM = True
-# Require 1H sweep or rejection (not just any candle); True = stricter, fewer but higher-quality trades
-LIQUIDITY_STRICT_1H_CONFIRM = True
+# Bias of the day (ICT-style): show Daily + H1 BOS bias in live loop when True
+SHOW_BIAS_OF_DAY = True          # If True, print [BIAS OF DAY] Daily: X | H1: Y each cycle
 
 # H1-M5 BOS: filters to reduce trades and improve win rate
 BOS_USE_KILL_ZONES = True   # Only trade during London/NY sessions
@@ -107,7 +96,11 @@ BOS_USE_EMA_FILTER = True   # Require price in direction of EMA
 BOS_DISPLACEMENT_RATIO = 0.7  # Candle body must be 70% of range (stricter than 0.6)
 BOS_M5_WINDOW_HOURS = 2    # Max hours to wait for M5 entry after H1 BOS (was 4)
 
-# Kingsley Gold: H1 trend + 15m BOS/ChoCH + zone→LQ + OB test (XAUUSD/GC=F only)
+# Generic 4H/Daily bias filters — apply to all strategies that use H1 or 4H
+USE_4H_BIAS_FILTER = False   # When True, require 4H bias to match H1/entry timeframe (Kingsley, H1-M5 BOS, etc.)
+USE_DAILY_BIAS_FILTER = False  # When True, require Daily bias to match H1/4H (Kingsley, H1-M5 BOS)
+
+# Kingsley Gold: 4H + H1 trend + 15m BOS/ChoCH + zone→LQ + OB test (XAUUSD/GC=F only)
 KINGSLEY_USE_KILL_ZONES = True
 KINGSLEY_USE_ASIAN_SESSION = True   # When True, also allow trades during Asian session
 KINGSLEY_ASIAN_SESSION_HOURS = [0, 1, 2, 3, 4]   # Tokyo session (UTC): 00:00-04:00

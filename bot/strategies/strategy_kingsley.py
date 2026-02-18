@@ -12,15 +12,18 @@ from ..indicators_bos import (
     detect_break_of_structure,
     identify_order_block,
     detect_shallow_tap,
+    higher_tf_bias_aligned,
 )
 
 
 class KingsleyGoldStrategy:
-    """ICT-style: H1 trend + 15m BOS/ChoCH + zone→LQ + sweep + OB test + entry."""
+    """ICT-style: 4H + H1 trend + 15m BOS/ChoCH + zone→LQ + sweep + OB test + entry."""
 
-    def __init__(self, df_h1, df_15m, verbose=True):
+    def __init__(self, df_4h, df_h1, df_15m, df_daily=None, verbose=True):
+        self.df_4h = df_4h.copy()
         self.df_h1 = df_h1.copy()
         self.df_15m = df_15m.copy()
+        self.df_daily = df_daily.copy() if df_daily is not None and not df_daily.empty else None
         self.verbose = verbose
 
     def _log(self, msg):
@@ -28,6 +31,15 @@ class KingsleyGoldStrategy:
             print(msg)
 
     def prepare_data(self):
+        self._log("Detecting swing highs/lows on 4H...")
+        self.df_4h = detect_swing_highs_lows(self.df_4h, swing_length=3)
+        self._log("Detecting Break of Structure on 4H...")
+        self.df_4h = detect_break_of_structure(self.df_4h)
+        if self.df_daily is not None:
+            self._log("Detecting swing highs/lows on Daily...")
+            self.df_daily = detect_swing_highs_lows(self.df_daily, swing_length=3)
+            self._log("Detecting Break of Structure on Daily...")
+            self.df_daily = detect_break_of_structure(self.df_daily)
         self._log("Detecting swing highs/lows on H1...")
         self.df_h1 = detect_swing_highs_lows(self.df_h1, swing_length=3)
         self._log("Detecting Break of Structure on H1...")
@@ -38,12 +50,13 @@ class KingsleyGoldStrategy:
         self.df_15m = detect_break_of_structure(self.df_15m)
         if getattr(config, 'KINGSLEY_USE_EMA_FILTER', False):
             from ..indicators import calculate_ema
+            self.df_4h = calculate_ema(self.df_4h, period=config.EMA_PERIOD)
             self.df_h1 = calculate_ema(self.df_h1, period=config.EMA_PERIOD)
             self.df_15m = calculate_ema(self.df_15m, period=config.EMA_PERIOD)
-        return self.df_h1, self.df_15m
+        return self.df_4h, self.df_h1, self.df_15m
 
     def run_backtest(self):
-        if self.df_h1.empty or self.df_15m.empty:
+        if self.df_4h.empty or self.df_h1.empty or self.df_15m.empty:
             return pd.DataFrame()
         signals = []
         use_kill_zone = getattr(config, 'KINGSLEY_USE_KILL_ZONES', True)
@@ -54,13 +67,29 @@ class KingsleyGoldStrategy:
         use_ema = getattr(config, 'KINGSLEY_USE_EMA_FILTER', False)
         window_hours = getattr(config, 'KINGSLEY_15M_WINDOW_HOURS', 8)
         disp_ratio = getattr(config, 'KINGSLEY_DISPLACEMENT_RATIO', 0.6)
+        use_4h_filter = getattr(config, 'USE_4H_BIAS_FILTER', False)
+        use_daily_filter = getattr(config, 'USE_DAILY_BIAS_FILTER', False)
 
         for i_h1 in range(len(self.df_h1)):
             h1_idx = self.df_h1.index[i_h1]
             h1_row = self.df_h1.iloc[i_h1]
             if not h1_row['bos_bull'] and not h1_row['bos_bear']:
                 continue
-            current_bias = 'BULLISH' if h1_row['bos_bull'] else 'BEARISH'
+            h1_bias = 'BULLISH' if h1_row['bos_bull'] else 'BEARISH'
+            
+            # Generic Daily filter: require Daily bias to match H1
+            if use_daily_filter and not higher_tf_bias_aligned(self.df_daily, h1_idx, h1_bias):
+                continue
+            if use_daily_filter and self.df_daily is not None:
+                self._log(f"[Daily+H1] {h1_bias} bias aligned at {h1_idx}")
+            
+            # Generic 4H filter: require 4H bias to match H1
+            if use_4h_filter and not higher_tf_bias_aligned(self.df_4h, h1_idx, h1_bias):
+                continue
+            if use_4h_filter:
+                self._log(f"[4H+H1] {h1_bias} bias aligned at {h1_idx}")
+            
+            current_bias = h1_bias
             h1_ob = identify_order_block(self.df_h1, i_h1)
             if h1_ob is None:
                 continue
@@ -195,7 +224,7 @@ class KingsleyGoldStrategy:
                             'price': entry,
                             'sl': lq_level,
                             'tp': tp_price,
-                            'reason': 'Kingsley Gold: H1+15m BOS + OB tap + Liq sweep + OB test'
+                            'reason': 'Kingsley Gold: 4H+H1+15m BOS + OB tap + Liq sweep + OB test'
                         })
                         self._log(f"[15m] BUY signal at {idx_15}")
                         break
@@ -216,7 +245,7 @@ class KingsleyGoldStrategy:
                             'price': entry,
                             'sl': lq_level,
                             'tp': tp_price,
-                            'reason': 'Kingsley Gold: H1+15m BOS + OB tap + Liq sweep + OB test'
+                            'reason': 'Kingsley Gold: 4H+H1+15m BOS + OB tap + Liq sweep + OB test'
                         })
                         self._log(f"[15m] SELL signal at {idx_15}")
                         break

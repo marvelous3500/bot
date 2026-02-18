@@ -8,13 +8,13 @@ This guide describes how to configure and run the bot in **paper** and **live** 
 
 **Paper trading (recommended first):**
 ```bash
-python main.py --mode paper --strategy pdh_pdl
+python main.py --mode paper --strategy h1_m5_bos
 python main.py --mode paper --strategy kingsely_gold   # Gold (XAUUSD) only
 ```
 
 **Live trading (real money):**
 ```bash
-python main.py --mode live --strategy pdh_pdl
+python main.py --mode live --strategy h1_m5_bos
 python main.py --mode live --strategy kingsely_gold    # Gold (XAUUSD) only
 ```
 
@@ -26,7 +26,7 @@ python main.py --mode live --auto-approve
 
 **Options:**
 - `--mode`: `backtest` | `paper` | `live`
-- `--strategy`: `pdh_pdl` | `liquidity_sweep` | `h1_m5_bos` | `confluence` | `kingsely_gold`
+- `--strategy`: `h1_m5_bos` | `kingsely_gold` | `test`
 - `--symbol`: used for backtest only; live/paper use the first symbol from `config.LIVE_SYMBOLS`
 - `--auto-approve`: bot auto-approves trades (no manual prompt); use for server/headless
 
@@ -122,8 +122,6 @@ For a real Exness account you may use a server like `Exness-MT5`; override `MT5_
 
 - **Single symbol:** Only the **first** symbol in `config.LIVE_SYMBOLS` is used for the whole run (e.g. XAUUSD). To trade another symbol, change the order in config or add a `--symbol` option for live mode (not implemented yet).
 - **MT5 server default:** If `MT5_SERVER` is not set in `.env`, the code uses **Exness-MT5Trial**. Override in `.env` for real accounts.
-- **pdh_pdl in live/paper:** The engine uses the 5m DataFrame only for `ICTStrategy`, computes PDH/PDL from daily data (same logic as backtest), and calls `run_backtest(pdh_series, pdl_series)` so the strategy behaves correctly.
-
 ### 4.1 Troubleshooting: kingsely_gold "Bar data missing"
 
 If you see `[LIVE_DEBUG] kingsely_gold: Bar data missing for XAUUSD — H1=MISSING, 15m=MISSING`:
@@ -175,7 +173,7 @@ treading-bot/
 │   ├── data_loader.py      # Yahoo Finance / CSV
 │   ├── indicators.py       # FVG, OB, liquidity sweep, EMA
 │   ├── indicators_bos.py   # Swing, BOS, order block
-│   ├── strategies/         # Strategy modules (pdh_pdl, liquidity_sweep, h1_m5_bos, confluence)
+│   ├── strategies/         # Strategy modules (h1_m5_bos, kingsely_gold, test)
 │   └── backtest/           # Backtest runners per strategy
 └── ...
 ```

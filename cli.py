@@ -21,7 +21,7 @@ def build_parser():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["pdh_pdl", "liquidity_sweep", "h1_m5_bos", "confluence", "kingsely_gold", "test", "gold_compare", "all"],
+        choices=["h1_m5_bos", "kingsely_gold", "test", "gold_compare", "all"],
         default="h1_m5_bos",
         help="Strategy to use ('all' = run every strategy in backtest mode)",
     )
@@ -122,10 +122,7 @@ def _print_summary_table(period_label, rows):
 def run_backtest(args):
     """Run backtest for the selected strategy (or all strategies if --strategy all)."""
     from bot.backtest import (
-        run_backtest_simulation,
-        run_liquidity_sweep_backtest,
         run_bos_backtest,
-        run_confluence_backtest,
         run_kingsley_backtest,
         run_test_backtest,
     )
@@ -134,7 +131,7 @@ def run_backtest(args):
         return
 
     strategies = (
-        ["pdh_pdl", "liquidity_sweep", "h1_m5_bos", "confluence", "kingsely_gold", "test"]
+        ["h1_m5_bos", "kingsely_gold", "test"]
         if args.strategy == "all"
         else [args.strategy]
     )
@@ -150,18 +147,12 @@ def run_backtest(args):
             rows = []
             for name in strategies:
                 kwargs = dict(symbol=args.symbol, period=period, return_stats=True)
-                if name == "pdh_pdl":
-                    s = run_backtest_simulation(**kwargs)
-                elif name == "liquidity_sweep":
-                    s = run_liquidity_sweep_backtest(**kwargs)
-                elif name == "h1_m5_bos":
+                if name == "h1_m5_bos":
                     s = run_bos_backtest(**kwargs)
                 elif name == "kingsely_gold":
                     s = run_kingsley_backtest(symbol="GC=F", period=period, return_stats=True)
-                elif name == "test":
-                    s = run_test_backtest(symbol="GC=F", period=period, return_stats=True)
                 else:
-                    s = run_confluence_backtest(**kwargs)
+                    s = run_test_backtest(symbol="GC=F", period=period, return_stats=True)
                 rows.append(s)
             _print_summary_table(period_label, rows)
         return
@@ -170,20 +161,14 @@ def run_backtest(args):
     for name in strategies:
         print(f"\n{'='*60}\nBacktesting {name} on {args.symbol}\n{'='*60}")
         kwargs = dict(csv_path=args.csv, symbol=args.symbol, period=period)
-        if name == "pdh_pdl":
-            run_backtest_simulation(**kwargs)
-        elif name == "liquidity_sweep":
-            run_liquidity_sweep_backtest(**kwargs)
-        elif name == "h1_m5_bos":
+        if name == "h1_m5_bos":
             run_bos_backtest(**kwargs)
         elif name == "kingsely_gold":
             kwargs["symbol"] = kwargs.get("symbol") or "GC=F"
             run_kingsley_backtest(**kwargs)
-        elif name == "test":
+        else:
             kwargs["symbol"] = kwargs.get("symbol") or "GC=F"
             run_test_backtest(**kwargs)
-        elif name == "confluence":
-            run_confluence_backtest(**kwargs)
 
 
 def run_replay_cmd(args):

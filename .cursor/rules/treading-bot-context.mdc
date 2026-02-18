@@ -9,7 +9,7 @@ alwaysApply: true
 
 ## Project Summary
 
-Python ICT-style trading bot: **backtest** (Yahoo/CSV), **paper**, **live** (MetaTrader 5), and **replay**. Four strategies: `pdh_pdl`, `liquidity_sweep`, `h1_m5_bos`, `confluence`. Optional **AI** (confidence + explain) and **voice** alerts. Single config in `config.py`. Code layout: **ai/** (AI + voice), **bot/** (strategies, backtest, data_loader, indicators, live_trading, replay_engine, etc.).
+Python ICT-style trading bot: **backtest** (Yahoo/CSV), **paper**, **live** (MetaTrader 5), and **replay**. Three strategies: `h1_m5_bos`, `kingsely_gold`, `test`. Optional **AI** (confidence + explain) and **voice** alerts. Single config in `config.py`. Code layout: **ai/** (AI + voice), **bot/** (strategies, backtest, data_loader, indicators, live_trading, replay_engine, etc.).
 
 ## Architecture (Concise)
 
@@ -32,7 +32,7 @@ Python ICT-style trading bot: **backtest** (Yahoo/CSV), **paper**, **live** (Met
 | AI / voice | `ai/helper.py`, `ai/voice.py` |
 | Data | `bot/data_loader.py`, `bot/mt5_connector.py` |
 | Indicators | `bot/indicators.py`, `bot/indicators_bos.py` |
-| Strategies | `bot/strategies/` (strategy.py, strategy_liquidity.py, strategy_bos.py, strategy_confluence.py) |
+| Strategies | `bot/strategies/` (strategy_bos.py, strategy_kingsley.py, strategy_test.py) |
 | Backtest | `bot/backtest/` (per-strategy runners) |
 | Live / paper / replay | `bot/live_trading.py`, `bot/paper_trading.py`, `bot/trade_approver.py`, `bot/replay_engine.py` |
 
@@ -40,7 +40,6 @@ Python ICT-style trading bot: **backtest** (Yahoo/CSV), **paper**, **live** (Met
 
 - New strategy: add strategy class in `bot/strategies/` (`prepare_data` + `run_backtest`), add backtest runner in `bot/backtest/`, wire in `main.py` and `bot/live_trading.run_strategy()`.
 - New indicator: add function in `bot/indicators.py` (or new module) returning DataFrame with new columns; call from strategy `prepare_data()`.
-- **PDH/PDL (pdh_pdl):** `ICTStrategy` in `bot/strategies/strategy.py` expects one 5m DataFrame; PDH/PDL are passed as series to `run_backtest(pdh_series, pdl_series)`. Live engine uses `prepare_pdh_pdl()` from `bot.backtest` and calls `run_backtest(pdh_series, pdl_series)`.
 - **Live safety:** SL is enforced in `execute_signal()` (`_validate_signal_sl`); optional margin check and approval timeout. See `LIVE_TRADING_GUIDE.md`.
 
 **Full details:** `ONBOARDING.md`; live trading: `LIVE_TRADING_GUIDE.md`.

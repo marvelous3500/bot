@@ -5,17 +5,26 @@ from ..indicators_bos import (
     detect_swing_highs_lows,
     detect_break_of_structure,
     identify_order_block,
-    detect_shallow_tap
+    detect_shallow_tap,
+    higher_tf_bias_aligned,
 )
 
 class H1M5BOSStrategy:
     """Multi-timeframe ICT: H1 BOS + OB, M5 shallow tap + liquidity sweep + entry."""
 
-    def __init__(self, df_h1, df_m5):
+    def __init__(self, df_h1, df_m5, df_4h=None, df_daily=None):
         self.df_h1 = df_h1.copy()
         self.df_m5 = df_m5.copy()
+        self.df_4h = df_4h.copy() if df_4h is not None and not df_4h.empty else None
+        self.df_daily = df_daily.copy() if df_daily is not None and not df_daily.empty else None
 
     def prepare_data(self):
+        if self.df_4h is not None:
+            self.df_4h = detect_swing_highs_lows(self.df_4h, swing_length=3)
+            self.df_4h = detect_break_of_structure(self.df_4h)
+        if self.df_daily is not None:
+            self.df_daily = detect_swing_highs_lows(self.df_daily, swing_length=3)
+            self.df_daily = detect_break_of_structure(self.df_daily)
         print("Detecting swing highs/lows on H1...")
         self.df_h1 = detect_swing_highs_lows(self.df_h1, swing_length=3)
         print("Detecting Break of Structure on H1...")
@@ -43,12 +52,20 @@ class H1M5BOSStrategy:
                 current_ob = identify_order_block(self.df_h1, i_h1)
                 ob_tapped = False
                 liquidity_swept = False
+                if getattr(config, 'USE_4H_BIAS_FILTER', False) and not higher_tf_bias_aligned(self.df_4h, h1_idx, 'BULLISH'):
+                    continue
+                if getattr(config, 'USE_DAILY_BIAS_FILTER', False) and not higher_tf_bias_aligned(self.df_daily, h1_idx, 'BULLISH'):
+                    continue
                 print(f"[H1] Bullish BOS detected at {h1_idx}, OB: {current_ob}")
             elif h1_row['bos_bear']:
                 current_bias = 'BEARISH'
                 current_ob = identify_order_block(self.df_h1, i_h1)
                 ob_tapped = False
                 liquidity_swept = False
+                if getattr(config, 'USE_4H_BIAS_FILTER', False) and not higher_tf_bias_aligned(self.df_4h, h1_idx, 'BEARISH'):
+                    continue
+                if getattr(config, 'USE_DAILY_BIAS_FILTER', False) and not higher_tf_bias_aligned(self.df_daily, h1_idx, 'BEARISH'):
+                    continue
                 print(f"[H1] Bearish BOS detected at {h1_idx}, OB: {current_ob}")
             if current_bias and current_ob:
                 future_m5 = self.df_m5[self.df_m5.index > h1_idx]

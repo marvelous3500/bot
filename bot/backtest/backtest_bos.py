@@ -2,7 +2,7 @@ import pandas as pd
 import config
 from ..data_loader import fetch_data_yfinance, load_data_csv
 from ..strategies import H1M5BOSStrategy
-from .backtest import _stats_dict
+from .common import _stats_dict
 
 
 def run_bos_backtest(csv_path=None, symbol=None, period=None, return_stats=False):
@@ -17,18 +17,28 @@ def run_bos_backtest(csv_path=None, symbol=None, period=None, return_stats=False
     else:
         symbol = symbol or config.SYMBOLS[0]
         period = period or getattr(config, 'BACKTEST_PERIOD', '60d')
+        agg = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
         if not return_stats:
             print(f"Fetching data for {symbol} ({period})...")
         df_h1 = fetch_data_yfinance(symbol, period=period, interval='1h')
         df_m5 = fetch_data_yfinance(symbol, period=period, interval='5m')
+        df_4h = df_h1.resample('4h').agg(agg).dropna() if getattr(config, 'USE_4H_BIAS_FILTER', False) else None
+        df_daily = df_h1.resample('1D').agg(agg).dropna() if getattr(config, 'USE_DAILY_BIAS_FILTER', False) else None
+    if csv_path:
+        df_4h = df_h1.resample('4h').agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}).dropna() if getattr(config, 'USE_4H_BIAS_FILTER', False) else None
+        df_daily = df_h1.resample('1D').agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}).dropna() if getattr(config, 'USE_DAILY_BIAS_FILTER', False) else None
     if df_h1.index.tz is not None:
         df_h1.index = df_h1.index.tz_convert(None)
     if df_m5.index.tz is not None:
         df_m5.index = df_m5.index.tz_convert(None)
+    if df_4h is not None and df_4h.index.tz is not None:
+        df_4h.index = df_4h.index.tz_convert(None)
+    if df_daily is not None and df_daily.index.tz is not None:
+        df_daily.index = df_daily.index.tz_convert(None)
     if not return_stats:
         print(f"H1 candles: {len(df_h1)}, M5 candles: {len(df_m5)}")
         print("Initializing H1-M5 BOS strategy...")
-    strat = H1M5BOSStrategy(df_h1, df_m5)
+    strat = H1M5BOSStrategy(df_h1, df_m5, df_4h=df_4h, df_daily=df_daily)
     df_h1_processed, df_m5_processed = strat.prepare_data()
     strat.df_h1 = df_h1_processed
     strat.df_m5 = df_m5_processed

@@ -18,10 +18,9 @@ This document describes the **treading-bot** (ICT Trading Bot) project: purpose,
 
 | Strategy ID        | Module (under `bot/strategies/`) | Description |
 |--------------------|----------------------------------|-------------|
-| `pdh_pdl`          | `strategy.py`       | Previous Day High/Low break + retest, FVG/OB, kill zones, EMA |
-| `liquidity_sweep`  | `strategy_liquidity.py` | 4H liquidity sweep → 15m FVG/OB entry |
 | `h1_m5_bos`        | `strategy_bos.py`   | H1 Break of Structure + OB → M5 shallow tap + liquidity sweep + entry |
-| `confluence`       | `strategy_confluence.py` | 4H BOS + 15m OB entry, kill zone, 50 pip SL |
+| `kingsely_gold`    | `strategy_kingsley.py` | H1 trend + 15m BOS/ChoCH + zone→LQ + OB test (gold only) |
+| `test`             | `strategy_test.py` | Minimal trend follow (gold, smoke test) |
 
 ---
 
@@ -32,7 +31,7 @@ This document describes the **treading-bot** (ICT Trading Bot) project: purpose,
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  main.py (CLI)                                                              │
-│  --mode: backtest | paper | live    --strategy: pdh_pdl | liquidity_sweep | h1_m5_bos
+│  --mode: backtest | paper | live    --strategy: h1_m5_bos | kingsely_gold | test
 └─────────────────────────────────────────────────────────────────────────────┘
          │
          ├── backtest ──► bot/backtest/ (per-strategy runners)
@@ -60,11 +59,10 @@ This document describes the **treading-bot** (ICT Trading Bot) project: purpose,
 | **bot/mt5_connector.py** | MT5 connection, account/symbol info, bars, live price, place_order, get_positions, close_position. Returns dicts/DataFrames. |
 | **bot/indicators.py** | FVG, order block, liquidity sweep, EMA, displacement. Adds boolean/float columns to DataFrame. |
 | **bot/indicators_bos.py** | Swing highs/lows, break of structure (BOS), order block identification, shallow tap. Used by H1-M5 BOS strategy. |
-| **bot/strategies/strategy.py** | `ICTStrategy`: one DataFrame (e.g. 5m), PDH/PDL from daily; `prepare_data()` then `run_backtest(pdh_series, pdl_series)` → signals DataFrame. |
-| **bot/strategies/strategy_liquidity.py** | `LiquiditySweepStrategy`: two DataFrames (4H, 15m); `prepare_data()` then `run_backtest()` → signals. |
-| **bot/strategies/strategy_bos.py** | `H1M5BOSStrategy`: two DataFrames (H1, M5); `prepare_data()` then `run_backtest()` → signals. |
-| **bot/strategies/strategy_confluence.py** | `ConfluenceStrategy`: 4H BOS + 15m OB, kill zone. |
-| **bot/backtest/** | Per-strategy backtest runners: load data, build strategy, align PDH/PDL if needed, run strategy, simulate trades (SL/TP hit first), print results. |
+| **bot/strategies/strategy_bos.py** | `H1M5BOSStrategy`: H1 + M5 DataFrames; `prepare_data()` then `run_backtest()` → signals. |
+| **bot/strategies/strategy_kingsley.py** | `KingsleyGoldStrategy`: 4H + H1 + 15m; BOS/ChoCH + zone→LQ + OB test (gold). |
+| **bot/strategies/strategy_test.py** | `TestStrategy`: H1 trend follow (gold, smoke test). |
+| **bot/backtest/** | Per-strategy backtest runners: load data, build strategy, run strategy, simulate trades (SL/TP hit first), print results. |
 | **bot/live_trading.py** | `LiveTradingEngine`: MT5 data → run_strategy() → optional TradeApprover → execute_signal (paper or MT5). Loop with LIVE_CHECK_INTERVAL. |
 | **bot/paper_trading.py** | Virtual balance/positions, place_order, update_positions (MT5 prices for SL/TP), save/load session JSON. |
 | **bot/trade_approver.py** | Console prompt for trade approval; shows signal, R:R, risk amount; returns True/False. |
@@ -98,7 +96,6 @@ This document describes the **treading-bot** (ICT Trading Bot) project: purpose,
 
 - **Load data** (CSV or yfinance); normalize timezone (strip to naive).
 - **Build strategy** with the correct frame(s); call `prepare_data()`.
-- **PDH/PDL** (pdh_pdl only): align daily high/low to 5m index (e.g. shift + reindex/ffill), pass two series into `run_backtest(pdh_series, pdl_series)`.
 - **Run strategy** to get signals.
 - **Simulate P&L:** for each signal, look at future bars; if SL hit first → loss (RISK_PER_TRADE × balance), if TP hit first → win (same risk × RISK_REWARD_RATIO); append to balance and counts; print totals and win rate.
 
@@ -122,11 +119,10 @@ This document describes the **treading-bot** (ICT Trading Bot) project: purpose,
 | `bot/mt5_connector.py` | MT5Connector: connect, get_bars, get_live_price, place_order, get_positions, close_position. |
 | `bot/indicators.py` | FVG, OB, liquidity sweep, EMA, displacement. |
 | `bot/indicators_bos.py` | Swing high/low, BOS, identify_order_block, detect_shallow_tap. |
-| `bot/strategies/strategy.py` | ICTStrategy (PDH/PDL + retest + FVG/OB). |
-| `bot/strategies/strategy_liquidity.py` | LiquiditySweepStrategy (4H sweep + 15m entry). |
 | `bot/strategies/strategy_bos.py` | H1M5BOSStrategy (H1 BOS + OB, M5 tap + sweep + entry). |
-| `bot/strategies/strategy_confluence.py` | ConfluenceStrategy (4H BOS + 15m OB). |
-| `bot/backtest/` | Per-strategy backtest runners (pdh_pdl, liquidity_sweep, bos, confluence). |
+| `bot/strategies/strategy_kingsley.py` | KingsleyGoldStrategy (H1 + 15m BOS/ChoCH + OB test, gold). |
+| `bot/strategies/strategy_test.py` | TestStrategy (minimal trend, smoke test). |
+| `bot/backtest/` | Per-strategy backtest runners (bos, kingsley, test). |
 | `bot/live_trading.py` | LiveTradingEngine: connect, run_strategy, execute_signal, update_positions, run() loop. |
 | `bot/paper_trading.py` | PaperTrading: virtual orders, positions, P&L, session JSON. |
 | `bot/trade_approver.py` | TradeApprover: request_approval, show_daily_summary. |
@@ -141,14 +137,15 @@ This document describes the **treading-bot** (ICT Trading Bot) project: purpose,
 ### 5.1 Backtest
 
 ```bash
-# Default: backtest pdh_pdl on config.SYMBOLS[0]
+# Default: backtest h1_m5_bos
 python main.py --mode backtest
 
 # With strategy and symbol
-python main.py --mode backtest --strategy liquidity_sweep --symbol "GC=F"
+python main.py --mode backtest --strategy h1_m5_bos --symbol "GC=F"
+python main.py --mode backtest --strategy kingsely_gold --symbol "GC=F"
 
 # From CSV (must have time/open/high/low/close/volume)
-python main.py --mode backtest --strategy pdh_pdl --csv path/to/data.csv
+python main.py --mode backtest --strategy h1_m5_bos --csv path/to/data.csv
 ```
 
 ### 5.2 Paper Trading
@@ -157,7 +154,7 @@ python main.py --mode backtest --strategy pdh_pdl --csv path/to/data.csv
 - `config.LIVE_MODE = False` and run:
 
 ```bash
-python main.py --mode paper --strategy pdh_pdl
+python main.py --mode paper --strategy h1_m5_bos
 ```
 
 ### 5.3 Live Trading
@@ -166,7 +163,7 @@ python main.py --mode paper --strategy pdh_pdl
 - Optional: `MANUAL_APPROVAL = True` to confirm each trade in the terminal.
 
 ```bash
-python main.py --mode live --strategy pdh_pdl
+python main.py --mode live --strategy h1_m5_bos
 ```
 
 ---

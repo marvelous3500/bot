@@ -5,14 +5,14 @@ from datetime import datetime, timedelta
 from .connector_interface import get_connector, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
 from .paper_trading import PaperTrading
 from .trade_approver import TradeApprover
-from .strategies import ICTStrategy, LiquiditySweepStrategy, H1M5BOSStrategy, ConfluenceStrategy, KingsleyGoldStrategy, TestStrategy
-from .backtest import prepare_pdh_pdl
+from .strategies import H1M5BOSStrategy, KingsleyGoldStrategy, TestStrategy
+from .indicators_bos import detect_swing_highs_lows, detect_break_of_structure
 from ai import get_signal_confidence, explain_trade, speak
 
 class LiveTradingEngine:
     """Main live trading engine that runs strategies continuously."""
 
-    def __init__(self, strategy_name='pdh_pdl', paper_mode=True):
+    def __init__(self, strategy_name='h1_m5_bos', paper_mode=True):
         self.strategy_name = strategy_name
         self.paper_mode = paper_mode
         self.mt5 = get_connector(
@@ -46,6 +46,37 @@ class LiveTradingEngine:
             return False
         return True
 
+    def _get_symbol_for_bias(self):
+        """Return the symbol used for bias-of-day (matches strategy's primary symbol)."""
+        if self.strategy_name in ('kingsely_gold', 'test'):
+            symbol = (
+                config.LIVE_SYMBOLS.get('XAUUSD') or
+                getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSDm') or
+                'XAUUSDm'
+            )
+        else:
+            symbol = list(config.LIVE_SYMBOLS.values())[0]
+        return symbol
+
+    def _get_bias_of_day(self, symbol):
+        """Compute ICT-style bias from last closed Daily and H1 bars (BOS). Returns {'daily': str, 'h1': str} or None."""
+        result = {}
+        for label, tf_const, count in [('daily', TIMEFRAME_D1, 50), ('h1', TIMEFRAME_H1, 200)]:
+            df = self.mt5.get_bars(symbol, tf_const, count=count)
+            if df is None or len(df) < 5:
+                return None
+            df = df.copy()
+            df = detect_swing_highs_lows(df, swing_length=3)
+            df = detect_break_of_structure(df)
+            last_closed = df.iloc[-2] if len(df) >= 2 else df.iloc[-1]
+            if last_closed.get('bos_bull'):
+                result[label] = 'BULLISH'
+            elif last_closed.get('bos_bear'):
+                result[label] = 'BEARISH'
+            else:
+                result[label] = 'NEUTRAL'
+        return result
+
     def run_strategy(self):
         if self.strategy_name in ('kingsely_gold', 'test'):
             symbol = (
@@ -56,27 +87,11 @@ class LiveTradingEngine:
             )
         else:
             symbol = list(config.LIVE_SYMBOLS.values())[0]
-        if self.strategy_name == 'pdh_pdl':
-            df_daily = self.mt5.get_bars(symbol, TIMEFRAME_D1, count=10)
-            df_5m = self.mt5.get_bars(symbol, TIMEFRAME_M5, count=500)
-            if df_daily is None or df_5m is None:
-                return []
-            strat = ICTStrategy(df_5m)
-            df_processed = strat.prepare_data()
-            pdh_series, pdl_series = prepare_pdh_pdl(df_processed, df_daily)
-            signals_df = strat.run_backtest(pdh_series, pdl_series)
-        elif self.strategy_name == 'liquidity_sweep':
-            df_4h = self.mt5.get_bars(symbol, TIMEFRAME_H4, count=100)
-            df_1h = self.mt5.get_bars(symbol, TIMEFRAME_H1, count=200)
-            df_15m = self.mt5.get_bars(symbol, TIMEFRAME_M15, count=500)
-            if df_4h is None or df_1h is None or df_15m is None:
-                return []
-            strat = LiquiditySweepStrategy(df_4h, df_1h, df_15m)
-            strat.prepare_data()
-            signals_df = strat.run_backtest()
-        elif self.strategy_name == 'h1_m5_bos':
+        if self.strategy_name == 'h1_m5_bos':
             df_h1 = self.mt5.get_bars(symbol, TIMEFRAME_H1, count=200)
             df_5m = self.mt5.get_bars(symbol, TIMEFRAME_M5, count=1000)
+            df_4h = self.mt5.get_bars(symbol, TIMEFRAME_H4, count=100) if getattr(config, 'USE_4H_BIAS_FILTER', False) else None
+            df_daily = self.mt5.get_bars(symbol, TIMEFRAME_D1, count=50) if getattr(config, 'USE_DAILY_BIAS_FILTER', False) else None
             if df_h1 is None or df_5m is None:
                 if getattr(config, 'LIVE_DEBUG', False):
                     print(f"[LIVE_DEBUG] No data: H1={df_h1 is not None}, M5={df_5m is not None}")
@@ -85,42 +100,41 @@ class LiveTradingEngine:
                 last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
                 last_m5 = df_5m.index[-1] if len(df_5m) > 0 else None
                 print(f"[LIVE_DEBUG] {symbol} H1: {len(df_h1)} bars, last={last_h1} | M5: {len(df_5m)} bars, last={last_m5}")
-            strat = H1M5BOSStrategy(df_h1, df_5m)
+            strat = H1M5BOSStrategy(df_h1, df_5m, df_4h=df_4h, df_daily=df_daily)
             strat.prepare_data()
             signals_df = strat.run_backtest()
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] Strategy returned 0 signals (no BOS + kill zone + entry)")
-        elif self.strategy_name == 'confluence':
-            df_4h = self.mt5.get_bars(symbol, TIMEFRAME_H4, count=100)
-            df_15m = self.mt5.get_bars(symbol, TIMEFRAME_M15, count=500)
-            if df_4h is None or df_15m is None:
-                return []
-            strat = ConfluenceStrategy(df_4h, df_15m)
-            strat.prepare_data()
-            signals_df = strat.run_backtest()
         elif self.strategy_name == 'kingsely_gold':
             gold_symbols = list(dict.fromkeys([
                 symbol, getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSD'), 'GOLD', 'XAUUSD'
             ]))
-            df_h1, df_15m = None, None
+            df_4h, df_h1, df_15m, df_daily = None, None, None, None
             for sym in gold_symbols:
+                df_4h = self.mt5.get_bars(sym, TIMEFRAME_H4, count=100)
                 df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
                 df_15m = self.mt5.get_bars(sym, TIMEFRAME_M15, count=1000)
-                if df_h1 is not None and df_15m is not None:
+                if getattr(config, 'USE_DAILY_BIAS_FILTER', False):
+                    df_daily = self.mt5.get_bars(sym, TIMEFRAME_D1, count=50)
+                has_all = df_4h is not None and df_h1 is not None and df_15m is not None
+                needs_daily = getattr(config, 'USE_DAILY_BIAS_FILTER', False)
+                if has_all and (not needs_daily or df_daily is not None):
                     symbol = sym
                     break
-            if df_h1 is None or df_15m is None:
+            if df_4h is None or df_h1 is None or df_15m is None:
                 if getattr(config, 'LIVE_DEBUG', False):
+                    h4_ok = "OK" if df_4h is not None else "MISSING"
                     h1_ok = "OK" if df_h1 is not None else "MISSING"
                     m15_ok = "OK" if df_15m is not None else "MISSING"
-                    print(f"[LIVE_DEBUG] kingsely_gold: Bar data missing — H1={h1_ok}, 15m={m15_ok} (tried: {gold_symbols})")
+                    print(f"[LIVE_DEBUG] kingsely_gold: Bar data missing — 4H={h4_ok}, H1={h1_ok}, 15m={m15_ok} (tried: {gold_symbols})")
                     print(f"[LIVE_DEBUG]   → Check: symbol in MT5 Market Watch, market open (not weekend), broker symbol name")
                 return []
             if getattr(config, 'LIVE_DEBUG', False):
+                last_4h = df_4h.index[-1] if len(df_4h) > 0 else None
                 last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
                 last_15m = df_15m.index[-1] if len(df_15m) > 0 else None
-                print(f"[LIVE_DEBUG] {symbol} H1: {len(df_h1)} bars, last={last_h1} | 15m: {len(df_15m)} bars, last={last_15m}")
-            strat = KingsleyGoldStrategy(df_h1, df_15m, verbose=False)
+                print(f"[LIVE_DEBUG] {symbol} 4H: {len(df_4h)} bars, last={last_4h} | H1: {len(df_h1)} bars, last={last_h1} | 15m: {len(df_15m)} bars, last={last_15m}")
+            strat = KingsleyGoldStrategy(df_4h, df_h1, df_15m, df_daily=df_daily, verbose=False)
             strat.prepare_data()
             signals_df = strat.run_backtest()
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
@@ -194,22 +208,6 @@ class LiveTradingEngine:
                                 latest_signal['sl'] = price_f + fallback_dist
                         except (TypeError, ValueError):
                             pass
-                # Confluence: set SL from pips before lot calc (other strategies have sl from signal)
-                if self.strategy_name == 'confluence':
-                    sl_pips = getattr(config, 'CONFLUENCE_SL_PIPS', 50)
-                    info = self.mt5.get_symbol_info(symbol)
-                    pip_size = (info['point'] * 10) if info else 0.0001
-                    if 'XAU' in symbol.upper() or 'GOLD' in symbol.upper():
-                        pip_size = 0.1
-                    elif 'BTC' in symbol.upper():
-                        pip_size = 1.0
-                    elif 'NAS' in symbol.upper() or 'US100' in symbol.upper() or 'NDX' in symbol.upper():
-                        pip_size = 1.0
-                    sl_dist = sl_pips * pip_size
-                    if latest_signal['type'] == 'BUY':
-                        latest_signal['sl'] = latest_signal['price'] - sl_dist
-                    else:
-                        latest_signal['sl'] = latest_signal['price'] + sl_dist
                 sl_dist = abs(latest_signal['price'] - latest_signal.get('sl', 0))
                 if latest_signal['type'] == 'BUY':
                     latest_signal['tp'] = latest_signal['price'] + (sl_dist * config.RISK_REWARD_RATIO)
@@ -524,6 +522,11 @@ class LiveTradingEngine:
                 self.update_positions()
                 self._check_breakeven()
                 self._last_run_errors = []
+                if getattr(config, "SHOW_BIAS_OF_DAY", False) and not self.paper_mode and self.mt5.connected:
+                    sym = self._get_symbol_for_bias()
+                    bias = self._get_bias_of_day(sym)
+                    if bias is not None:
+                        print(f"[BIAS OF DAY] Daily: {bias['daily']} | H1: {bias['h1']} ({sym})")
                 if getattr(config, "MT5_VERBOSE", False):
                     print(f"[MT5] Running strategy check...")
                 signals = self.run_strategy()

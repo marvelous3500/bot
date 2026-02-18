@@ -3,7 +3,7 @@ import pandas as pd
 import config
 from ..data_loader import fetch_data_yfinance, load_data_csv
 from ..strategies import TestStrategy
-from .backtest import _stats_dict
+from .common import _stats_dict
 
 TEST_BACKTEST_SYMBOL = 'GC=F'
 TEST_LIVE_SYMBOL = 'XAUUSD'

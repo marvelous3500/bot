@@ -3,9 +3,8 @@ Replay engine: runs the full live flow on historical data. No MT5 required.
 """
 import pandas as pd
 import config
-from .data_loader import fetch_data_yfinance, fetch_daily_data_yfinance, load_data_csv
-from .strategies import ICTStrategy, LiquiditySweepStrategy, H1M5BOSStrategy, ConfluenceStrategy, KingsleyGoldStrategy
-from .backtest import prepare_pdh_pdl, _pip_size_for_symbol
+from .data_loader import fetch_data_yfinance, load_data_csv
+from .strategies import H1M5BOSStrategy, KingsleyGoldStrategy, TestStrategy
 from ai import get_signal_confidence, explain_trade, speak
 
 
@@ -25,67 +24,47 @@ def load_replay_data(strategy_name, symbol, csv_path):
         if df.index.tz is not None:
             df.index = df.index.tz_convert(None)
 
-    if strategy_name == 'pdh_pdl':
-        if csv_path:
-            df_5m = df
-            df_daily = df.resample('1D').agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}).dropna()
-        else:
-            df_5m = fetch_data_yfinance(symbol, period='60d', interval='5m')
-            df_daily = fetch_daily_data_yfinance(symbol, period='6mo')
-        df_5m = _strip_tz(df_5m)
-        df_daily = _strip_tz(df_daily)
-        return df_5m, {'df_5m': df_5m, 'df_daily': df_daily, 'symbol': symbol}
-
-    if strategy_name == 'liquidity_sweep':
+    if strategy_name == 'h1_m5_bos':
         agg = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
         if csv_path:
-            df_4h = df.resample('4h').agg(agg).dropna()
-            df_1h = df.resample('1h').agg(agg).dropna()
-            df_15m = df.resample('15m').agg(agg).dropna()
-        else:
-            df_1h = fetch_data_yfinance(symbol, period='60d', interval='1h')
-            df_4h = df_1h.resample('4h').agg(agg).dropna()
-            df_15m = fetch_data_yfinance(symbol, period='60d', interval='15m')
-        df_4h = _strip_tz(df_4h)
-        df_1h = _strip_tz(df_1h)
-        df_15m = _strip_tz(df_15m)
-        return df_15m, {'df_4h': df_4h, 'df_1h': df_1h, 'df_15m': df_15m, 'symbol': symbol}
-
-    if strategy_name == 'confluence':
-        if csv_path:
-            df_4h = df.resample('4h').agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}).dropna()
-            df_15m = df
-        else:
-            df_4h = fetch_data_yfinance(symbol, period='60d', interval='1h')
-            df_4h = df_4h.resample('4h').agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}).dropna()
-            df_15m = fetch_data_yfinance(symbol, period='60d', interval='15m')
-        df_4h = _strip_tz(df_4h)
-        df_15m = _strip_tz(df_15m)
-        return df_15m, {'df_4h': df_4h, 'df_15m': df_15m, 'symbol': symbol}
-
-    if strategy_name == 'h1_m5_bos':
-        if csv_path:
-            df_h1 = df.resample('1h').agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}).dropna()
+            df_h1 = df.resample('1h').agg(agg).dropna()
             df_m5 = df
         else:
             df_h1 = fetch_data_yfinance(symbol, period='60d', interval='1h')
             df_m5 = fetch_data_yfinance(symbol, period='60d', interval='5m')
+        df_4h = df_h1.resample('4h').agg(agg).dropna() if getattr(config, 'USE_4H_BIAS_FILTER', False) else None
+        df_daily = df_h1.resample('1D').agg(agg).dropna() if getattr(config, 'USE_DAILY_BIAS_FILTER', False) else None
         df_h1 = _strip_tz(df_h1)
         df_m5 = _strip_tz(df_m5)
-        return df_m5, {'df_h1': df_h1, 'df_m5': df_m5, 'symbol': symbol}
+        df_4h = _strip_tz(df_4h) if df_4h is not None else None
+        df_daily = _strip_tz(df_daily) if df_daily is not None else None
+        return df_m5, {'df_h1': df_h1, 'df_m5': df_m5, 'df_4h': df_4h, 'df_daily': df_daily, 'symbol': symbol}
 
     if strategy_name == 'kingsely_gold':
         agg = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
         symbol = symbol or 'GC=F'
         if csv_path:
             df_h1 = df.resample('1h').agg(agg).dropna()
+            df_4h = df_h1.resample('4h').agg(agg).dropna()
             df_15m = df.resample('15min').agg(agg).dropna()
         else:
             df_h1 = fetch_data_yfinance(symbol, period='60d', interval='1h')
+            df_4h = df_h1.resample('4h').agg(agg).dropna()
             df_15m = fetch_data_yfinance(symbol, period='60d', interval='15m')
+        df_daily = df_h1.resample('1D').agg(agg).dropna()
+        df_4h = _strip_tz(df_4h)
         df_h1 = _strip_tz(df_h1)
         df_15m = _strip_tz(df_15m)
-        return df_15m, {'df_h1': df_h1, 'df_15m': df_15m, 'symbol': symbol}
+        df_daily = _strip_tz(df_daily)
+        return df_15m, {'df_4h': df_4h, 'df_h1': df_h1, 'df_15m': df_15m, 'df_daily': df_daily, 'symbol': symbol}
+
+    if strategy_name == 'test':
+        if csv_path:
+            df_h1 = df.resample('1h').agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}).dropna()
+        else:
+            df_h1 = fetch_data_yfinance(symbol or 'GC=F', period='60d', interval='1h')
+        df_h1 = _strip_tz(df_h1)
+        return df_h1, {'df_h1': df_h1, 'symbol': symbol}
 
     raise ValueError(f"Unknown strategy: {strategy_name}")
 
@@ -93,62 +72,41 @@ def load_replay_data(strategy_name, symbol, csv_path):
 def run_strategy_at_time(strategy_name, data, current_time):
     signal = None
     symbol = data.get('symbol', config.SYMBOLS[0])
-    if strategy_name == 'pdh_pdl':
-        df_5m = data['df_5m'].loc[data['df_5m'].index <= current_time]
-        df_daily = data['df_daily'].loc[data['df_daily'].index <= current_time]
-        if len(df_5m) < 50 or len(df_daily) < 5:
-            return None
-        strat = ICTStrategy(df_5m)
-        df_p = strat.prepare_data()
-        pdh_series, pdl_series = prepare_pdh_pdl(df_p, df_daily)
-        signals_df = strat.run_backtest(pdh_series, pdl_series)
-        if not signals_df.empty:
-            signal = signals_df.iloc[-1].to_dict()
-            signal['sl'] = signal.get('sl')
-    elif strategy_name == 'liquidity_sweep':
-        df_4h = data['df_4h'].loc[data['df_4h'].index <= current_time]
-        df_1h = data['df_1h'].loc[data['df_1h'].index <= current_time]
-        df_15m = data['df_15m'].loc[data['df_15m'].index <= current_time]
-        if len(df_4h) < 10 or len(df_1h) < 10 or len(df_15m) < 50:
-            return None
-        strat = LiquiditySweepStrategy(df_4h, df_1h, df_15m)
-        strat.prepare_data()
-        signals_df = strat.run_backtest()
-        if not signals_df.empty:
-            signal = signals_df.iloc[-1].to_dict()
-    elif strategy_name == 'confluence':
-        df_4h = data['df_4h'].loc[data['df_4h'].index <= current_time]
-        df_15m = data['df_15m'].loc[data['df_15m'].index <= current_time]
-        if len(df_4h) < 10 or len(df_15m) < 50:
-            return None
-        strat = ConfluenceStrategy(df_4h, df_15m)
-        strat.prepare_data()
-        signals_df = strat.run_backtest()
-        if not signals_df.empty:
-            signal = signals_df.iloc[-1].to_dict()
-            pip = _pip_size_for_symbol(symbol)
-            sl_pips = getattr(config, 'CONFLUENCE_SL_PIPS', 50)
-            dist = sl_pips * pip
-            if signal['type'] == 'BUY':
-                signal['sl'] = signal['price'] - dist
-            else:
-                signal['sl'] = signal['price'] + dist
-    elif strategy_name == 'h1_m5_bos':
+    if strategy_name == 'h1_m5_bos':
         df_h1 = data['df_h1'].loc[data['df_h1'].index <= current_time]
         df_m5 = data['df_m5'].loc[data['df_m5'].index <= current_time]
+        df_4h = data.get('df_4h')
+        df_daily = data.get('df_daily')
+        if df_4h is not None:
+            df_4h = df_4h.loc[df_4h.index <= current_time]
+        if df_daily is not None:
+            df_daily = df_daily.loc[df_daily.index <= current_time]
         if len(df_h1) < 20 or len(df_m5) < 100:
             return None
-        strat = H1M5BOSStrategy(df_h1, df_m5)
+        strat = H1M5BOSStrategy(df_h1, df_m5, df_4h=df_4h, df_daily=df_daily)
+        strat.prepare_data()
+        signals_df = strat.run_backtest()
+        if not signals_df.empty:
+            signal = signals_df.iloc[-1].to_dict()
+    elif strategy_name == 'test':
+        df_h1 = data['df_h1'].loc[data['df_h1'].index <= current_time]
+        if len(df_h1) < 4:
+            return None
+        strat = TestStrategy(df_h1, verbose=False)
         strat.prepare_data()
         signals_df = strat.run_backtest()
         if not signals_df.empty:
             signal = signals_df.iloc[-1].to_dict()
     elif strategy_name == 'kingsely_gold':
+        df_4h = data['df_4h'].loc[data['df_4h'].index <= current_time]
         df_h1 = data['df_h1'].loc[data['df_h1'].index <= current_time]
         df_15m = data['df_15m'].loc[data['df_15m'].index <= current_time]
-        if len(df_h1) < 20 or len(df_15m) < 100:
+        df_daily = data.get('df_daily')
+        if df_daily is not None:
+            df_daily = df_daily.loc[df_daily.index <= current_time]
+        if len(df_4h) < 10 or len(df_h1) < 20 or len(df_15m) < 100:
             return None
-        strat = KingsleyGoldStrategy(df_h1, df_15m)
+        strat = KingsleyGoldStrategy(df_4h, df_h1, df_15m, df_daily=df_daily)
         strat.prepare_data()
         signals_df = strat.run_backtest()
         if not signals_df.empty:
@@ -166,7 +124,7 @@ def run_strategy_at_time(strategy_name, data, current_time):
 
 
 def run_replay(strategy_name, symbol=None, csv_path=None, auto_approve=True):
-    if strategy_name == 'kingsely_gold':
+    if strategy_name in ('kingsely_gold', 'test'):
         symbol = symbol or 'GC=F'
     print(f"Loading replay data for {strategy_name}...")
     entry_df, data = load_replay_data(strategy_name, symbol, csv_path)

@@ -13,7 +13,7 @@ The **ICT Trading Bot** is a rules-based algorithmic trading system that impleme
 
 **Highlights:**
 
-- **Multiple strategies** — PDH/PDL, liquidity sweep, H1–M5 break of structure (BOS), confluence, and a dedicated gold strategy (Kingsley) are implemented and backtestable.
+- **Multiple strategies** — H1–M5 break of structure (BOS), Kingsley gold strategy, and a test strategy are implemented and backtestable.
 - **Full execution stack** — Paper and live trading through MT5 (e.g. Exness), with dynamic position sizing, margin checks, and broker-safe order handling.
 - **Risk and position rules** — No duplicate entries on the same pair unless adding at TP1/TP2; optional breakeven (move SL to entry after X pips in profit); configurable daily trade limits and manual or auto-approval.
 - **Backtest framework** — Per-strategy backtests with consistent metrics (trades, wins, losses, win rate, final balance, return %). Results depend on strategy, symbol, and period; run `--strategy all` or per-strategy for current numbers.
@@ -48,10 +48,7 @@ The codebase is modular: strategies live in `bot/strategies/`, backtest runners 
 
 | Strategy ID        | Focus | Typical use |
 |--------------------|--------|-------------|
-| **pdh_pdl**        | Previous day high/low break + retest, FVG/OB, kill zones | Multi-asset, 5m |
-| **liquidity_sweep** | 4H liquidity sweep → 1H confirm → 15m FVG/OB entry | Swing, multi-timeframe |
 | **h1_m5_bos**       | H1 break of structure + order block → M5 tap + entry | Gold / forex |
-| **confluence**      | 4H BOS + 15m OB, kill zone, fixed 50 pip SL | Structured entries |
 | **kingsely_gold**   | H1 trend + 15m BOS/ChoCH + zone → liquidity + OB test | Gold (XAUUSD) only |
 | **test**            | Minimal trend + fixed SL/TP | Smoke tests, demos |
 
@@ -138,3 +135,21 @@ Actual **financial** success (e.g. positive expectancy, drawdown limits) depends
 ---
 
 *Report generated from the ICT Trading Bot codebase and documentation. For technical details, see ONBOARDING.md and LIVE_TRADING_GUIDE.md.*
+
+
+Fine-tuning ideas
+1. Session filters
+KINGSLEY_USE_ASIAN_SESSION = False – fewer trades, often higher quality (London/NY only).
+KINGSLEY_USE_KILL_ZONES = True – keep this; it’s already aligned with ICT-style sessions.
+2. Higher timeframe bias
+USE_4H_BIAS_FILTER = True – fewer trades, higher win rate if 4H and H1 agree.
+USE_DAILY_BIAS_FILTER = True – even stricter; test both together.
+3. Displacement
+KINGSLEY_DISPLACEMENT_RATIO = 0.7 – stricter (like BOS strategy), fewer but stronger entries.
+KINGSLEY_DISPLACEMENT_RATIO = 0.5 – looser, more trades.
+4. 15m window
+KINGSLEY_15M_WINDOW_HOURS = 4 – only recent setups.
+KINGSLEY_15M_WINDOW_HOURS = 12 – more setups, possibly noisier.
+5. Risk:reward
+RISK_REWARD_RATIO = 3.0 – smaller TP, easier to hit, more wins.
+RISK_REWARD_RATIO = 5.0 – larger TP, fewer wins but bigger when they hit.

@@ -11,11 +11,9 @@ Use these commands from the project folder (e.g. `C:\Users\...\Desktop\bot` or `
 python main.py --mode backtest
 
 # One strategy, one symbol
-python main.py --mode backtest --strategy pdh_pdl --symbol "GBPUSD=X"
-python main.py --mode backtest --strategy liquidity_sweep --symbol "GC=F"
 python main.py --mode backtest --strategy h1_m5_bos --symbol "GBPUSD=X"
-python main.py --mode backtest --strategy confluence --symbol "GBPUSD=X"
 python main.py --mode backtest --strategy kingsely_gold --symbol "GC=F"
+python main.py --mode backtest --strategy test --symbol "GC=F"
 # Compare kingsely_gold vs h1_m5_bos on gold (same result table)
 python main.py --mode backtest --strategy gold_compare --period 60d
 
@@ -27,7 +25,7 @@ python main.py --mode backtest --strategy all --period 12d
 python main.py --mode backtest --strategy all --period 60d
 ```
 
-**Strategies:** `pdh_pdl` | `liquidity_sweep` | `h1_m5_bos` | `confluence` | `kingsely_gold` | `gold_compare` | `all`
+**Strategies:** `h1_m5_bos` | `kingsely_gold` | `test` | `gold_compare` | `all`
 
 ---
 
@@ -43,6 +41,7 @@ python main.py --mode paper --auto-approve
 # Specific strategy
 python main.py --mode paper --strategy h1_m5_bos
 python main.py --mode paper --strategy kingsely_gold   # Gold (XAUUSD) only
+python main.py --mode paper --strategy test            # Gold, smoke test
 ```
 
 ---
@@ -59,6 +58,7 @@ python main.py --mode live --auto-approve
 # Specific strategy
 python main.py --mode live --strategy h1_m5_bos
 python main.py --mode live --strategy kingsely_gold    # Gold (XAUUSD) only
+python main.py --mode live --strategy test             # Gold, smoke test
 ```
 
 ---
@@ -66,9 +66,9 @@ python main.py --mode live --strategy kingsely_gold    # Gold (XAUUSD) only
 ## Replay (live-style flow on history, no MT5)
 
 ```bash
-python main.py --mode replay --strategy liquidity_sweep --symbol "GBPUSD=X"
 python main.py --mode replay --strategy h1_m5_bos --symbol "GC=F"
 python main.py --mode replay --strategy kingsely_gold --symbol "GC=F"
+python main.py --mode replay --strategy test --symbol "GC=F"
 ```
 
 ---

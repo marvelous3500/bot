@@ -3,7 +3,7 @@ import pandas as pd
 import config
 from ..data_loader import fetch_data_yfinance, load_data_csv
 from ..strategies import KingsleyGoldStrategy
-from .backtest import _stats_dict
+from .common import _stats_dict
 
 # Gold symbols: Yahoo uses GC=F, MT5 uses XAUUSD
 KINGSLEY_BACKTEST_SYMBOL = 'GC=F'
@@ -12,22 +12,37 @@ KINGSLEY_LIVE_SYMBOL = 'XAUUSD'
 
 def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=False):
     agg = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
+    display_period = period or getattr(config, 'BACKTEST_PERIOD', '60d')
+    period_note = ""
     # Silent mode for clean image-format output (no strategy debug prints)
     if csv_path:
         df = load_data_csv(csv_path)
         df_h1 = df.resample('1h').agg(agg).dropna()
+        df_4h = df_h1.resample('4h').agg(agg).dropna()
         df_15m = df.resample('15min').agg(agg).dropna()
     else:
         symbol = symbol or getattr(config, 'KINGSLEY_BACKTEST_SYMBOL', KINGSLEY_BACKTEST_SYMBOL)
         period = period or getattr(config, 'BACKTEST_PERIOD', '60d')
-        df_h1 = fetch_data_yfinance(symbol, period=period, interval='1h')
-        df_15m = fetch_data_yfinance(symbol, period=period, interval='15m')
+        # Yahoo limits 15m to last 60 days; for 6mo+ use 60d and warn
+        use_60d = period in ('6mo', '180d') or (isinstance(period, str) and ('mo' in period.lower() or 'y' in period.lower()))
+        fetch_period = '60d' if use_60d else period
+        period_note = f" (Yahoo 15m limit; {period} requested)" if use_60d and period != '60d' else ""
+        display_period = fetch_period
+        df_h1 = fetch_data_yfinance(symbol, period=fetch_period, interval='1h')
+        df_4h = df_h1.resample('4h').agg(agg).dropna()
+        df_15m = fetch_data_yfinance(symbol, period=fetch_period, interval='15m')
+    df_daily = df_h1.resample('1D').agg(agg).dropna()
+    if df_4h.index.tz is not None:
+        df_4h.index = df_4h.index.tz_convert(None)
     if df_h1.index.tz is not None:
         df_h1.index = df_h1.index.tz_convert(None)
     if df_15m.index.tz is not None:
         df_15m.index = df_15m.index.tz_convert(None)
-    strat = KingsleyGoldStrategy(df_h1, df_15m, verbose=False)
-    df_h1_processed, df_15m_processed = strat.prepare_data()
+    if df_daily.index.tz is not None:
+        df_daily.index = df_daily.index.tz_convert(None)
+    strat = KingsleyGoldStrategy(df_4h, df_h1, df_15m, df_daily=df_daily, verbose=False)
+    df_4h_processed, df_h1_processed, df_15m_processed = strat.prepare_data()
+    strat.df_4h = df_4h_processed
     strat.df_h1 = df_h1_processed
     strat.df_15m = df_15m_processed
     signals = strat.run_backtest()
@@ -47,17 +62,18 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
         return True
     invalid_sl = signals[~signals.apply(_valid_sl, axis=1)]
     signals = signals[signals.apply(_valid_sl, axis=1)]
+    risk = getattr(config, 'RISK_REWARD_RATIO', 3.0)
     if signals.empty:
         if return_stats:
             return _stats_dict("kingsely_gold", 0, 0, 0, 0.0, 0.0, config.INITIAL_BALANCE)
         used_symbol = symbol or getattr(config, 'KINGSLEY_BACKTEST_SYMBOL', KINGSLEY_BACKTEST_SYMBOL)
-        used_period = period or getattr(config, 'BACKTEST_PERIOD', '60d')
         print()
         print("Backtest Parameters:")
         print(f"  Asset: {used_symbol}")
         print(f"  Risk per trade: {config.RISK_PER_TRADE * 100:.0f}%")
+        print(f"  Risk:Reward: 1:{risk}")
         print(f"  Trade Limit: {'No trade limit' if getattr(config, 'BACKTEST_MAX_TRADES', None) is None else config.BACKTEST_MAX_TRADES}")
-        print(f"  Duration: {used_period}")
+        print(f"  Duration: {display_period}{period_note}")
         print()
         print("| Strategy          | Trades | Wins | Losses | Win rate  | Final balance | Return      |")
         print("| :---------------- | :----- | :--- | :----- | :-------- | :------------ | :---------- |")
@@ -73,7 +89,6 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
     losses = 0
     total_profit = 0.0
     total_loss = 0.0
-    risk = getattr(config, 'RISK_REWARD_RATIO', 3.0)
     for _, trade in signals.iterrows():
         entry_price = trade['price']
         stop_loss = trade['sl']
@@ -134,7 +149,6 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
         )
     # Display in image format: parameters + table
     used_symbol = symbol or getattr(config, 'KINGSLEY_BACKTEST_SYMBOL', KINGSLEY_BACKTEST_SYMBOL)
-    used_period = period or getattr(config, 'BACKTEST_PERIOD', '60d')
     trade_limit = getattr(config, 'BACKTEST_MAX_TRADES', None)
     trade_limit_str = "No trade limit" if trade_limit is None else str(trade_limit)
     risk_pct = config.RISK_PER_TRADE * 100
@@ -144,8 +158,9 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
     print("Backtest Parameters:")
     print(f"  Asset: {used_symbol}")
     print(f"  Risk per trade: {risk_pct:.0f}%")
+    print(f"  Risk:Reward: 1:{risk}")
     print(f"  Trade Limit: {trade_limit_str}")
-    print(f"  Duration: {used_period}")
+    print(f"  Duration: {display_period}{period_note}")
     print()
     print("| Strategy          | Trades | Wins | Losses | Win rate  | Final balance | Return      |")
     print("| :---------------- | :----- | :--- | :----- | :-------- | :------------ | :---------- |")
