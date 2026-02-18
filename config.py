@@ -59,8 +59,10 @@ MT5_CONNECT_RETRIES = 5       # Max attempts for initialize + login
 MT5_CONNECT_DELAY = 5         # Seconds between retries
 MT5_VERBOSE = True            # Log connection steps, data fetches, etc.
 # Optional: fixed order comment (max 31 chars, alphanumeric + space hyphen underscore).
-# Set e.g. MT5_ORDER_COMMENT=ICT in .env to avoid "Invalid comment" on strict brokers (Exness etc).
-MT5_ORDER_COMMENT = (os.getenv('MT5_ORDER_COMMENT') or '').strip() or None
+# None = use strategy reason; '' (set MT5_ORDER_COMMENT= in .env) = send empty; 'ICT' = fixed comment.
+MT5_ORDER_COMMENT = os.getenv('MT5_ORDER_COMMENT')  # None if key missing, '' if empty, else value
+if MT5_ORDER_COMMENT is not None:
+    MT5_ORDER_COMMENT = MT5_ORDER_COMMENT.strip()
 
 
 # Live Trading Symbols (MT5 format) — first is default for paper/live

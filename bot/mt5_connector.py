@@ -369,16 +369,18 @@ class MT5Connector:
             volume = round(v, 2)
         except (TypeError, ValueError):
             volume = vol_min
-        # MT5 comment max 31 chars; many brokers allow only ASCII alphanumeric, space, hyphen, underscore
-        raw = str(comment).replace("\x00", "") if comment else ""
-        try:
-            raw = raw.encode("ascii", "replace").decode("ascii")  # drop non-ASCII
-        except Exception:
-            raw = ""
-        allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 _-")
-        safe_comment = "".join(c if c in allowed else " " for c in raw)
-        safe_comment = " ".join(safe_comment.split())[:31].strip() or "ICT"
-
+        # MT5 comment max 31 chars; many brokers allow only ASCII alphanumeric, space, hyphen, underscore. Some require empty.
+        if comment is None or (isinstance(comment, str) and not comment.strip()):
+            safe_comment = ""
+        else:
+            raw = str(comment).replace("\x00", "") if comment else ""
+            try:
+                raw = raw.encode("ascii", "replace").decode("ascii")  # drop non-ASCII
+            except Exception:
+                raw = ""
+            allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 _-")
+            safe_comment = "".join(c if c in allowed else " " for c in raw)
+            safe_comment = " ".join(safe_comment.split())[:31].strip() or "ICT"
         # Filling mode: try FOK, IOC, RETURN (Exness gold often needs FOK or IOC, not RETURN)
         filling_modes = [
             ("FOK", mt5.ORDER_FILLING_FOK),
@@ -429,7 +431,7 @@ class MT5Connector:
                 elif result.retcode == 10030:  # Invalid fill
                     print("  → Tried FOK, IOC, RETURN — none supported. Check broker/symbol in MT5 Market Watch.")
                 elif result.retcode == -2:  # Invalid comment
-                    print("  → Comment too long or invalid. MT5 allows max 31 chars.")
+                    print("  → Comment rejected. Set MT5_ORDER_COMMENT= in .env (empty) or MT5_ORDER_COMMENT=ICT; some brokers require empty comment.")
             return None, err_msg
         print(f"Order executed: {order_type} {volume} {symbol} @ {result.price} (filling={fill_name})")
         return {

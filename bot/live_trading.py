@@ -312,6 +312,7 @@ class LiveTradingEngine:
             )
             mt5_err = None
         else:
+            _comment = config.MT5_ORDER_COMMENT if config.MT5_ORDER_COMMENT is not None else signal.get('reason', '')
             result, mt5_err = self.mt5.place_order(
                 symbol=signal['symbol'],
                 order_type=signal['type'],
@@ -319,7 +320,7 @@ class LiveTradingEngine:
                 price=signal['price'],
                 sl=signal['sl'],
                 tp=signal['tp'],
-                comment=config.MT5_ORDER_COMMENT or signal.get('reason', '')
+                comment=_comment
             )
         if result:
             result['time'] = datetime.now()
