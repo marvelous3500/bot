@@ -136,10 +136,14 @@ class KingsleyGoldStrategy:
                         m15_bos_seen = True
                         current_ob = identify_order_block(self.df_15m, i_15, ob_lookback=ob_lookback)
                     if not m15_bos_seen or current_ob is None:
+                        if current_ob is None and m15_bos_seen:
+                            m15_bos_seen = False
                         continue
                     self._log(f"[15m] BOS/ChoCH at {idx_15}, OB: {current_ob}")
 
                 # Rule 3: Shallow tap into OB
+                if current_ob is None:
+                    continue
                 if not ob_tapped:
                     tapped = detect_shallow_tap(
                         row_15['low'], row_15['high'],

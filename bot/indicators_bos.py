@@ -1,8 +1,22 @@
 import pandas as pd
 import numpy as np
 
+try:
+    import config
+except ImportError:
+    config = None
+
+
 def detect_swing_highs_lows(df, swing_length=3):
-    """Detects swing highs and swing lows using fractal logic."""
+    """Detects swing highs and lows. Dispatches to LuxAlgo or Kingsley per config."""
+    if config and getattr(config, 'USE_LUXALGO_ICT', False):
+        from .indicators_luxalgo import detect_swing_highs_lows as _lux
+        return _lux(df, swing_length=getattr(config, 'LUXALGO_SWING_LENGTH', 5))
+    return _detect_swing_fractal(df, swing_length)
+
+
+def _detect_swing_fractal(df, swing_length=3):
+    """Detects swing highs and swing lows using fractal logic (Kingsley)."""
     df['swing_high'] = False
     df['swing_low'] = False
     df['swing_high_price'] = np.nan
@@ -41,8 +55,17 @@ def detect_swing_highs_lows(df, swing_length=3):
 
     return df
 
+
 def detect_break_of_structure(df):
-    """Detects Break of Structure (BOS)."""
+    """Detects BOS/MSS. Dispatches to LuxAlgo or Kingsley per config."""
+    if config and getattr(config, 'USE_LUXALGO_ICT', False):
+        from .indicators_luxalgo import detect_break_of_structure as _lux
+        return _lux(df)
+    return _detect_bos_kingsley(df)
+
+
+def _detect_bos_kingsley(df):
+    """Detects Break of Structure (Kingsley)."""
     df['bos_bull'] = False
     df['bos_bear'] = False
     df['bos_direction'] = None
@@ -68,8 +91,18 @@ def detect_break_of_structure(df):
             last_swing_low = row['low']
     return df
 
+
 def identify_order_block(df, bos_index, ob_lookback=20):
-    """Identifies the order block before a BOS."""
+    """Identifies order block before BOS. Dispatches to LuxAlgo or Kingsley per config."""
+    if config and getattr(config, 'USE_LUXALGO_ICT', False):
+        from .indicators_luxalgo import identify_order_block as _lux
+        use_body = getattr(config, 'LUXALGO_OB_USE_BODY', True)
+        return _lux(df, bos_index, ob_lookback=ob_lookback, use_body=use_body)
+    return _identify_ob_kingsley(df, bos_index, ob_lookback=ob_lookback)
+
+
+def _identify_ob_kingsley(df, bos_index, ob_lookback=20):
+    """Identifies the order block before a BOS (Kingsley)."""
     if bos_index <= 0:
         return None
     bos_row = df.iloc[bos_index]

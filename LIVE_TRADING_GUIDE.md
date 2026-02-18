@@ -44,7 +44,9 @@ python main.py --mode live --auto-approve
 |--------|-------------|---------|
 | `LIVE_MODE` | `False` = paper, `True` = real money | `False` |
 | `MANUAL_APPROVAL` | Require y/n confirmation before each trade; `False` = bot auto-approves. Or use `--auto-approve` CLI flag. | `True` |
-| `MAX_TRADES_PER_DAY` | Daily trade limit (in-memory; resets at midnight **local time**) | `5` |
+| `MAX_TRADES_PER_DAY` | Daily trade limit (in-memory; resets at midnight UTC) | `3` |
+| `MAX_TRADES_PER_SESSION` | Per-session limit (London, NY, Asian); divides daily across sessions | `1` |
+| `TRADE_SESSION_HOURS` | UTC hours mapped to session names (london, ny, asian) | London 7-10, NY 13-16, Asian 0-4 |
 | `MAX_POSITION_SIZE` | Lot size (e.g. 0.01 = micro lot) | `0.01` |
 | `PAPER_TRADING_LOG` | JSON file for paper session persistence | `paper_trades.json` |
 | `LIVE_CONFIRM_ON_START` | Require typing 'yes' before live loop starts | `True` |
@@ -74,6 +76,14 @@ The OpenAI API key is read from `.env` as `OPENAI_API_KEY`. If the key is missin
 | `VOICE_ALERT_ON_REJECT` | Speak when a trade is rejected and why | `True` |
 
 When voice is on, the bot speaks: **trade found** (direction, symbol, reason, “Checking approval”); **trade rejected** (concrete reason: no stop loss, stop loss invalid, insufficient margin, below confidence threshold, daily limit reached, not approved by user); **trade executed** (direction, symbol, price).
+
+#### ICT indicator source
+
+| Setting | Description | Default |
+|--------|-------------|---------|
+| `USE_LUXALGO_ICT` | `False` = Kingsley fractal swings; `True` = LuxAlgo-style pivot swings, MSS/BOS, OB with breaker | `False` |
+| `LUXALGO_SWING_LENGTH` | Pivot lookback when LuxAlgo enabled (LuxAlgo default: 5) | `5` |
+| `LUXALGO_OB_USE_BODY` | Use candle body (vs full range) for OB when LuxAlgo enabled | `True` |
 
 #### Kingsley Gold (kingsely_gold strategy)
 
@@ -111,7 +121,8 @@ For a real Exness account you may use a server like `Exness-MT5`; override `MT5_
 | Feature | Enforced in code | Where |
 |--------|-------------------|-------|
 | **Stop loss required** | Yes | [bot/live_trading.py](bot/live_trading.py): `_validate_signal_sl()` rejects signals with missing/invalid SL or SL on wrong side of entry. No order is sent without a valid SL. |
-| **Daily trade limit** | Yes | [bot/live_trading.py](bot/live_trading.py): `check_safety_limits()` blocks new trades when trades executed today (by local date) ≥ `MAX_TRADES_PER_DAY`. |
+| **Daily trade limit** | Yes | [bot/live_trading.py](bot/live_trading.py): `check_safety_limits()` blocks when trades today (UTC) ≥ `MAX_TRADES_PER_DAY`. |
+| **Session trade limit** | Yes | When `MAX_TRADES_PER_SESSION` is set, blocks when trades in current session (London/NY/Asian) ≥ limit. |
 | **Position size** | Yes | Volume is set from `config.MAX_POSITION_SIZE` for every signal. |
 | **Manual approval** | Yes (when enabled) | [bot/trade_approver.py](bot/trade_approver.py): prompt with trade details; optional **timeout** (default 60s) — if no response, trade is rejected. |
 | **Pre-trade margin check** | Yes (live, when `USE_MARGIN_CHECK=True`) | [bot/live_trading.py](bot/live_trading.py): before placing a live order, compares `calc_required_margin(...)` to `free_margin`; rejects if insufficient. |

@@ -34,6 +34,15 @@ python main.py --mode backtest --strategy all --period 60d
 python scripts/sweep_kingsley.py
 ```
 
+### Kingsley vs LuxAlgo ICT comparison
+
+```bash
+# Compare Kingsley (fractal) vs LuxAlgo (pivot) backtest results side by side
+python scripts/compare_kingsley_luxalgo.py
+python scripts/compare_kingsley_luxalgo.py --period 12d
+python scripts/compare_kingsley_luxalgo.py --csv path/to/data.csv
+```
+
 ---
 
 ## Paper trading (MT5 required, no real orders)

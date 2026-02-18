@@ -40,11 +40,29 @@ class LiveTradingEngine:
         self.mt5.disconnect()
 
     def check_safety_limits(self):
-        today = datetime.now().date()
-        trades_count = len([t for t in self.trades_today if t['time'].date() == today])
-        if trades_count >= config.MAX_TRADES_PER_DAY:
+        now_utc = datetime.utcnow()
+        today = now_utc.date()
+        session_hours = getattr(config, 'TRADE_SESSION_HOURS', {})
+        max_per_session = getattr(config, 'MAX_TRADES_PER_SESSION', None)
+        self._limit_reason = None
+
+        trades_today = [t for t in self.trades_today if t['time'].date() == today]
+        if len(trades_today) >= config.MAX_TRADES_PER_DAY:
+            self._limit_reason = "Daily trade limit reached"
             print(f"[SAFETY] Daily trade limit reached ({config.MAX_TRADES_PER_DAY})")
             return False
+
+        if max_per_session is not None and session_hours:
+            current_session = session_hours.get(now_utc.hour)
+            if current_session is not None:
+                trades_in_session = [
+                    t for t in trades_today
+                    if session_hours.get(t['time'].hour) == current_session
+                ]
+                if len(trades_in_session) >= max_per_session:
+                    self._limit_reason = "Session trade limit reached"
+                    print(f"[SAFETY] Session limit reached ({max_per_session} per {current_session})")
+                    return False
         return True
 
     def _get_symbol_for_bias(self):
@@ -379,7 +397,7 @@ class LiveTradingEngine:
                 comment=_comment
             )
         if result:
-            result['time'] = datetime.now()
+            result['time'] = datetime.utcnow()
             self.trades_today.append(result)
             if not self.paper_mode and getattr(config, 'LIVE_TRADE_LOG', False):
                 self._log_trade(signal, result)
@@ -584,7 +602,8 @@ class LiveTradingEngine:
         print(f"Strategy: {self.strategy_name}")
         print(f"Check interval: {config.LIVE_CHECK_INTERVAL}s")
         print(f"Manual approval: {'ON' if config.MANUAL_APPROVAL else 'OFF'}")
-        print(f"Max trades/day: {config.MAX_TRADES_PER_DAY}")
+        session_limit = getattr(config, 'MAX_TRADES_PER_SESSION', None)
+        print(f"Max trades/day: {config.MAX_TRADES_PER_DAY}" + (f" ({session_limit} per session)" if session_limit is not None else ""))
         if not self.paper_mode and getattr(config, 'LIVE_CONFIRM_ON_START', False):
             resp = input("LIVE MODE — REAL MONEY. Type 'yes' to continue: ").strip().lower()
             if resp != 'yes':
@@ -613,13 +632,14 @@ class LiveTradingEngine:
                     self.running = False
                     break
                 if not self.check_safety_limits():
+                    reason = getattr(self, '_limit_reason', 'Trade limit reached')
                     if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
-                        print("Daily limit reached. Exiting.")
+                        print(f"{reason}. Exiting.")
                         self.running = False
                         break
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
-                        speak("Trade rejected. Reason: Daily trade limit reached.")
-                    print("Waiting... (daily limit reached)")
+                        speak(f"Trade rejected. Reason: {reason}.")
+                    print(f"Waiting... ({reason})")
                     time.sleep(config.LIVE_CHECK_INTERVAL)
                     continue
                 self.update_positions()

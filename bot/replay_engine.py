@@ -191,6 +191,21 @@ def run_replay(strategy_name, symbol=None, csv_path=None, auto_approve=True):
             if config.VOICE_ALERTS and getattr(config, 'VOICE_ALERT_ON_REJECT', True):
                 speak("Trade rejected. Reason: Daily trade limit reached.")
             continue
+        max_per_session = getattr(config, 'MAX_TRADES_PER_SESSION', None)
+        session_hours = getattr(config, 'TRADE_SESSION_HOURS', {})
+        if max_per_session is not None and session_hours:
+            bar_hour = t.hour if hasattr(t, 'hour') else pd.Timestamp(t).hour
+            current_session = session_hours.get(bar_hour)
+            if current_session is not None:
+                execs_in_session = [
+                    x for x in execution_times
+                    if (x.date() if hasattr(x, 'date') else pd.Timestamp(x).date()) == current_date
+                    and session_hours.get(x.hour if hasattr(x, 'hour') else pd.Timestamp(x).hour) == current_session
+                ]
+                if len(execs_in_session) >= max_per_session:
+                    if config.VOICE_ALERTS and getattr(config, 'VOICE_ALERT_ON_REJECT', True):
+                        speak("Trade rejected. Reason: Session trade limit reached.")
+                    continue
         if i % step != 0:
             continue
         signal = run_strategy_at_time(strategy_name, data, t)

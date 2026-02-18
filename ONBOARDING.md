@@ -58,7 +58,8 @@ This document describes the **treading-bot** (ICT Trading Bot) project: purpose,
 | **bot/data_loader.py** | Fetch OHLCV from Yahoo Finance or load from CSV. Normalizes columns to lowercase and datetime index. |
 | **bot/mt5_connector.py** | MT5 connection, account/symbol info, bars, live price, place_order, get_positions, close_position. Returns dicts/DataFrames. |
 | **bot/indicators.py** | FVG, order block, liquidity sweep, EMA, displacement. Adds boolean/float columns to DataFrame. |
-| **bot/indicators_bos.py** | Swing highs/lows, break of structure (BOS), order block identification, shallow tap. Used by H1-M5 BOS strategy. |
+| **bot/indicators_bos.py** | Swing highs/lows, break of structure (BOS), order block identification, shallow tap. Dispatches to Kingsley (fractal) or LuxAlgo-style (pivot) per `USE_LUXALGO_ICT`. |
+| **bot/indicators_luxalgo.py** | LuxAlgo-style ICT parity: pivot swings, MSS/BOS, OB with breaker. Used when `USE_LUXALGO_ICT=True`. |
 | **bot/strategies/strategy_bos.py** | `H1M5BOSStrategy`: H1 + M5 DataFrames; `prepare_data()` then `run_backtest()` → signals. |
 | **bot/strategies/strategy_kingsley.py** | `KingsleyGoldStrategy`: 4H + H1 + 15m; BOS/ChoCH + zone→LQ + OB test (gold). |
 | **bot/strategies/strategy_test.py** | `TestStrategy`: H1 trend follow (gold, smoke test). |

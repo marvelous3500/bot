@@ -55,6 +55,13 @@ MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot 
 LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
 MAX_LOT_LIVE = 0.01   # Cap lot size in live mode (safety)
 MAX_TRADES_PER_DAY = 3
+MAX_TRADES_PER_SESSION = 1   # Per session (London, NY); divides daily limit across sessions
+# Session hours (UTC) for per-session limit: London 7-10, NY 13-16, Asian 0-4
+TRADE_SESSION_HOURS = {
+    7: 'london', 8: 'london', 9: 'london', 10: 'london',
+    13: 'ny', 14: 'ny', 15: 'ny', 16: 'ny',
+    0: 'asian', 1: 'asian', 2: 'asian', 3: 'asian', 4: 'asian',
+}
 MAX_POSITION_SIZE = 0.10  # Fallback lot size when dynamic calc fails
 USE_DYNAMIC_POSITION_SIZING = True  # Risk % of current balance per trade (matches backtest)
 PAPER_TRADING_LOG = 'paper_trades.json'
@@ -114,6 +121,11 @@ BOS_M5_WINDOW_HOURS = 2    # Max hours to wait for M5 entry after H1 BOS (was 4)
 # Generic 4H/Daily bias filters — apply to all strategies that use H1 or 4H
 USE_4H_BIAS_FILTER = False   # When True, require 4H bias to match H1/entry timeframe (Kingsley, H1-M5 BOS, etc.)
 USE_DAILY_BIAS_FILTER = False  # When True, require Daily bias to match H1/4H (Kingsley, H1-M5 BOS)
+
+# ICT indicator source: False = Kingsley fractal, True = LuxAlgo-style pivot
+USE_LUXALGO_ICT = False
+LUXALGO_SWING_LENGTH = 5      # Pivot left/right (LuxAlgo default: 5)
+LUXALGO_OB_USE_BODY = True   # Use candle body for OB range (LuxAlgo default)
 
 # Kingsley Gold: 4H + H1 trend + 15m BOS/ChoCH + zone→LQ + OB test (XAUUSD/GC=F only)
 

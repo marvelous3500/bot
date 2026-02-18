@@ -8,7 +8,7 @@ Complete before running live trading with real funds.
 - [ ] Backtest with spread/commission shows acceptable performance
 - [ ] Walk-forward or holdout validation passed (see STRATEGY_VALIDATION.md)
 - [ ] `MANUAL_APPROVAL = True` for first live runs
-- [ ] `MAX_TRADES_PER_DAY = 2` or 3
+- [ ] `MAX_TRADES_PER_DAY = 2` or 3; `MAX_TRADES_PER_SESSION = 1` (divides limit across London/NY)
 - [ ] `.env` has correct MT5 server for real account (not Trial)
 - [ ] Position size = 0.01 (or minimum) for first 10–20 trades
 - [ ] `LIVE_CONFIRM_ON_START = True` so you explicitly confirm before the loop starts
