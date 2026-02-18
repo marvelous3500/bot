@@ -445,6 +445,43 @@ class MT5Connector:
             'time': datetime.now()
         }, None
 
+    def get_pip_size(self, symbol):
+        """Return pip size in price units for the symbol (e.g. 0.0001 for forex, 0.1 for XAUUSD)."""
+        info = mt5.symbol_info(symbol)
+        if info is None:
+            return None
+        point = getattr(info, 'point', 0)
+        if point <= 0:
+            return None
+        digits = getattr(info, 'digits', 5)
+        # 1 pip = 10 * point for 5/3-digit forex and 2-digit gold
+        return 10.0 * point
+
+    def modify_position(self, ticket, sl=None, tp=None):
+        """Modify an open position's SL and/or TP. Returns (True, None) on success, (False, error_msg) on failure."""
+        if not self.connected:
+            return False, "Not connected"
+        positions = mt5.positions_get(ticket=ticket)
+        if positions is None or len(positions) == 0:
+            return False, "Position not found"
+        pos = positions[0]
+        new_sl = float(sl) if sl is not None else pos.sl
+        new_tp = float(tp) if tp is not None else pos.tp
+        request = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "symbol": pos.symbol,
+            "position": ticket,
+            "sl": new_sl,
+            "tp": new_tp,
+        }
+        result = mt5.order_send(request)
+        if result is not None and result.retcode == mt5.TRADE_RETCODE_DONE:
+            _log(f"Position {ticket} modified: sl={new_sl} tp={new_tp}")
+            return True, None
+        err = mt5.last_error()
+        err_msg = err[1] if err and len(err) > 1 else str(result.retcode if result is not None else "?")
+        return False, err_msg
+
     def get_positions(self):
         positions = mt5.positions_get()
         if positions is None:

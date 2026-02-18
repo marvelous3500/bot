@@ -401,6 +401,59 @@ class LiveTradingEngine:
             if closed:
                 print(f"[UPDATE] {len(closed)} positions closed automatically")
 
+    def _check_breakeven(self):
+        """When a position is in profit by BREAKEVEN_PIPS, move SL to half breakeven (lock in half the pips). Live only."""
+        if self.paper_mode or not getattr(config, 'BREAKEVEN_ENABLED', False):
+            return
+        required_pips = getattr(config, 'BREAKEVEN_PIPS', 3.0)
+        half_pips = required_pips / 2.0
+        positions = self.mt5.get_positions()
+        for pos in positions:
+            ticket = pos.get('ticket')
+            symbol = pos.get('symbol')
+            price_open = pos.get('price_open')
+            sl = pos.get('sl')
+            pos_type = pos.get('type')
+            if ticket is None or symbol is None or price_open is None:
+                continue
+            try:
+                price_open = float(price_open)
+            except (TypeError, ValueError):
+                continue
+            pip_size = self.mt5.get_pip_size(symbol)
+            if pip_size is None or pip_size <= 0:
+                continue
+            tick = self.mt5.get_live_price(symbol)
+            if not tick:
+                continue
+            if pos_type == 'BUY':
+                current = tick.get('bid')
+            else:
+                current = tick.get('ask')
+            if current is None:
+                continue
+            try:
+                current = float(current)
+            except (TypeError, ValueError):
+                continue
+            if pos_type == 'BUY':
+                profit_pips = (current - price_open) / pip_size
+                target_sl = price_open + half_pips * pip_size
+                sl_already_ok = (sl is not None and sl != 0 and float(sl) >= target_sl - pip_size)
+            else:
+                profit_pips = (price_open - current) / pip_size
+                target_sl = price_open - half_pips * pip_size
+                sl_already_ok = (sl is not None and sl != 0 and float(sl) <= target_sl + pip_size)
+            if profit_pips < required_pips:
+                continue
+            if sl_already_ok:
+                continue
+            ok, err = self.mt5.modify_position(ticket, sl=target_sl, tp=pos.get('tp'))
+            if ok:
+                print(f"[BREAKEVEN] Position {ticket} SL moved to half breakeven ({half_pips:.1f} pips) at {target_sl:.5f} (profit was {profit_pips:.1f} pips)")
+            elif getattr(config, 'MT5_VERBOSE', False):
+                print(f"[BREAKEVEN] Failed to move SL for {ticket}: {err}")
+
     def show_status(self):
         if self.paper_mode:
             account = self.paper.get_account_info()
@@ -469,6 +522,7 @@ class LiveTradingEngine:
                     time.sleep(config.LIVE_CHECK_INTERVAL)
                     continue
                 self.update_positions()
+                self._check_breakeven()
                 self._last_run_errors = []
                 if getattr(config, "MT5_VERBOSE", False):
                     print(f"[MT5] Running strategy check...")

@@ -83,6 +83,10 @@ LIVE_DEBUG = True         # Log when no signals (data range, bar counts) to diag
 ALLOW_SAME_SYMBOL_AT_TP = True   # If True, allow new entry on same symbol only when price is at/near existing position's TP
 AT_TP_POINTS = 5.0               # Consider "at TP" when entry price is within this many points of position's TP (e.g. 5 for XAUUSD)
 
+# Breakeven: when position is in profit by BREAKEVEN_PIPS, move SL to half that (lock in half the pips)
+BREAKEVEN_ENABLED = True         # If True, move SL to half breakeven once profit reaches BREAKEVEN_PIPS
+BREAKEVEN_PIPS = 10.0            # Trigger when trade is in profit by this many pips; SL moves to entry + half (e.g. 10 → 5 pips locked)
+
 # Confluence strategy: fixed stop loss in pips (4H structure + 15m OB entry)
 CONFLUENCE_SL_PIPS = 50
 
