@@ -41,7 +41,7 @@ load_dotenv()  # Load from .env file
 
 LIVE_MODE = True   # True = real money, False = paper trading
 MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
-MAX_TRADES_PER_DAY = 10
+MAX_TRADES_PER_DAY = 3
 MAX_POSITION_SIZE = 0.10  # Fallback lot size when dynamic calc fails
 USE_DYNAMIC_POSITION_SIZING = True  # Risk % of current balance per trade (matches backtest)
 PAPER_TRADING_LOG = 'paper_trades.json'
