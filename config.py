@@ -28,7 +28,6 @@ BACKTEST_PERIOD = '60d'  # Data period: 12d, 60d, 6mo (set before run)
 BACKTEST_SPREAD_PIPS = 2.0       # e.g. 2.0 for gold, 1.0 for forex
 BACKTEST_COMMISSION_PER_LOT = 7.0  # round-trip per lot (e.g. 7.0)
 BACKTEST_SLIPPAGE_PIPS = 0.5     # e.g. 0.5
-
 # Filters
 USE_EMA_FILTER = False
 EMA_PERIOD = 50 
