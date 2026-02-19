@@ -673,6 +673,7 @@ class LiveTradingEngine:
             print(f"Margin: ${account['margin']:.2f}")
             print(f"Free Margin: ${account['free_margin']:.2f}")
             print(f"\nOpen Positions: {len(positions)}")
+            print(f"Total Trades: {len(self.trades_today)}")
             print("=" * 50)
 
     def run(self):
