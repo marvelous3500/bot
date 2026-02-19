@@ -82,6 +82,31 @@ def _run_gold_compare(args):
         print(f"| {r['strategy']:<17} | {r['trades']:>5} | {r['wins']:>4} | {r['losses']:>6} | {wr:>9} | ${r['final_balance']:>11,.2f} | {ret_str:>10} |")
 
 
+def _hour_to_session(hour_utc):
+    """Map UTC hour to session (London 7-10, NY 13-16, Asian 0-4)."""
+    import config
+    return config.TRADE_SESSION_HOURS.get(hour_utc, "other")
+
+
+def _format_trade_details(trade_details):
+    """From trade_details [(ts, outcome), ...] return days, trades_per_day, sessions."""
+    if not trade_details:
+        return [], {}, {}
+    from collections import Counter
+    import pandas as pd
+    days = []
+    per_day = Counter()
+    per_session = Counter()
+    for ts, _ in trade_details:
+        t = pd.Timestamp(ts) if not hasattr(ts, "hour") else ts
+        day = t.strftime("%Y-%m-%d")
+        days.append(day)
+        per_day[day] += 1
+        per_session[_hour_to_session(t.hour)] += 1
+    unique_days = sorted(set(days))
+    return unique_days, dict(per_day), dict(per_session)
+
+
 def _run_marvellous_kingsley_compare(args):
     """Run marvellous and kingsely_gold on gold (GC=F), display side by side."""
     import sys
@@ -92,8 +117,12 @@ def _run_marvellous_kingsley_compare(args):
     old_stdout = sys.stdout
     sys.stdout = io.StringIO()
     try:
-        s_marvellous = run_marvellous_backtest(symbol="GC=F", period=period, return_stats=True)
-        s_kingsley = run_kingsley_backtest(symbol="GC=F", period=period, return_stats=True)
+        s_marvellous = run_marvellous_backtest(
+            symbol="GC=F", period=period, return_stats=True, include_trade_details=True
+        )
+        s_kingsley = run_kingsley_backtest(
+            symbol="GC=F", period=period, return_stats=True, include_trade_details=True
+        )
     finally:
         sys.stdout = old_stdout
 
@@ -110,6 +139,28 @@ def _run_marvellous_kingsley_compare(args):
         wr = f"{r['win_rate']:.2f}%"
         ret_str = f"{'+' if r['return_pct'] >= 0 else ''}{r['return_pct']:,.2f}%"
         print(f"| {r['strategy']:<17} | {r['trades']:>5} | {r['wins']:>4} | {r['losses']:>6} | {wr:>9} | ${r['final_balance']:>11,.2f} | {ret_str:>10} |")
+
+    # Days, trades per day, sessions — same table format
+    print()
+    print("| Strategy          | Days w/ trades | Max/day | Avg/day | London | NY | Asian | Other |")
+    print("| :---------------- | :------------- | :------ | :------ | :----- | :- | :---- | :---- |")
+    for r in [s_marvellous, s_kingsley]:
+        details = r.get("trade_details", [])
+        days_list, per_day, per_session = _format_trade_details(details)
+        name = r["strategy"]
+        n_days = len(days_list)
+        if per_day and days_list:
+            max_day = max(per_day, key=per_day.get)
+            max_val = per_day[max_day]
+            avg = r["trades"] / n_days
+        else:
+            max_val = 0
+            avg = 0.0
+        london = per_session.get("london", 0)
+        ny = per_session.get("ny", 0)
+        asian = per_session.get("asian", 0)
+        other = per_session.get("other", 0)
+        print(f"| {name:<17} | {n_days:>14} | {max_val:>6} | {avg:>6.1f} | {london:>6} | {ny:>2} | {asian:>5} | {other:>5} |")
 
 
 def _fmt_money(x):

@@ -21,6 +21,7 @@ def run_marvellous_backtest(
     symbol=None,
     period=None,
     return_stats=False,
+    include_trade_details=False,
     df_daily=None,
     df_4h=None,
     df_h1=None,
@@ -102,7 +103,10 @@ def run_marvellous_backtest(
 
     if signals.empty:
         if return_stats:
-            return _stats_dict("marvellous", 0, 0, 0, 0.0, 0.0, config.INITIAL_BALANCE)
+            d = _stats_dict("marvellous", 0, 0, 0, 0.0, 0.0, config.INITIAL_BALANCE)
+            if include_trade_details:
+                d["trade_details"] = []
+            return d
         print()
         print("Backtest Parameters:")
         print(f"  Asset: {used_symbol}")
@@ -122,6 +126,7 @@ def run_marvellous_backtest(
     losses = 0
     total_profit = 0.0
     total_loss = 0.0
+    trade_details = [] if include_trade_details else None
 
     for _, trade in signals.iterrows():
         entry_price = trade["price"]
@@ -152,11 +157,15 @@ def run_marvellous_backtest(
                 total_profit += profit
                 balance += profit
                 wins += 1
+                if trade_details is not None:
+                    trade_details.append((trade_time, "WIN"))
             elif outcome == "LOSS":
                 loss = (balance * config.RISK_PER_TRADE) + spread_cost + commission
                 total_loss += loss
                 balance -= loss
                 losses += 1
+                if trade_details is not None:
+                    trade_details.append((trade_time, "LOSS"))
         elif trade["type"] == "SELL":
             sl_dist = adj_sl - adj_entry
             tp_price = trade.get("tp")
@@ -175,16 +184,23 @@ def run_marvellous_backtest(
                 total_profit += profit
                 balance += profit
                 wins += 1
+                if trade_details is not None:
+                    trade_details.append((trade_time, "WIN"))
             elif outcome == "LOSS":
                 loss = (balance * config.RISK_PER_TRADE) + spread_cost + commission
                 total_loss += loss
                 balance -= loss
                 losses += 1
+                if trade_details is not None:
+                    trade_details.append((trade_time, "LOSS"))
 
     if return_stats:
-        return _stats_dict(
+        d = _stats_dict(
             "marvellous", wins + losses, wins, losses, total_profit, total_loss, balance
         )
+        if include_trade_details:
+            d["trade_details"] = trade_details or []
+        return d
 
     trade_limit = getattr(config, "BACKTEST_MAX_TRADES", None)
     trade_limit_str = "No trade limit" if trade_limit is None else str(trade_limit)

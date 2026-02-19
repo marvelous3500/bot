@@ -14,6 +14,7 @@ from ..indicators_bos import (
     detect_shallow_tap,
     higher_tf_bias_aligned,
 )
+from .strategy_marvellous import calculate_h1_bias_with_zone_validation
 
 
 class KingsleyGoldStrategy:
@@ -76,6 +77,10 @@ class KingsleyGoldStrategy:
             disp_ratio = getattr(config, 'KINGSLEY_DISPLACEMENT_RATIO', 0.6)
         use_4h_filter = getattr(config, 'USE_4H_BIAS_FILTER', False)
         use_daily_filter = getattr(config, 'USE_DAILY_BIAS_FILTER', False)
+        use_h1_zone = getattr(config, 'KINGSLEY_REQUIRE_H1_ZONE_CONFIRMATION', False)
+        h1_zone_lookback = getattr(config, 'KINGSLEY_H1_ZONE_LOOKBACK_HOURS', 48)
+        h1_zone_wick = getattr(config, 'KINGSLEY_H1_ZONE_WICK_PCT', 0.5)
+        h1_zone_body = getattr(config, 'KINGSLEY_H1_ZONE_BODY_PCT', 0.3)
         liq_lookback = getattr(config, 'KINGSLEY_LIQ_SWEEP_LOOKBACK', 5)
         tp_lookahead = getattr(config, 'KINGSLEY_TP_SWING_LOOKAHEAD', 3)
         ob_lookback = getattr(config, 'KINGSLEY_OB_LOOKBACK', 20)
@@ -98,7 +103,22 @@ class KingsleyGoldStrategy:
                 continue
             if use_4h_filter:
                 self._log(f"[4H+H1] {h1_bias} bias aligned at {h1_idx}")
-            
+
+            # H1 zone confirmation (Marvellous-style): require FVG/OB zone respected
+            if use_h1_zone:
+                df_h1_slice = self.df_h1.iloc[: i_h1 + 1]
+                zone_result = calculate_h1_bias_with_zone_validation(
+                    df_h1_slice,
+                    lookback_hours=h1_zone_lookback,
+                    require_zone=True,
+                    wick_pct=h1_zone_wick,
+                    body_pct=h1_zone_body,
+                )
+                if zone_result["bias"] == "NEUTRAL":
+                    continue
+                if zone_result["proof"]:
+                    self._log(f"[H1] {h1_bias} zone confirmed at {h1_idx} ({zone_result['proof'].get('zone_type', 'zone')})")
+
             current_bias = h1_bias
             h1_ob = identify_order_block(self.df_h1, i_h1, ob_lookback=ob_lookback)
             if h1_ob is None:

@@ -248,7 +248,7 @@ def is_session_allowed(current_time: datetime, cfg: Any = None) -> bool:
     if getattr(cfg, "ENABLE_NEWYORK_SESSION", True):
         sessions["ny"] = [13, 14, 15, 16]
     if getattr(cfg, "ENABLE_ASIA_SESSION", True):
-        sessions["asian"] = [0, 1, 2, 3, 4]
+        sessions["asian"] = getattr(cfg, "ASIAN_SESSION_HOURS", [0, 1, 2, 3, 4])
     allowed_hours = []
     for hlist in sessions.values():
         allowed_hours.extend(hlist)

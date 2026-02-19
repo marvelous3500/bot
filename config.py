@@ -54,8 +54,8 @@ LIVE_MODE = True   # True = real money, False = paper trading
 MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
 LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
 MAX_LOT_LIVE = None   # Cap lot size in live mode (safety)
-MAX_TRADES_PER_DAY = 3
-MAX_TRADES_PER_SESSION = 1   # Per session (London, NY); divides daily limit across sessions
+MAX_TRADES_PER_DAY = 6
+MAX_TRADES_PER_SESSION = 2   # Per session (London, NY); divides daily limit across sessions
 MAX_TRADES_PER_DAY_PER_PAIR = True   # True = limits apply per symbol; False = global (legacy)
 # Session hours (UTC) for per-session limit: London 7-10, NY 13-16, Asian 0-4
 TRADE_SESSION_HOURS = {
@@ -63,7 +63,7 @@ TRADE_SESSION_HOURS = {
     13: 'ny', 14: 'ny', 15: 'ny', 16: 'ny',
     0: 'asian', 1: 'asian', 2: 'asian', 3: 'asian', 4: 'asian',
 }
-MAX_POSITION_SIZE = 0.10  # Fallback lot size when dynamic calc fails
+MAX_POSITION_SIZE = 0.04  # Fallback lot size when dynamic calc fails
 USE_DYNAMIC_POSITION_SIZING = True  # Risk % of current balance per trade (matches backtest)
 PAPER_TRADING_LOG = 'paper_trades.json'
 LIVE_TRADE_LOG = True   # Append trades to logs/trades_YYYYMMDD.json
@@ -98,7 +98,7 @@ LIVE_SYMBOLS = {
 
 
 # Trading Loop Settings
-LIVE_CHECK_INTERVAL = 30  # Seconds between strategy checks
+LIVE_CHECK_INTERVAL = 15  # Seconds between strategy checks
 USE_MARGIN_CHECK = True   # Pre-trade margin check for live mode (skip if insufficient free margin)
 LIVE_DEBUG = True         # Log when no signals (data range, bar counts) to diagnose why live misses trades
 # Same symbol: do not take a new trade if we already have an open position on that pair, except when adding at TP1/TP2
@@ -114,7 +114,7 @@ BREAKEVEN_PIPS = 10.0            # Trigger when trade is in profit by this many 
 SHOW_BIAS_OF_DAY = True          # If True, print [BIAS OF DAY] Daily: X | H1: Y each cycle
 
 # H1-M5 BOS: filters to reduce trades and improve win rate
-BOS_USE_KILL_ZONES = True   # Only trade during London/NY sessions
+BOS_USE_KILL_ZONES = True   # Only trade during London/NY sessionsf
 BOS_USE_EMA_FILTER = True   # Require price in direction of EMA
 BOS_DISPLACEMENT_RATIO = 0.7  # Candle body must be 70% of range (stricter than 0.6)
 BOS_M5_WINDOW_HOURS = 2    # Max hours to wait for M5 entry after H1 BOS (was 4)
@@ -146,6 +146,11 @@ KINGSLEY_LIVE_SYMBOL = 'XAUUSDm'    # MT5
 KINGSLEY_SL_BUFFER = 1.0   # Price units buffer below/above lq_level for live execution (reduces "Stop loss invalid" when market moves)
 KINGSLEY_USE_SL_FALLBACK = True   # When True: use fallback SL when live price invalidates lq_level. When False: reject invalid signals.
 KINGSLEY_SL_FALLBACK_DISTANCE = 5.0  # Price units for fallback (e.g. $5 for gold). Only used when KINGSLEY_USE_SL_FALLBACK=True.
+# H1 zone confirmation (Marvellous-style): require FVG/OB zone respected before accepting H1 BOS
+KINGSLEY_REQUIRE_H1_ZONE_CONFIRMATION = True
+KINGSLEY_H1_ZONE_LOOKBACK_HOURS = 48
+KINGSLEY_H1_ZONE_WICK_PCT = 0.5
+KINGSLEY_H1_ZONE_BODY_PCT = 0.3
 
 # Test strategy (gold, verify live execution - takes trade immediately)
 TEST_SL_DISTANCE = 5.0   # Price units (e.g. $5 for gold)
@@ -184,7 +189,8 @@ MARVELLOUS_LOOKBACK_4H_BARS = 24
 MARVELLOUS_LOOKBACK_DAILY_BARS = 10
 MARVELLOUS_REACTION_THRESHOLDS = {'wick_pct': 0.5, 'body_pct': 0.3}
 MARVELLOUS_BIAS_COMBINATION_METHOD = 'unanimous'
-MARVELLOUS_ENABLE_ASIA_SESSION = True
+MARVELLOUS_ENABLE_ASIA_SESSION = True   # Asian (Tokyo) session UTC 00:00-04:00
+MARVELLOUS_ASIAN_SESSION_HOURS = [0, 1, 2, 3, 4]
 MARVELLOUS_ENABLE_LONDON_SESSION = True
 MARVELLOUS_ENABLE_NEWYORK_SESSION = True
 MARVELLOUS_AVOID_NEWS = True
