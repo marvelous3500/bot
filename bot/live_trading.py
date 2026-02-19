@@ -651,7 +651,7 @@ class LiveTradingEngine:
             account = self.paper.get_account_info()
             stats = self.paper.get_stats()
             print("\n" + "=" * 50)
-            print(f"PAPER TRADING STATUS - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"PAPER TRADING STATUS [{self.strategy_name}] - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             print("=" * 50)
             print(f"Balance: ${account['balance']:.2f}")
             print(f"Equity: ${account['equity']:.2f}")
@@ -665,7 +665,7 @@ class LiveTradingEngine:
             account = self.mt5.get_account_info()
             positions = self.mt5.get_positions()
             print("\n" + "=" * 50)
-            print(f"LIVE TRADING STATUS - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"LIVE TRADING STATUS [{self.strategy_name}] - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             print("=" * 50)
             print(f"Balance: ${account['balance']:.2f}")
             print(f"Equity: ${account['equity']:.2f}")
@@ -789,6 +789,7 @@ class LiveTradingEngine:
                         if exec_err:
                             self._last_run_errors.append(exec_err)
                         print(f"[EXECUTE] Order failed — check [MT5] or [SAFETY] message above for reason.")
+                # Always show status (Open Positions + Total Trades) every loop
                 self.show_status()
                 # Test strategy: single-run mode — always exit after one check
                 if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
@@ -810,7 +811,15 @@ class LiveTradingEngine:
                             print(f"\nTest strategy: single run complete. {trades_done} trade(s) executed.")
                     self.running = False
                     break
-                print(f"\nNext check in {config.LIVE_CHECK_INTERVAL}s...")
+                # Compact status line so Strategy + Open Positions + Total Trades are always visible
+                if self.paper_mode:
+                    n_pos = len(self.paper.get_positions())
+                    n_trades = self.paper.get_stats().get('total_trades', 0)
+                else:
+                    n_pos = len(self.mt5.get_positions())
+                    n_trades = len(self.trades_today)
+                print(f"\n[{self.strategy_name}] Open Positions: {n_pos} | Total Trades: {n_trades}")
+                print(f"Next check in {config.LIVE_CHECK_INTERVAL}s...")
                 time.sleep(config.LIVE_CHECK_INTERVAL)
         except KeyboardInterrupt:
             print("\n\nStopping trading engine...")
