@@ -3,10 +3,10 @@ import time
 import config
 import pandas as pd
 from datetime import datetime, timedelta
-from .connector_interface import get_connector, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
+from .connector_interface import get_connector, TIMEFRAME_M1, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
 from .paper_trading import PaperTrading
 from .trade_approver import TradeApprover
-from .strategies import H1M5BOSStrategy, KingsleyGoldStrategy, TestStrategy
+from .strategies import H1M5BOSStrategy, KingsleyGoldStrategy, MarvellousStrategy, TestStrategy
 from .indicators_bos import detect_swing_highs_lows, detect_break_of_structure
 from ai import get_signal_confidence, explain_trade, speak
 
@@ -67,7 +67,7 @@ class LiveTradingEngine:
 
     def _get_symbol_for_bias(self):
         """Return the symbol used for bias-of-day (matches strategy's primary symbol)."""
-        if self.strategy_name in ('kingsely_gold', 'test'):
+        if self.strategy_name in ('kingsely_gold', 'marvellous', 'test'):
             symbol = (
                 config.LIVE_SYMBOLS.get('XAUUSD') or
                 getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSDm') or
@@ -97,7 +97,7 @@ class LiveTradingEngine:
         return result
 
     def run_strategy(self):
-        if self.strategy_name in ('kingsely_gold', 'test'):
+        if self.strategy_name in ('kingsely_gold', 'marvellous', 'test'):
             symbol = (
                 config.LIVE_SYMBOLS.get('XAUUSD') or
                 config.LIVE_SYMBOLS.get('GOLD') or
@@ -158,6 +158,45 @@ class LiveTradingEngine:
             signals_df = strat.run_backtest()
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] kingsely_gold: 0 signals (no H1+15m BOS + OB tap + Liq sweep + OB test)")
+        elif self.strategy_name == 'marvellous':
+            from . import marvellous_config as mc
+            gold_symbols = list(dict.fromkeys([
+                symbol,
+                getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL),
+                'XAUUSD',
+                'XAUUSDm',
+            ]))
+            entry_tf = getattr(mc, 'ENTRY_TIMEFRAME', '5m')
+            df_daily = df_4h = df_h1 = df_m15 = df_entry = None
+            for sym in gold_symbols:
+                df_daily = self.mt5.get_bars(sym, TIMEFRAME_D1, count=50)
+                df_4h = self.mt5.get_bars(sym, TIMEFRAME_H4, count=100)
+                df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
+                df_m15 = self.mt5.get_bars(sym, TIMEFRAME_M15, count=1000)
+                df_entry = self.mt5.get_bars(
+                    sym, TIMEFRAME_M1 if entry_tf == '1m' else TIMEFRAME_M5, count=1000
+                )
+                if all(x is not None for x in (df_daily, df_4h, df_h1, df_m15, df_entry)):
+                    symbol = sym
+                    break
+            if df_h1 is None or df_m15 is None or df_entry is None:
+                if getattr(config, 'LIVE_DEBUG', False):
+                    print(f"[LIVE_DEBUG] marvellous: Bar data missing (tried: {gold_symbols})")
+                return []
+            if getattr(config, 'LIVE_DEBUG', False):
+                print(f"[LIVE_DEBUG] {symbol} marvellous: D1/4H/H1/M15/Entry loaded")
+            strat = MarvellousStrategy(
+                df_daily=df_daily,
+                df_4h=df_4h,
+                df_h1=df_h1,
+                df_m15=df_m15,
+                df_entry=df_entry,
+                verbose=False,
+            )
+            strat.prepare_data()
+            signals_df = strat.run_backtest()
+            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
+                print(f"[LIVE_DEBUG] marvellous: 0 signals")
         elif self.strategy_name == 'test':
             gold_symbols = list(dict.fromkeys([
                 symbol,
@@ -200,11 +239,11 @@ class LiveTradingEngine:
             elif tick:
                 latest_signal['symbol'] = symbol
                 latest_signal['price'] = tick['ask'] if latest_signal['type'] == 'BUY' else tick['bid']
-                # Kingsley Gold: add buffer below/above lq_level so slight price move doesn't invalidate SL
-                if self.strategy_name == 'kingsely_gold':
+                # Kingsley/Marvellous Gold: add buffer below/above lq_level so slight price move doesn't invalidate SL
+                if self.strategy_name in ('kingsely_gold', 'marvellous'):
                     sl = latest_signal.get('sl')
                     if sl is not None:
-                        buf = getattr(config, 'KINGSLEY_SL_BUFFER', 1.0)
+                        buf = getattr(config, 'MARVELLOUS_SL_BUFFER', 1.0) if self.strategy_name == 'marvellous' else getattr(config, 'KINGSLEY_SL_BUFFER', 1.0)
                         try:
                             sl_f = float(sl)
                             if latest_signal['type'] == 'BUY':
@@ -213,14 +252,18 @@ class LiveTradingEngine:
                                 latest_signal['sl'] = sl_f + buf  # Move SL higher for SELL
                         except (TypeError, ValueError):
                             pass
-                # Kingsley Gold: if live price invalidated SL and fallback enabled, use fallback SL
-                if self.strategy_name == 'kingsely_gold' and getattr(config, 'KINGSLEY_USE_SL_FALLBACK', False):
+                # Kingsley/Marvellous Gold: if live price invalidated SL and fallback enabled, use fallback SL
+                use_fallback = (
+                    (self.strategy_name == 'kingsely_gold' and getattr(config, 'KINGSLEY_USE_SL_FALLBACK', False)) or
+                    (self.strategy_name == 'marvellous' and getattr(config, 'MARVELLOUS_USE_SL_FALLBACK', False))
+                )
+                if use_fallback:
                     sl = latest_signal.get('sl')
                     price = latest_signal['price']
                     if sl is not None:
                         try:
                             sl_f, price_f = float(sl), float(price)
-                            fallback_dist = getattr(config, 'KINGSLEY_SL_FALLBACK_DISTANCE', 5.0)
+                            fallback_dist = getattr(config, 'MARVELLOUS_SL_FALLBACK_DISTANCE', 5.0) if self.strategy_name == 'marvellous' else getattr(config, 'KINGSLEY_SL_FALLBACK_DISTANCE', 5.0)
                             if latest_signal['type'] == 'BUY' and sl_f >= price_f:
                                 latest_signal['sl'] = price_f - fallback_dist
                             elif latest_signal['type'] == 'SELL' and sl_f <= price_f:

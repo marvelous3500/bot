@@ -17,6 +17,12 @@ python main.py --mode backtest --strategy test --symbol "GC=F"
 # Compare kingsely_gold vs h1_m5_bos on gold (same result table)
 python main.py --mode backtest --strategy gold_compare --period 60d
 
+# Compare Marvellous vs Kingsley on gold (side by side)
+python main.py --mode backtest --strategy marvellous_kingsley_compare --period 60d
+
+# Verify Marvellous config is loaded (after editing config.py)
+python scripts/print_marvellous_config.py
+
 # Run all strategies (summary table)
 python main.py --mode backtest --strategy all
 
@@ -25,7 +31,7 @@ python main.py --mode backtest --strategy all --period 12d
 python main.py --mode backtest --strategy all --period 60d
 ```
 
-**Strategies:** `h1_m5_bos` | `kingsely_gold` | `test` | `gold_compare` | `all`
+**Strategies:** `h1_m5_bos` | `kingsely_gold` | `marvellous` | `test` | `gold_compare` | `marvellous_kingsley_compare` | `all`
 
 ### Parameter sweep (Kingsley fine-tuning)
 

@@ -6,5 +6,6 @@ python-dotenv
 openai
 pyttsx3
 requests
+investpy
 
 # MetaTrader5 is Windows-only. For paper/live: use Windows or Windows VPS and pip install -r requirements-windows.txt

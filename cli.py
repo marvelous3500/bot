@@ -21,9 +21,9 @@ def build_parser():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["h1_m5_bos", "kingsely_gold", "test", "gold_compare", "all"],
+        choices=["h1_m5_bos", "kingsely_gold", "marvellous", "test", "gold_compare", "marvellous_kingsley_compare", "all"],
         default="h1_m5_bos",
-        help="Strategy to use ('all' = run every strategy in backtest mode)",
+        help="Strategy to use ('all' = run every strategy; 'marvellous_kingsley_compare' = Marvellous vs Kingsley on gold)",
     )
     parser.add_argument(
         "--csv",
@@ -82,6 +82,36 @@ def _run_gold_compare(args):
         print(f"| {r['strategy']:<17} | {r['trades']:>5} | {r['wins']:>4} | {r['losses']:>6} | {wr:>9} | ${r['final_balance']:>11,.2f} | {ret_str:>10} |")
 
 
+def _run_marvellous_kingsley_compare(args):
+    """Run marvellous and kingsely_gold on gold (GC=F), display side by side."""
+    import sys
+    import io
+    from bot.backtest import run_kingsley_backtest, run_marvellous_backtest
+
+    period = args.period if args.period != "both" else "60d"
+    old_stdout = sys.stdout
+    sys.stdout = io.StringIO()
+    try:
+        s_marvellous = run_marvellous_backtest(symbol="GC=F", period=period, return_stats=True)
+        s_kingsley = run_kingsley_backtest(symbol="GC=F", period=period, return_stats=True)
+    finally:
+        sys.stdout = old_stdout
+
+    print()
+    print("Backtest Parameters:")
+    print("  Asset: GC=F (Gold)")
+    print("  Risk per trade: 10%")
+    print("  Trade Limit: No trade limit")
+    print("  Duration:", period)
+    print()
+    print("| Strategy          | Trades | Wins | Losses | Win rate  | Final balance | Return      |")
+    print("| :---------------- | :----- | :--- | :----- | :-------- | :------------ | :---------- |")
+    for r in sorted([s_marvellous, s_kingsley], key=lambda x: x["return_pct"], reverse=True):
+        wr = f"{r['win_rate']:.2f}%"
+        ret_str = f"{'+' if r['return_pct'] >= 0 else ''}{r['return_pct']:,.2f}%"
+        print(f"| {r['strategy']:<17} | {r['trades']:>5} | {r['wins']:>4} | {r['losses']:>6} | {wr:>9} | ${r['final_balance']:>11,.2f} | {ret_str:>10} |")
+
+
 def _fmt_money(x):
     """Format as currency: $0 for zero, else $1,234.56."""
     if x == 0:
@@ -124,14 +154,18 @@ def run_backtest(args):
     from bot.backtest import (
         run_bos_backtest,
         run_kingsley_backtest,
+        run_marvellous_backtest,
         run_test_backtest,
     )
     if args.strategy == "gold_compare":
         _run_gold_compare(args)
         return
+    if args.strategy == "marvellous_kingsley_compare":
+        _run_marvellous_kingsley_compare(args)
+        return
 
     strategies = (
-        ["h1_m5_bos", "kingsely_gold", "test"]
+        ["h1_m5_bos", "kingsely_gold", "marvellous", "test"]
         if args.strategy == "all"
         else [args.strategy]
     )
@@ -151,6 +185,8 @@ def run_backtest(args):
                     s = run_bos_backtest(**kwargs)
                 elif name == "kingsely_gold":
                     s = run_kingsley_backtest(symbol="GC=F", period=period, return_stats=True)
+                elif name == "marvellous":
+                    s = run_marvellous_backtest(symbol="GC=F", period=period, return_stats=True)
                 else:
                     s = run_test_backtest(symbol="GC=F", period=period, return_stats=True)
                 rows.append(s)
@@ -166,6 +202,9 @@ def run_backtest(args):
         elif name == "kingsely_gold":
             kwargs["symbol"] = kwargs.get("symbol") or "GC=F"
             run_kingsley_backtest(**kwargs)
+        elif name == "marvellous":
+            kwargs["symbol"] = kwargs.get("symbol") or "GC=F"
+            run_marvellous_backtest(**kwargs)
         else:
             kwargs["symbol"] = kwargs.get("symbol") or "GC=F"
             run_test_backtest(**kwargs)
