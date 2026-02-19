@@ -186,7 +186,8 @@ def run_backtest(args):
                 elif name == "kingsely_gold":
                     s = run_kingsley_backtest(symbol="GC=F", period=period, return_stats=True)
                 elif name == "marvellous":
-                    s = run_marvellous_backtest(symbol="GC=F", period=period, return_stats=True)
+                    from bot import marvellous_config as mc
+                    s = run_marvellous_backtest(symbol=mc.MARVELLOUS_BACKTEST_SYMBOL, period=period, return_stats=True)
                 else:
                     s = run_test_backtest(symbol="GC=F", period=period, return_stats=True)
                 rows.append(s)
@@ -203,7 +204,8 @@ def run_backtest(args):
             kwargs["symbol"] = kwargs.get("symbol") or "GC=F"
             run_kingsley_backtest(**kwargs)
         elif name == "marvellous":
-            kwargs["symbol"] = kwargs.get("symbol") or "GC=F"
+            from bot import marvellous_config as mc
+            kwargs["symbol"] = kwargs.get("symbol") or mc.MARVELLOUS_BACKTEST_SYMBOL
             run_marvellous_backtest(**kwargs)
         else:
             kwargs["symbol"] = kwargs.get("symbol") or "GC=F"

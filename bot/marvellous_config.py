@@ -65,9 +65,29 @@ LIQUIDITY_ZONE_STRENGTH_THRESHOLD = _get(
 # Entry timeframe: "5m" or "1m"
 ENTRY_TIMEFRAME = _get("MARVELLOUS_ENTRY_TIMEFRAME", "5m")
 
-# Backtest / live symbols
-MARVELLOUS_BACKTEST_SYMBOL = _get("MARVELLOUS_BACKTEST_SYMBOL", "GC=F")
-MARVELLOUS_LIVE_SYMBOL = _get("MARVELLOUS_LIVE_SYMBOL", "XAUUSDm")
+# Backtest / live symbols — MARVELLOUS_SYMBOL overrides when set (Yahoo ticker); None = gold
+def _resolve_marvellous_symbols():
+    override = _get("MARVELLOUS_SYMBOL", None)
+    if override:
+        backtest = override
+        yahoo_to_mt5 = _get("MARVELLOUS_YAHOO_TO_MT5", {})
+        live = yahoo_to_mt5.get(override)
+        if not live and config:
+            live_syms = getattr(config, "LIVE_SYMBOLS", {})
+            key = override.replace("=X", "").replace("-", "").replace("^", "")
+            if key == "GC":
+                live = live_syms.get("XAUUSD", "XAUUSDm")
+            elif key == "NDX":
+                live = live_syms.get("NAS100", "NAS100m")
+            elif key in live_syms:
+                live = live_syms[key]
+            else:
+                live = live_syms.get(key, "XAUUSDm")
+        return backtest, live or "XAUUSDm"
+    return _get("MARVELLOUS_BACKTEST_SYMBOL", "GC=F"), _get("MARVELLOUS_LIVE_SYMBOL", "XAUUSDm")
+
+
+MARVELLOUS_BACKTEST_SYMBOL, MARVELLOUS_LIVE_SYMBOL = _resolve_marvellous_symbols()
 
 # Swing detection
 MARVELLOUS_SWING_LENGTH = _get("MARVELLOUS_SWING_LENGTH", 3)

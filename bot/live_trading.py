@@ -97,7 +97,10 @@ class LiveTradingEngine:
 
     def _get_symbol_for_bias(self):
         """Return the symbol used for bias-of-day (matches strategy's primary symbol)."""
-        if self.strategy_name in ('kingsely_gold', 'marvellous', 'test'):
+        if self.strategy_name == 'marvellous':
+            from . import marvellous_config as mc
+            symbol = getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
+        elif self.strategy_name in ('kingsely_gold', 'test'):
             symbol = (
                 config.LIVE_SYMBOLS.get('XAUUSD') or
                 getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSDm') or
@@ -190,9 +193,11 @@ class LiveTradingEngine:
                 print(f"[LIVE_DEBUG] kingsely_gold: 0 signals (no H1+15m BOS + OB tap + Liq sweep + OB test)")
         elif self.strategy_name == 'marvellous':
             from . import marvellous_config as mc
+            # Use configured Marvellous symbol first (gold when MARVELLOUS_SYMBOL is None)
+            marv_live = getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
             gold_symbols = list(dict.fromkeys([
+                marv_live,
                 symbol,
-                getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL),
                 'XAUUSD',
                 'XAUUSDm',
             ]))

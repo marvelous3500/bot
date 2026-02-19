@@ -4,8 +4,14 @@ Run this to verify your config.py changes are being loaded."""
 import sys
 sys.path.insert(0, ".")
 from bot import marvellous_config as mc
+import config
 
 print("Marvellous Strategy — Active Config (from config.py)")
+print("=" * 50)
+print("Symbols (MARVELLOUS_SYMBOL=None → gold):")
+print(f"  MARVELLOUS_BACKTEST_SYMBOL:   {mc.MARVELLOUS_BACKTEST_SYMBOL}")
+print(f"  MARVELLOUS_LIVE_SYMBOL:       {mc.MARVELLOUS_LIVE_SYMBOL}")
+print(f"  (config MARVELLOUS_SYMBOL:    {getattr(config, 'MARVELLOUS_SYMBOL', 'N/A')})")
 print("=" * 50)
 print("Bias (only enabled timeframes are checked):")
 print(f"  REQUIRE_H1_BIAS:              {mc.REQUIRE_H1_BIAS}")

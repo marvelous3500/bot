@@ -3,7 +3,7 @@
 # GC=F : Gold Futures
 # BTC-USD : Bitcoin
 # ^NDX : Nasdaq 100 Index
-SYMBOLS = ['GBPUSD=X', 'GC=F', 'BTC-USD', '^NDX']
+SYMBOLS = [ 'GC=F', 'GBPUSD=X', 'BTC-USD', '^NDX']
 
 KINGSLEY_AGGRESSIVE = False  # True = swing=2 + disp=0.5 (more trades, sweep-tuned)
 # Generic 4H/Daily bias filters — apply to all strategies that use H1 or 4H
@@ -89,8 +89,8 @@ if MT5_ORDER_COMMENT is not None:
 
 # Live Trading Symbols (MT5 format) — first is default for paper/live
 LIVE_SYMBOLS = {
+     'XAUUSD': 'XAUUSDm',  # Exness gold symbol
     'GBPUSD': 'GBPUSDm',
-    'XAUUSD': 'XAUUSDm',  # Exness gold symbol
     'BTCUSD': 'BTCUSDm',
     'NAS100': 'NAS100m'
 }
@@ -210,3 +210,8 @@ MARVELLOUS_ENTRY_WINDOW_MINUTES = 60   # Minutes after M15 signal to allow 5m en
 MARVELLOUS_SL_BUFFER = 1.0
 MARVELLOUS_USE_SL_FALLBACK = True
 MARVELLOUS_SL_FALLBACK_DISTANCE = 5.0
+
+# Marvellous symbol: None = gold (GC=F / XAUUSDm). Set to Yahoo symbol (e.g. 'GBPUSD=X') to run on that pair.
+MARVELLOUS_SYMBOL = None
+# Yahoo ticker -> MT5 symbol for Marvellous live trading
+MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}

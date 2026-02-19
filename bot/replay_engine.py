@@ -61,7 +61,7 @@ def load_replay_data(strategy_name, symbol, csv_path):
     if strategy_name == 'marvellous':
         from . import marvellous_config as mc
         agg = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
-        symbol = symbol or 'GC=F'
+        symbol = symbol or mc.MARVELLOUS_BACKTEST_SYMBOL
         entry_tf = getattr(mc, 'ENTRY_TIMEFRAME', '5m')
         if csv_path:
             df_h1 = df.resample('1h').agg(agg).dropna()
@@ -170,7 +170,10 @@ def run_strategy_at_time(strategy_name, data, current_time):
 
 
 def run_replay(strategy_name, symbol=None, csv_path=None, auto_approve=True):
-    if strategy_name in ('kingsely_gold', 'marvellous', 'test'):
+    if strategy_name == 'marvellous':
+        from . import marvellous_config as mc
+        symbol = symbol or mc.MARVELLOUS_BACKTEST_SYMBOL
+    elif strategy_name in ('kingsely_gold', 'test'):
         symbol = symbol or 'GC=F'
     print(f"Loading replay data for {strategy_name}...")
     entry_df, data = load_replay_data(strategy_name, symbol, csv_path)
