@@ -46,6 +46,10 @@ class LiveTradingEngine:
         max_per_session = getattr(config, 'MAX_TRADES_PER_SESSION', None)
         self._limit_reason = None
 
+        # When per-pair mode: limits are checked per symbol in the signal loop
+        if getattr(config, 'MAX_TRADES_PER_DAY_PER_PAIR', False):
+            return True
+
         trades_today = [t for t in self.trades_today if t['time'].date() == today]
         if len(trades_today) >= config.MAX_TRADES_PER_DAY:
             self._limit_reason = "Daily trade limit reached"
@@ -64,6 +68,32 @@ class LiveTradingEngine:
                     print(f"[SAFETY] Session limit reached ({max_per_session} per {current_session})")
                     return False
         return True
+
+    def _can_trade_symbol(self, symbol):
+        """Check if we can trade this symbol (per-pair daily/session limits). Returns (True, None) or (False, reason)."""
+        if not symbol:
+            return True, None
+        now_utc = datetime.utcnow()
+        today = now_utc.date()
+        session_hours = getattr(config, 'TRADE_SESSION_HOURS', {})
+        max_per_session = getattr(config, 'MAX_TRADES_PER_SESSION', None)
+
+        trades_today = [t for t in self.trades_today if t['time'].date() == today]
+        trades_for_symbol = [t for t in trades_today if t.get('symbol') == symbol]
+
+        if len(trades_for_symbol) >= config.MAX_TRADES_PER_DAY:
+            return False, f"Daily limit reached for {symbol} ({config.MAX_TRADES_PER_DAY})"
+
+        if max_per_session is not None and session_hours:
+            current_session = session_hours.get(now_utc.hour)
+            if current_session is not None:
+                trades_in_session = [
+                    t for t in trades_for_symbol
+                    if session_hours.get(t['time'].hour) == current_session
+                ]
+                if len(trades_in_session) >= max_per_session:
+                    return False, f"Session limit reached for {symbol} ({max_per_session} per {current_session})"
+        return True, None
 
     def _get_symbol_for_bias(self):
         """Return the symbol used for bias-of-day (matches strategy's primary symbol)."""
@@ -646,7 +676,9 @@ class LiveTradingEngine:
         print(f"Check interval: {config.LIVE_CHECK_INTERVAL}s")
         print(f"Manual approval: {'ON' if config.MANUAL_APPROVAL else 'OFF'}")
         session_limit = getattr(config, 'MAX_TRADES_PER_SESSION', None)
-        print(f"Max trades/day: {config.MAX_TRADES_PER_DAY}" + (f" ({session_limit} per session)" if session_limit is not None else ""))
+        per_pair = getattr(config, 'MAX_TRADES_PER_DAY_PER_PAIR', False)
+        limit_str = f"{config.MAX_TRADES_PER_DAY}/day per pair" if per_pair else f"{config.MAX_TRADES_PER_DAY}/day"
+        print(f"Max trades: {limit_str}" + (f" ({session_limit} per session per pair)" if per_pair and session_limit else (f" ({session_limit} per session)" if session_limit else "")))
         if not self.paper_mode and getattr(config, 'LIVE_CONFIRM_ON_START', False):
             resp = input("LIVE MODE — REAL MONEY. Type 'yes' to continue: ").strip().lower()
             if resp != 'yes':
@@ -714,6 +746,11 @@ class LiveTradingEngine:
                         self._last_run_errors.append("5 min cooldown")
                         print(f"[SKIP] Signal within 5 min of last execution (cooldown)")
                         continue
+                    if getattr(config, 'MAX_TRADES_PER_DAY_PER_PAIR', False):
+                        can_trade, limit_reason = self._can_trade_symbol(signal.get('symbol', ''))
+                        if not can_trade:
+                            print(f"[SKIP] {limit_reason}")
+                            continue
                     sl = signal.get('sl')
                     sl_dist = abs(float(signal['price']) - float(sl)) if sl is not None else None
                     dollar_risk = self.mt5.calc_dollar_risk(

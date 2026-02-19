@@ -53,9 +53,10 @@ load_dotenv()  # Load from .env file
 LIVE_MODE = True   # True = real money, False = paper trading
 MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
 LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
-MAX_LOT_LIVE = 0.01   # Cap lot size in live mode (safety)
+MAX_LOT_LIVE = None   # Cap lot size in live mode (safety)
 MAX_TRADES_PER_DAY = 3
 MAX_TRADES_PER_SESSION = 1   # Per session (London, NY); divides daily limit across sessions
+MAX_TRADES_PER_DAY_PER_PAIR = True   # True = limits apply per symbol; False = global (legacy)
 # Session hours (UTC) for per-session limit: London 7-10, NY 13-16, Asian 0-4
 TRADE_SESSION_HOURS = {
     7: 'london', 8: 'london', 9: 'london', 10: 'london',
@@ -205,7 +206,7 @@ MARVELLOUS_OB_LOOKBACK = 20
 MARVELLOUS_LIQ_SWEEP_LOOKBACK = 5
 MARVELLOUS_TP_SWING_LOOKAHEAD = 3
 MARVELLOUS_ENTRY_WINDOW_HOURS = 8
-MARVELLOUS_ENTRY_WINDOW_MINUTES = 15   # Minutes after M15 signal to allow 5m entry (15=strict, 30-60=more trades)
+MARVELLOUS_ENTRY_WINDOW_MINUTES = 60   # Minutes after M15 signal to allow 5m entry (15=strict, 60=more trades)
 MARVELLOUS_SL_BUFFER = 1.0
 MARVELLOUS_USE_SL_FALLBACK = True
 MARVELLOUS_SL_FALLBACK_DISTANCE = 5.0

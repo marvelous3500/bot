@@ -23,6 +23,9 @@ python main.py --mode backtest --strategy marvellous_kingsley_compare --period 6
 # Verify Marvellous config is loaded (after editing config.py)
 python scripts/print_marvellous_config.py
 
+# Marvellous: compare 12d vs 60d backtest (side by side)
+python scripts/compare_marvellous_periods.py
+
 # Run all strategies (summary table)
 python main.py --mode backtest --strategy all
 
