@@ -3,10 +3,13 @@ Kingsley Gold Strategy: H1 trend + 15m BOS/ChoCH + zone→LQ + liquidity sweep +
 Rules: 1) 1H trend, 2) 15m BOS/ChoCH, 3) Shallow tap → zone=LQ → sweep high/low,
 4) Price returns, sweeps LQ, tests OB, 5) Entry, target high/low.
 Gold only (XAUUSD/GC=F).
+When USE_EXTRA_FILTERS=True, uses same filters as Marvellous (MARVELLOUS_* config).
 """
 import pandas as pd
 import numpy as np
+
 import config
+from .. import marvellous_config as mc
 from ..indicators_bos import (
     detect_swing_highs_lows,
     detect_break_of_structure,
@@ -14,7 +17,13 @@ from ..indicators_bos import (
     detect_shallow_tap,
     higher_tf_bias_aligned,
 )
-from .strategy_marvellous import calculate_h1_bias_with_zone_validation
+from .strategy_marvellous import (
+    calculate_h1_bias_with_zone_validation,
+    is_session_allowed,
+    is_liquidity_map_valid,
+    _atr,
+)
+from ..news_filter import is_news_safe
 
 
 class KingsleyGoldStrategy:
@@ -84,6 +93,9 @@ class KingsleyGoldStrategy:
         liq_lookback = getattr(config, 'KINGSLEY_LIQ_SWEEP_LOOKBACK', 5)
         tp_lookahead = getattr(config, 'KINGSLEY_TP_SWING_LOOKAHEAD', 3)
         ob_lookback = getattr(config, 'KINGSLEY_OB_LOOKBACK', 20)
+        use_extra_filters = getattr(config, 'USE_EXTRA_FILTERS', True)
+        # When True, use Marvellous config (mc) for session, news, ATR, spread, liquidity — one config for both strategies
+        atr_series = _atr(self.df_15m, 14) if use_extra_filters else None
 
         for i_h1 in range(len(self.df_h1)):
             h1_idx = self.df_h1.index[i_h1]
@@ -91,7 +103,20 @@ class KingsleyGoldStrategy:
             if not h1_row['bos_bull'] and not h1_row['bos_bear']:
                 continue
             h1_bias = 'BULLISH' if h1_row['bos_bull'] else 'BEARISH'
-            
+
+            # Extra filters: news (skip H1 bar if not safe) — uses MARVELLOUS_* config
+            if use_extra_filters:
+                if not is_news_safe(
+                    h1_idx,
+                    buffer_before_minutes=mc.NEWS_BUFFER_BEFORE_MINUTES,
+                    buffer_after_minutes=mc.NEWS_BUFFER_AFTER_MINUTES,
+                    avoid_news=mc.AVOID_NEWS,
+                    countries=mc.MARVELLOUS_NEWS_COUNTRIES,
+                    api=mc.MARVELLOUS_NEWS_API,
+                    api_key=mc.FCSAPI_KEY,
+                ):
+                    continue
+
             # Generic Daily filter: require Daily bias to match H1
             if use_daily_filter and not higher_tf_bias_aligned(self.df_daily, h1_idx, h1_bias):
                 continue
@@ -139,7 +164,11 @@ class KingsleyGoldStrategy:
             ob_tested = False  # Rule 4: tests unmitigated OB
 
             for idx_15, row_15 in m15_window.iterrows():
-                if use_kill_zone and idx_15.hour not in allowed_hours:
+                # Session filter: extra filters use Marvellous config (London/NY/Asian); else use kill zone
+                if use_extra_filters:
+                    if not is_session_allowed(idx_15, mc):
+                        continue
+                elif use_kill_zone and idx_15.hour not in allowed_hours:
                     continue
 
                 # Rule 2: 15m BOS/ChoCH aligned with H1 bias
@@ -248,6 +277,18 @@ class KingsleyGoldStrategy:
                     if is_bullish and is_displacement and row_15['close'] > current_ob['low']:
                         if lq_level is None or float(lq_level) >= float(entry):
                             continue
+                        # Extra filters: ATR, spread, liquidity map — uses MARVELLOUS_* config
+                        if use_extra_filters:
+                            atr_val = atr_series.loc[idx_15] if idx_15 in atr_series.index else None
+                            if atr_val is not None and not pd.isna(atr_val) and float(atr_val) < mc.MIN_ATR_THRESHOLD:
+                                continue
+                            if getattr(config, 'BACKTEST_SPREAD_PIPS', 0) > mc.MAX_SPREAD_POINTS:
+                                continue
+                            if mc.USE_LIQUIDITY_MAP:
+                                entry_slice = self.df_15m[self.df_15m.index <= idx_15]
+                                atr_slice = atr_series[atr_series.index <= idx_15] if atr_series is not None else None
+                                if not is_liquidity_map_valid(entry_slice, mc.LIQUIDITY_ZONE_STRENGTH_THRESHOLD, atr_slice):
+                                    continue
                         future_highs = self.df_15m[
                             (self.df_15m.index > idx_15) & (self.df_15m['swing_high'] == True)
                         ].head(tp_lookahead)
@@ -269,6 +310,18 @@ class KingsleyGoldStrategy:
                     if is_bearish and is_displacement and row_15['close'] < current_ob['high']:
                         if lq_level is None or float(lq_level) <= float(entry):
                             continue
+                        # Extra filters: ATR, spread, liquidity map — uses MARVELLOUS_* config
+                        if use_extra_filters:
+                            atr_val = atr_series.loc[idx_15] if idx_15 in atr_series.index else None
+                            if atr_val is not None and not pd.isna(atr_val) and float(atr_val) < mc.MIN_ATR_THRESHOLD:
+                                continue
+                            if getattr(config, 'BACKTEST_SPREAD_PIPS', 0) > mc.MAX_SPREAD_POINTS:
+                                continue
+                            if mc.USE_LIQUIDITY_MAP:
+                                entry_slice = self.df_15m[self.df_15m.index <= idx_15]
+                                atr_slice = atr_series[atr_series.index <= idx_15] if atr_series is not None else None
+                                if not is_liquidity_map_valid(entry_slice, mc.LIQUIDITY_ZONE_STRENGTH_THRESHOLD, atr_slice):
+                                    continue
                         future_lows = self.df_15m[
                             (self.df_15m.index > idx_15) & (self.df_15m['swing_low'] == True)
                         ].head(tp_lookahead)

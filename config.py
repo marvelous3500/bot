@@ -216,6 +216,10 @@ MARVELLOUS_SL_BUFFER = 1.0
 MARVELLOUS_USE_SL_FALLBACK = True
 MARVELLOUS_SL_FALLBACK_DISTANCE = 5.0
 
+# Extra filters: when True, both Kingsley and Marvellous apply news/session/ATR/spread/liquidity filters.
+# When False, both skip them. Config comes from MARVELLOUS_* above.
+USE_EXTRA_FILTERS = True
+
 # Marvellous symbol: None = gold (GC=F / XAUUSDm). Set to Yahoo symbol (e.g. 'GBPUSD=X') to run on that pair.
 MARVELLOUS_SYMBOL = None
 # Yahoo ticker -> MT5 symbol for Marvellous live trading

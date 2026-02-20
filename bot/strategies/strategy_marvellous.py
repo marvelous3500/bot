@@ -8,6 +8,7 @@ import numpy as np
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple
 
+import config
 from .. import marvellous_config as mc
 from ..indicators import detect_fvg
 from ..indicators_bos import (
@@ -385,36 +386,31 @@ class MarvellousStrategy:
             if overall_bias == "NEUTRAL":
                 continue
 
-            # 2. Session
-            if not is_session_allowed(current_time):
-                continue
-
-            # 3. News
-            if not is_news_safe(
-                current_time,
-                mc.NEWS_BUFFER_BEFORE_MINUTES,
-                mc.NEWS_BUFFER_AFTER_MINUTES,
-                mc.AVOID_NEWS,
-                mc.MARVELLOUS_NEWS_COUNTRIES,
-                mc.MARVELLOUS_NEWS_API,
-                mc.FCSAPI_KEY,
-            ):
-                continue
-
-            # 4. Liquidity map
-            if mc.USE_LIQUIDITY_MAP:
-                entry_slice = entry_df[entry_df.index <= idx]
-                if not is_liquidity_map_valid(
-                    entry_slice,
-                    mc.LIQUIDITY_ZONE_STRENGTH_THRESHOLD,
-                    atr_series[atr_series.index <= idx] if atr_series is not None else None,
+            # 2–5. Extra filters (session, news, liquidity, ATR) — only when USE_EXTRA_FILTERS=True
+            if getattr(config, "USE_EXTRA_FILTERS", True):
+                if not is_session_allowed(current_time):
+                    continue
+                if not is_news_safe(
+                    current_time,
+                    mc.NEWS_BUFFER_BEFORE_MINUTES,
+                    mc.NEWS_BUFFER_AFTER_MINUTES,
+                    mc.AVOID_NEWS,
+                    mc.MARVELLOUS_NEWS_COUNTRIES,
+                    mc.MARVELLOUS_NEWS_API,
+                    mc.FCSAPI_KEY,
                 ):
                     continue
-
-            # 5. ATR / spread (backtest uses config spread; skip ATR for now in backtest)
-            atr_val = atr_series.iloc[i] if i < len(atr_series) and atr_series is not None else None
-            if atr_val is not None and not pd.isna(atr_val) and atr_val < mc.MIN_ATR_THRESHOLD:
-                continue
+                if mc.USE_LIQUIDITY_MAP:
+                    entry_slice = entry_df[entry_df.index <= idx]
+                    if not is_liquidity_map_valid(
+                        entry_slice,
+                        mc.LIQUIDITY_ZONE_STRENGTH_THRESHOLD,
+                        atr_series[atr_series.index <= idx] if atr_series is not None else None,
+                    ):
+                        continue
+                atr_val = atr_series.iloc[i] if i < len(atr_series) and atr_series is not None else None
+                if atr_val is not None and not pd.isna(atr_val) and atr_val < mc.MIN_ATR_THRESHOLD:
+                    continue
 
             # 6. Lower-TF zone + structure + sweep + entry
             row = entry_df.iloc[i]
