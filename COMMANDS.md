@@ -107,3 +107,12 @@ pip install -r requirements-windows.txt
 ```
 
 Copy `.env.example` to `.env` and set `MT5_LOGIN`, `MT5_PASSWORD`, `MT5_SERVER`. For Exness MT5, set `MT5_PATH` (e.g. `C:/Program Files/MetaTrader 5 EXNESS/terminal64.exe`) if the bot should start the terminal. Log in once manually in the MT5 app, then you can run the bot and it will connect using `.env` credentials.
+
+### Test Telegram notifier
+
+```bash
+# Send a sample setup message to verify bot token and chat ID
+python scripts/test_telegram.py
+# Or with a specific strategy name:
+python scripts/test_telegram.py kingsely_gold
+```

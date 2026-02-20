@@ -86,7 +86,7 @@ class KingsleyGoldStrategy:
             disp_ratio = getattr(config, 'KINGSLEY_DISPLACEMENT_RATIO', 0.6)
         use_4h_filter = getattr(config, 'USE_4H_BIAS_FILTER', False)
         use_daily_filter = getattr(config, 'USE_DAILY_BIAS_FILTER', False)
-        use_h1_zone = getattr(config, 'KINGSLEY_REQUIRE_H1_ZONE_CONFIRMATION', False)
+        use_h1_zone = getattr(config, 'KINGSLEY_REQUIRE_H1_ZONE_CONFIRMATION', True)
         h1_zone_lookback = getattr(config, 'KINGSLEY_H1_ZONE_LOOKBACK_HOURS', 48)
         h1_zone_wick = getattr(config, 'KINGSLEY_H1_ZONE_WICK_PCT', 0.5)
         h1_zone_body = getattr(config, 'KINGSLEY_H1_ZONE_BODY_PCT', 0.3)
