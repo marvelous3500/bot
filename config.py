@@ -11,7 +11,7 @@ USE_4H_BIAS_FILTER = False   # When True, require 4H bias to match H1/entry time
 USE_DAILY_BIAS_FILTER = False  # When True, require Daily bias to match H1/4H (Kingsley, H1-M5 BOS)
 
 TP1_SL_TO_ENTRY_ENABLED = False   # True = move SL to entry when TP1 hit
-TP1_RATIO = 0.5   
+TP1_RATIO = 0.3   
 
 # Timeframe settings
 TIMEFRAME = '15m'
@@ -85,6 +85,10 @@ MT5_ORDER_COMMENT = os.getenv('MT5_ORDER_COMMENT')  # None if key missing, '' if
 if MT5_ORDER_COMMENT is not None:
     MT5_ORDER_COMMENT = MT5_ORDER_COMMENT.strip()
 
+# Telegram: notify setup before trade when TELEGRAM_ENABLED=true (live/paper only)
+TELEGRAM_ENABLED = os.getenv('TELEGRAM_ENABLED', 'false').lower() in ('true', '1', 'yes')
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')  # From @BotFather
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')     # Your chat/group ID
 
 # Live Trading Symbols (MT5 format) — first is default for paper/live
 LIVE_SYMBOLS = {

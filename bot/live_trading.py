@@ -9,6 +9,7 @@ from .trade_approver import TradeApprover
 from .strategies import H1M5BOSStrategy, KingsleyGoldStrategy, MarvellousStrategy, TestStrategy
 from .indicators_bos import detect_swing_highs_lows, detect_break_of_structure
 from ai import get_signal_confidence, explain_trade, speak
+from .telegram_notifier import send_setup_notification
 
 class LiveTradingEngine:
     """Main live trading engine that runs strategies continuously."""
@@ -778,6 +779,8 @@ class LiveTradingEngine:
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_SIGNAL:
                         reason = signal.get('reason', 'Strategy signal')
                         speak(f"Trade found. {signal['type']} {signal['symbol']}. {reason}. Checking approval.")
+                    if getattr(config, 'TELEGRAM_ENABLED', False):
+                        send_setup_notification(signal, self.strategy_name)
                     result, exec_err = self.execute_signal(signal)
                     if result:
                         last_signal_time = datetime.now()

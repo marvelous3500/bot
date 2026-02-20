@@ -162,6 +162,15 @@ def _run_marvellous_kingsley_compare(args):
         other = per_session.get("other", 0)
         print(f"| {name:<17} | {n_days:>14} | {max_val:>6} | {avg:>6.1f} | {london:>6} | {ny:>2} | {asian:>5} | {other:>5} |")
 
+    # BUY / SELL counts
+    print()
+    print("| Strategy          | BUY  | SELL |")
+    print("| :---------------- | :--- | :--- |")
+    for r in [s_marvellous, s_kingsley]:
+        buys = r.get("buys", 0)
+        sells = r.get("sells", 0)
+        print(f"| {r['strategy']:<17} | {buys:>4} | {sells:>5} |")
+
 
 def _fmt_money(x):
     """Format as currency: $0 for zero, else $1,234.56."""

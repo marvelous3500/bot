@@ -71,6 +71,8 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
     if signals.empty:
         if return_stats:
             d = _stats_dict("kingsely_gold", 0, 0, 0, 0.0, 0.0, config.INITIAL_BALANCE)
+            d["buys"] = 0
+            d["sells"] = 0
             if include_trade_details:
                 d["trade_details"] = []
             return d
@@ -95,6 +97,8 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
     balance = config.INITIAL_BALANCE
     wins = 0
     losses = 0
+    buys = 0
+    sells = 0
     total_profit = 0.0
     total_loss = 0.0
     trade_details = [] if include_trade_details else None
@@ -128,6 +132,7 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
                 total_profit += profit
                 balance += profit
                 wins += 1
+                buys += 1
                 if trade_details is not None:
                     trade_details.append((trade_time, 'WIN'))
             elif outcome == 'LOSS':
@@ -135,6 +140,7 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
                 total_loss += loss
                 balance -= loss
                 losses += 1
+                buys += 1
                 if trade_details is not None:
                     trade_details.append((trade_time, 'LOSS'))
         elif trade['type'] == 'SELL':
@@ -155,6 +161,7 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
                 total_profit += profit
                 balance += profit
                 wins += 1
+                sells += 1
                 if trade_details is not None:
                     trade_details.append((trade_time, 'WIN'))
             elif outcome == 'LOSS':
@@ -162,6 +169,7 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
                 total_loss += loss
                 balance -= loss
                 losses += 1
+                sells += 1
                 if trade_details is not None:
                     trade_details.append((trade_time, 'LOSS'))
     if return_stats:
@@ -169,6 +177,8 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
             "kingsely_gold", wins + losses, wins, losses,
             total_profit, total_loss, balance,
         )
+        d["buys"] = buys
+        d["sells"] = sells
         if include_trade_details:
             d["trade_details"] = trade_details or []
         return d
@@ -191,6 +201,8 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
     print("| :---------------- | :----- | :--- | :----- | :-------- | :------------ | :---------- |")
     ret_str = f"{'+' if return_pct >= 0 else ''}{return_pct:,.2f}%"
     print(f"| kingsely_gold     | {wins + losses:>5} | {wins:>4} | {losses:>6} | {win_rate:>8.2f}% | ${balance:>11,.2f} | {ret_str:>10} |")
+    print()
+    print(f"  BUY: {buys} | SELL: {sells}")
     print()
     print(f"Invalid SL (rejected, would fail in live): {len(invalid_sl)}")
     if not invalid_sl.empty:
