@@ -121,10 +121,13 @@ class LiveTradingEngine:
         return True, None
 
     def _get_symbol_for_bias(self):
-        """Return the symbol used for bias-of-day (matches strategy's primary symbol)."""
+        """Return the symbol used for bias-of-day and market-open check (matches strategy's trading symbol)."""
         if self.strategy_name == 'marvellous':
             from . import marvellous_config as mc
-            symbol = getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
+            if self.cli_symbol:
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
+            else:
+                symbol = getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
         elif self.strategy_name == 'nas':
             from . import nas_config as nc
             symbol = getattr(config, 'NAS_LIVE_SYMBOL', nc.LIVE_SYMBOL)
