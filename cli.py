@@ -317,6 +317,7 @@ def run_paper_or_live(args):
     engine = LiveTradingEngine(
         strategy_name=args.strategy,
         paper_mode=paper_mode,
+        symbol=args.symbol,
     )
     if not engine.connect():
         print("Failed to connect. Ensure MT5 terminal is installed/running and credentials in .env are correct.")

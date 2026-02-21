@@ -14,9 +14,10 @@ from .telegram_notifier import send_setup_notification
 class LiveTradingEngine:
     """Main live trading engine that runs strategies continuously."""
 
-    def __init__(self, strategy_name='h1_m5_bos', paper_mode=True):
+    def __init__(self, strategy_name='h1_m5_bos', paper_mode=True, symbol=None):
         self.strategy_name = strategy_name
         self.paper_mode = paper_mode
+        self.cli_symbol = symbol  # --symbol from CLI (e.g. 'BTC-USD'); overrides config for live/paper
         self.mt5 = get_connector(
             login=config.MT5_LOGIN,
             password=config.MT5_PASSWORD,
@@ -139,6 +140,7 @@ class LiveTradingEngine:
     def run_strategy(self):
         if self.strategy_name in ('kingsely_gold', 'marvellous', 'test'):
             symbol = (
+                (config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None) or
                 config.LIVE_SYMBOLS.get('XAUUSD') or
                 config.LIVE_SYMBOLS.get('GOLD') or
                 next((v for k, v in config.LIVE_SYMBOLS.items() if 'XAU' in k.upper() or 'GOLD' in k.upper()), None) or
@@ -216,13 +218,11 @@ class LiveTradingEngine:
                 print(f"[LIVE_DEBUG] kingsely_gold: 0 signals (no H1+15m BOS + OB tap + Liq sweep + OB test)")
         elif self.strategy_name == 'marvellous':
             from . import marvellous_config as mc
-            # Use configured Marvellous symbol first (gold when MARVELLOUS_SYMBOL is None)
+            # CLI --symbol overrides: try that MT5 symbol first (e.g. BTC-USD -> BTCUSDm)
+            cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
             marv_live = getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
             gold_symbols = list(dict.fromkeys([
-                marv_live,
-                symbol,
-                'XAUUSD',
-                'XAUUSDm',
+                s for s in [cli_mt5, marv_live, symbol, 'XAUUSD', 'XAUUSDm'] if s
             ]))
             entry_tf = getattr(mc, 'ENTRY_TIMEFRAME', '5m')
             df_daily = df_4h = df_h1 = df_m15 = df_entry = None

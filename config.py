@@ -340,6 +340,20 @@ SYMBOL_CONFIGS = {
 }
 
 
+def cli_symbol_to_mt5(cli_symbol):
+    """Map CLI/Yahoo symbol (e.g. 'BTC-USD', 'GC=F') to MT5 symbol for live/paper. Returns None if not resolved."""
+    if not cli_symbol:
+        return None
+    s = str(cli_symbol).strip()
+    if s in MARVELLOUS_YAHOO_TO_MT5:
+        return MARVELLOUS_YAHOO_TO_MT5[s]
+    normalized = s.upper().replace("-", "").replace("=", "").replace("^", "")
+    for key, mt5_val in LIVE_SYMBOLS.items():
+        if key.upper().replace("M", "") == normalized or key.upper() == normalized:
+            return mt5_val
+    return None
+
+
 def _normalize_symbol_for_config(symbol):
     """Map symbol to config key (BTCUSDm, BTC-USD, BTCUSD -> 'BTCUSDm')."""
     if not symbol:
