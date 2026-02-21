@@ -87,9 +87,9 @@ class KingsleyGoldStrategy:
         use_4h_filter = getattr(config, 'USE_4H_BIAS_FILTER', False)
         use_daily_filter = getattr(config, 'USE_DAILY_BIAS_FILTER', False)
         use_h1_zone = getattr(config, 'KINGSLEY_REQUIRE_H1_ZONE_CONFIRMATION', True)
-        h1_zone_lookback = getattr(config, 'KINGSLEY_H1_ZONE_LOOKBACK_HOURS', 48)
-        h1_zone_wick = getattr(config, 'KINGSLEY_H1_ZONE_WICK_PCT', 0.5)
-        h1_zone_body = getattr(config, 'KINGSLEY_H1_ZONE_BODY_PCT', 0.3)
+        rt = mc.REACTION_THRESHOLDS
+        h1_wick_pct = rt.get("wick_pct", 0.5)
+        h1_body_pct = rt.get("body_pct", 0.3)
         liq_lookback = getattr(config, 'KINGSLEY_LIQ_SWEEP_LOOKBACK', 5)
         tp_lookahead = getattr(config, 'KINGSLEY_TP_SWING_LOOKAHEAD', 3)
         ob_lookback = getattr(config, 'KINGSLEY_OB_LOOKBACK', 20)
@@ -129,15 +129,15 @@ class KingsleyGoldStrategy:
             if use_4h_filter:
                 self._log(f"[4H+H1] {h1_bias} bias aligned at {h1_idx}")
 
-            # H1 zone confirmation (Marvellous-style): require FVG/OB zone respected
+            # H1 zone confirmation (Marvellous-style): use Marvellous config for lookback, require_zone, thresholds
             if use_h1_zone:
                 df_h1_slice = self.df_h1.iloc[: i_h1 + 1]
                 zone_result = calculate_h1_bias_with_zone_validation(
                     df_h1_slice,
-                    lookback_hours=h1_zone_lookback,
-                    require_zone=True,
-                    wick_pct=h1_zone_wick,
-                    body_pct=h1_zone_body,
+                    lookback_hours=mc.LOOKBACK_H1_HOURS,
+                    require_zone=mc.REQUIRE_H1_ZONE_CONFIRMATION,
+                    wick_pct=h1_wick_pct,
+                    body_pct=h1_body_pct,
                 )
                 if zone_result["bias"] == "NEUTRAL":
                     continue

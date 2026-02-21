@@ -150,7 +150,9 @@ KINGSLEY_SL_BUFFER = 1.0   # Price units buffer below/above lq_level for live ex
 KINGSLEY_USE_SL_FALLBACK = True   # When True: use fallback SL when live price invalidates lq_level. When False: reject invalid signals.
 KINGSLEY_SL_FALLBACK_DISTANCE = 5.0  # Price units for fallback (e.g. $5 for gold). Only used when KINGSLEY_USE_SL_FALLBACK=True.
 # H1 zone confirmation (Marvellous-style): require FVG/OB zone respected before accepting H1 BOS
+# When True, Kingsley uses Marvellous config for H1: MARVELLOUS_LOOKBACK_H1_HOURS, MARVELLOUS_REQUIRE_H1_ZONE_CONFIRMATION, MARVELLOUS_REACTION_THRESHOLDS
 KINGSLEY_REQUIRE_H1_ZONE_CONFIRMATION = True
+# Deprecated: Kingsley now uses Marvellous H1 config. Kept for reference; not read by code.
 KINGSLEY_H1_ZONE_LOOKBACK_HOURS = 48
 KINGSLEY_H1_ZONE_WICK_PCT = 0.5
 KINGSLEY_H1_ZONE_BODY_PCT = 0.3
