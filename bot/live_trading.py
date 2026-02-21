@@ -130,18 +130,30 @@ class LiveTradingEngine:
                 symbol = getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
         elif self.strategy_name == 'nas':
             from . import nas_config as nc
-            symbol = getattr(config, 'NAS_LIVE_SYMBOL', nc.LIVE_SYMBOL)
+            if self.cli_symbol:
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'NAS_LIVE_SYMBOL', nc.LIVE_SYMBOL)
+            else:
+                symbol = getattr(config, 'NAS_LIVE_SYMBOL', nc.LIVE_SYMBOL)
         elif self.strategy_name == 'judas':
             from . import judas_config as jc
-            symbol = getattr(config, 'JUDAS_LIVE_SYMBOL', jc.LIVE_SYMBOL)
+            if self.cli_symbol:
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'JUDAS_LIVE_SYMBOL', jc.LIVE_SYMBOL)
+            else:
+                symbol = getattr(config, 'JUDAS_LIVE_SYMBOL', jc.LIVE_SYMBOL)
         elif self.strategy_name in ('kingsely_gold', 'test'):
-            symbol = (
-                config.LIVE_SYMBOLS.get('XAUUSD') or
-                getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSDm') or
-                'XAUUSDm'
-            )
+            if self.cli_symbol:
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or config.LIVE_SYMBOLS.get('XAUUSD') or getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSDm')
+            else:
+                symbol = (
+                    config.LIVE_SYMBOLS.get('XAUUSD') or
+                    getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSDm') or
+                    'XAUUSDm'
+                )
         else:
-            symbol = list(config.LIVE_SYMBOLS.values())[0]
+            if self.cli_symbol:
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or list(config.LIVE_SYMBOLS.values())[0]
+            else:
+                symbol = list(config.LIVE_SYMBOLS.values())[0]
         return symbol
 
     def _get_bias_of_day(self, symbol):
