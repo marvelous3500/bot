@@ -11,6 +11,29 @@ from .indicators_bos import detect_swing_highs_lows, detect_break_of_structure
 from ai import get_signal_confidence, explain_trade, speak
 from .telegram_notifier import send_setup_notification
 
+
+def _print_live_checklist():
+    """Print real-money checklist at live startup. See REAL_MONEY_CHECKLIST.md for full details."""
+    print("\n" + "=" * 50)
+    print("LIVE TRADING CHECKLIST (verify before continuing)")
+    print("=" * 50)
+    items = [
+        ("Paper traded 2+ weeks with target strategy", True),
+        ("Backtest with spread/commission shows acceptable performance", True),
+        ("MANUAL_APPROVAL = True for first live runs", config.MANUAL_APPROVAL),
+        ("MAX_TRADES_PER_DAY = 2 or 3", config.MAX_TRADES_PER_DAY <= 3),
+        (".env has correct MT5 server for real account (not Trial)", True),
+        ("Position size = 0.01 or minimum for first trades", True),
+        ("LIVE_CONFIRM_ON_START = True to confirm before loop", getattr(config, 'LIVE_CONFIRM_ON_START', False)),
+        ("SKIP_WHEN_MARKET_CLOSED = True (no weekend trades)", getattr(config, 'SKIP_WHEN_MARKET_CLOSED', True)),
+    ]
+    for desc, ok in items:
+        mark = "[OK]" if ok else "[?]"
+        print(f"  {mark} {desc}")
+    print("  [ ] Real money at risk. Only use capital you can afford to lose.")
+    print("=" * 50 + "\n")
+
+
 class LiveTradingEngine:
     """Main live trading engine that runs strategies continuously."""
 
@@ -801,6 +824,8 @@ class LiveTradingEngine:
         per_pair = getattr(config, 'MAX_TRADES_PER_DAY_PER_PAIR', False)
         limit_str = f"{config.MAX_TRADES_PER_DAY}/day per pair" if per_pair else f"{config.MAX_TRADES_PER_DAY}/day"
         print(f"Max trades: {limit_str}" + (f" ({session_limit} per session per pair)" if per_pair and session_limit else (f" ({session_limit} per session)" if session_limit else "")))
+        if not self.paper_mode and getattr(config, 'PRINT_CHECKLIST_ON_START', True):
+            _print_live_checklist()
         if not self.paper_mode and getattr(config, 'LIVE_CONFIRM_ON_START', False):
             resp = input("LIVE MODE — REAL MONEY. Type 'yes' to continue: ").strip().lower()
             if resp != 'yes':
@@ -839,6 +864,14 @@ class LiveTradingEngine:
                     print(f"Waiting... ({reason})")
                     time.sleep(config.LIVE_CHECK_INTERVAL)
                     continue
+                # Skip strategy run when market is closed (weekend or trade disabled)
+                if getattr(config, 'SKIP_WHEN_MARKET_CLOSED', True):
+                    sym = self._get_symbol_for_bias()
+                    if self.mt5.connected and not self.mt5.is_market_open(sym):
+                        if getattr(config, 'MT5_VERBOSE', False):
+                            print(f"[MT5] Market closed for {sym} (weekend or trading disabled). Skipping.")
+                        time.sleep(config.LIVE_CHECK_INTERVAL)
+                        continue
                 self.update_positions()
                 self._check_breakeven()
                 self._check_tp1_sl_to_entry()
@@ -889,11 +922,27 @@ class LiveTradingEngine:
                     reason = signal.get('reason', '')
                     if reason:
                         print(f"[REASON] {reason}")
+                    diag = signal.get('kingsley_diagnostic')
+                    if diag and self.strategy_name == 'kingsely_gold':
+                        print(f"[KINGSLEY DIAGNOSTIC] Check 5m chart at these times:")
+                        print(f"  H1 bar:      {diag.get('h1_bar', 'N/A')}")
+                        print(f"  BOS bar:     {diag.get('bos_bar', 'N/A')}")
+                        print(f"  OB tap:      {diag.get('ob_tap_bar', 'N/A')}")
+                        print(f"  Liq sweep:   {diag.get('liq_sweep_bar', 'N/A')} (SL=LQ from this bar)")
+                        print(f"  LQ sweep:    {diag.get('lq_sweep_back_bar', 'N/A')}")
+                        print(f"  OB test:     {diag.get('ob_test_bar', 'N/A')}")
+                        print(f"  Entry bar:   {diag.get('entry_bar', 'N/A')}")
                     if sl is not None:
                         print(f"[SL] Stop loss: {float(sl):.5f} | Risk in dollars: ${dollar_risk:.2f}" if dollar_risk is not None else f"[SL] Stop loss: {float(sl):.5f} | Risk in dollars: n/a")
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_SIGNAL:
                         reason = signal.get('reason', 'Strategy signal')
                         speak(f"Trade found. {signal['type']} {signal['symbol']}. {reason}. Checking approval.")
+                    # Skip Telegram + execution if market closed (avoid retcode 10018, don't alert on impossible trades)
+                    if getattr(config, 'SKIP_WHEN_MARKET_CLOSED', True) and self.mt5.connected:
+                        sym = signal.get('symbol', '')
+                        if sym and not self.mt5.is_market_open(sym):
+                            print(f"[SKIP] Market closed for {sym}. Not sending to Telegram or executing.")
+                            continue
                     if getattr(config, 'TELEGRAM_ENABLED', False):
                         send_setup_notification(signal, self.strategy_name)
                     result, exec_err = self.execute_signal(signal)

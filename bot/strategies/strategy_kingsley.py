@@ -162,6 +162,9 @@ class KingsleyGoldStrategy:
             lq_level = None
             lq_swept_back = False  # Rule 4: price returns, sweeps LQ
             ob_tested = False  # Rule 4: tests unmitigated OB
+            # Diagnostic timestamps (for debugging / chart verification)
+            bos_bar_time = ob_tap_bar_time = liq_sweep_bar_time = None
+            lq_sweep_back_bar_time = ob_test_bar_time = None
 
             for idx_15, row_15 in m15_window.iterrows():
                 # Session filter: extra filters use Marvellous config (London/NY/Asian); else use kill zone
@@ -188,6 +191,7 @@ class KingsleyGoldStrategy:
                         if current_ob is None and m15_bos_seen:
                             m15_bos_seen = False
                         continue
+                    bos_bar_time = idx_15
                     self._log(f"[Entry-TF] BOS/ChoCH at {idx_15}, OB: {current_ob}")
 
                 # Rule 3: Shallow tap into OB
@@ -200,9 +204,11 @@ class KingsleyGoldStrategy:
                     )
                     if tapped and current_bias == 'BULLISH' and row_15['close'] >= current_ob['midpoint']:
                         ob_tapped = True
+                        ob_tap_bar_time = idx_15
                         self._log(f"[Entry-TF] Shallow tap into bullish OB at {idx_15}")
                     elif tapped and current_bias == 'BEARISH' and row_15['close'] <= current_ob['midpoint']:
                         ob_tapped = True
+                        ob_tap_bar_time = idx_15
                         self._log(f"[Entry-TF] Shallow tap into bearish OB at {idx_15}")
                     continue
 
@@ -217,6 +223,7 @@ class KingsleyGoldStrategy:
                             if row_15['high'] > liq_high:
                                 lq_swept = True
                                 lq_level = row_15['low']
+                                liq_sweep_bar_time = idx_15
                                 self._log(f"[Entry-TF] Liq sweep (high) at {idx_15}, LQ={lq_level}")
                     elif current_bias == 'BEARISH':
                         recent_lows = self.df_15m[
@@ -227,6 +234,7 @@ class KingsleyGoldStrategy:
                             if row_15['low'] < liq_low:
                                 lq_swept = True
                                 lq_level = row_15['high']
+                                liq_sweep_bar_time = idx_15
                                 self._log(f"[Entry-TF] Liq sweep (low) at {idx_15}, LQ={lq_level}")
                     if not lq_swept:
                         continue
@@ -236,10 +244,12 @@ class KingsleyGoldStrategy:
                     if current_bias == 'BULLISH' and lq_level is not None:
                         if row_15['low'] <= lq_level:
                             lq_swept_back = True
+                            lq_sweep_back_bar_time = idx_15
                             self._log(f"[Entry-TF] Price swept LQ at {idx_15}")
                     elif current_bias == 'BEARISH' and lq_level is not None:
                         if row_15['high'] >= lq_level:
                             lq_swept_back = True
+                            lq_sweep_back_bar_time = idx_15
                             self._log(f"[Entry-TF] Price swept LQ at {idx_15}")
                     if not lq_swept_back:
                         continue
@@ -252,8 +262,10 @@ class KingsleyGoldStrategy:
                     )
                     if tapped and current_bias == 'BULLISH' and row_15['close'] >= current_ob['midpoint']:
                         ob_tested = True
+                        ob_test_bar_time = idx_15
                     elif tapped and current_bias == 'BEARISH' and row_15['close'] <= current_ob['midpoint']:
                         ob_tested = True
+                        ob_test_bar_time = idx_15
                     if not ob_tested:
                         continue
 
@@ -293,13 +305,23 @@ class KingsleyGoldStrategy:
                             (self.df_15m.index > idx_15) & (self.df_15m['swing_high'] == True)
                         ].head(tp_lookahead)
                         tp_price = future_highs.iloc[0]['swing_high_price'] if not future_highs.empty else None
+                        _ts = lambda t: t.strftime('%Y-%m-%d %H:%M') if hasattr(t, 'strftime') else str(t)
                         signals.append({
                             'time': idx_15,
                             'type': 'BUY',
                             'price': entry,
                             'sl': lq_level,
                             'tp': tp_price,
-                            'reason': 'Kingsley Gold: 4H+H1+entry-TF BOS + OB tap + Liq sweep + OB test'
+                            'reason': 'Kingsley Gold: 4H+H1+entry-TF BOS + OB tap + Liq sweep + OB test',
+                            'kingsley_diagnostic': {
+                                'h1_bar': _ts(h1_idx),
+                                'bos_bar': _ts(bos_bar_time) if bos_bar_time is not None else None,
+                                'ob_tap_bar': _ts(ob_tap_bar_time) if ob_tap_bar_time is not None else None,
+                                'liq_sweep_bar': _ts(liq_sweep_bar_time) if liq_sweep_bar_time is not None else None,
+                                'lq_sweep_back_bar': _ts(lq_sweep_back_bar_time) if lq_sweep_back_bar_time is not None else None,
+                                'ob_test_bar': _ts(ob_test_bar_time) if ob_test_bar_time is not None else None,
+                                'entry_bar': _ts(idx_15),
+                            },
                         })
                         self._log(f"[Entry-TF] BUY signal at {idx_15}")
                         break
@@ -326,13 +348,23 @@ class KingsleyGoldStrategy:
                             (self.df_15m.index > idx_15) & (self.df_15m['swing_low'] == True)
                         ].head(tp_lookahead)
                         tp_price = future_lows.iloc[0]['swing_low_price'] if not future_lows.empty else None
+                        _ts = lambda t: t.strftime('%Y-%m-%d %H:%M') if hasattr(t, 'strftime') else str(t)
                         signals.append({
                             'time': idx_15,
                             'type': 'SELL',
                             'price': entry,
                             'sl': lq_level,
                             'tp': tp_price,
-                            'reason': 'Kingsley Gold: 4H+H1+entry-TF BOS + OB tap + Liq sweep + OB test'
+                            'reason': 'Kingsley Gold: 4H+H1+entry-TF BOS + OB tap + Liq sweep + OB test',
+                            'kingsley_diagnostic': {
+                                'h1_bar': _ts(h1_idx),
+                                'bos_bar': _ts(bos_bar_time) if bos_bar_time is not None else None,
+                                'ob_tap_bar': _ts(ob_tap_bar_time) if ob_tap_bar_time is not None else None,
+                                'liq_sweep_bar': _ts(liq_sweep_bar_time) if liq_sweep_bar_time is not None else None,
+                                'lq_sweep_back_bar': _ts(lq_sweep_back_bar_time) if lq_sweep_back_bar_time is not None else None,
+                                'ob_test_bar': _ts(ob_test_bar_time) if ob_test_bar_time is not None else None,
+                                'entry_bar': _ts(idx_15),
+                            },
                         })
                         self._log(f"[Entry-TF] SELL signal at {idx_15}")
                         break

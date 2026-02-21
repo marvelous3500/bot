@@ -102,6 +102,8 @@ LIVE_SYMBOLS = {
 
 # Trading Loop Settings
 LIVE_CHECK_INTERVAL = 15  # Seconds between strategy checks
+SKIP_WHEN_MARKET_CLOSED = True   # When True, skip strategy run and execution on weekend or when symbol trade_mode is disabled
+PRINT_CHECKLIST_ON_START = True  # When True, print real-money checklist at live startup (paper mode: no)
 USE_MARGIN_CHECK = True   # Pre-trade margin check for live mode (skip if insufficient free margin)
 LIVE_DEBUG = True         # Log when no signals (data range, bar counts) to diagnose why live misses trades
 # Same symbol: do not take a new trade if we already have an open position on that pair, except when adding at TP1/TP2
