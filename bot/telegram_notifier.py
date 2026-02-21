@@ -1,5 +1,5 @@
 """
-Telegram notifier: send trade setup to a bot before execution.
+Telegram notifier: send notification when a position is opened.
 Used when TELEGRAM_ENABLED=true (live/paper only).
 """
 import requests
@@ -20,7 +20,7 @@ def _current_session():
 
 def send_setup_notification(signal, strategy_name):
     """
-    Send the trade setup to Telegram when 1H confirmation is seen, before execution.
+    Send notification to Telegram when a position is opened (after execution).
     Fails silently (log but don't block) if token/chat_id missing or request fails.
     Returns True if sent successfully, False otherwise.
     """
@@ -47,7 +47,7 @@ def send_setup_notification(signal, strategy_name):
     bias = "Bullish" if signal.get('type') == 'BUY' else "Bearish"
     strategy_title = strategy_name.replace('_', ' ').title()
     session = _current_session()
-    text = f"""📊 {strategy_title} Strategy Setup Detected
+    text = f"""📊 {strategy_title} Position Opened
 
 Pair: {pair}
 Bias: {bias}

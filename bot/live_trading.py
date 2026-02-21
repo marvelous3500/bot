@@ -958,11 +958,11 @@ class LiveTradingEngine:
                         if sym and not self.mt5.is_market_open(sym):
                             print(f"[SKIP] Market closed for {sym}. Not sending to Telegram or executing.")
                             continue
-                    if getattr(config, 'TELEGRAM_ENABLED', False):
-                        send_setup_notification(signal, self.strategy_name)
                     result, exec_err = self.execute_signal(signal)
                     if result:
                         last_signal_time = datetime.now()
+                        if getattr(config, 'TELEGRAM_ENABLED', False):
+                            send_setup_notification(signal, self.strategy_name)
                         exec_reason = signal.get('reason', '')
                         print(f"[EXECUTE] Order placed: {result.get('type')} {result.get('volume')} {result.get('symbol')} @ {result.get('price')}")
                         if exec_reason:
