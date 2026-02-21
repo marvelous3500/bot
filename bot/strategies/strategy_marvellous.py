@@ -290,6 +290,7 @@ class MarvellousStrategy:
         df_m15: pd.DataFrame,
         df_entry: pd.DataFrame,
         df_daily_raw: Optional[pd.DataFrame] = None,
+        symbol: Optional[str] = None,
         verbose: bool = False,
     ):
         self.df_daily = df_daily.copy() if df_daily is not None and not df_daily.empty else None
@@ -298,6 +299,7 @@ class MarvellousStrategy:
         self.df_m15 = df_m15.copy()
         self.df_entry = df_entry.copy()
         self.df_daily_raw = df_daily_raw or df_daily
+        self.symbol = symbol
         self.verbose = verbose
 
     def _log(self, msg: str):
@@ -409,7 +411,8 @@ class MarvellousStrategy:
                     ):
                         continue
                 atr_val = atr_series.iloc[i] if i < len(atr_series) and atr_series is not None else None
-                if atr_val is not None and not pd.isna(atr_val) and atr_val < mc.MIN_ATR_THRESHOLD:
+                min_atr = config.get_symbol_config(self.symbol, "MARVELLOUS_MIN_ATR_THRESHOLD") or mc.MIN_ATR_THRESHOLD
+                if atr_val is not None and not pd.isna(atr_val) and atr_val < min_atr:
                     continue
 
             # 6. Lower-TF zone + structure + sweep + entry

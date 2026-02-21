@@ -116,3 +116,14 @@ python scripts/test_telegram.py
 # Or with a specific strategy name:
 python scripts/test_telegram.py kingsely_gold
 ```
+
+### Symbol-specific config (BTC-USD / BTCUSDm)
+
+When Marvellous runs on BTC-USD or BTCUSDm, the bot uses `SYMBOL_CONFIGS["BTCUSDm"]` in `config.py` for:
+
+- `BACKTEST_SPREAD_PIPS`, `PIP_SIZE`, `MARVELLOUS_MIN_ATR_THRESHOLD`
+- `MARVELLOUS_SL_BUFFER`, `MARVELLOUS_SL_FALLBACK_DISTANCE`, `MARVELLOUS_MAX_SPREAD_POINTS`
+
+Edit `config.py` → `SYMBOL_CONFIGS` to tune BTC parameters.
+
+python3 main.py --mode live --strategy marvellous --symbol "BTC-USD"

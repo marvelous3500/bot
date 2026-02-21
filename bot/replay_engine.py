@@ -4,7 +4,7 @@ Replay engine: runs the full live flow on historical data. No MT5 required.
 import pandas as pd
 import config
 from .data_loader import fetch_data_yfinance, load_data_csv
-from .strategies import H1M5BOSStrategy, KingsleyGoldStrategy, MarvellousStrategy, TestStrategy
+from .strategies import H1M5BOSStrategy, KingsleyGoldStrategy, MarvellousStrategy, NasStrategy, JudasStrategy, TestStrategy
 from ai import get_signal_confidence, explain_trade, speak
 
 
@@ -88,6 +88,36 @@ def load_replay_data(strategy_name, symbol, csv_path):
         df_h1 = _strip_tz(df_h1)
         return df_h1, {'df_h1': df_h1, 'symbol': symbol}
 
+    if strategy_name == 'nas':
+        from . import nas_config as nc
+        agg = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
+        symbol = symbol or nc.BACKTEST_SYMBOL
+        if csv_path:
+            df_h1 = df.resample('1h').agg(agg).dropna()
+            df_4h = df_h1.resample('4h').agg(agg).dropna()
+            df_m15 = df.resample('15min').agg(agg).dropna()
+        else:
+            df_h1 = fetch_data_yfinance(symbol, period='60d', interval='1h')
+            df_4h = df_h1.resample('4h').agg(agg).dropna()
+            df_m15 = fetch_data_yfinance(symbol, period='60d', interval='15m')
+        for d in (df_4h, df_h1, df_m15):
+            _strip_tz(d)
+        return df_m15, {'df_4h': df_4h, 'df_h1': df_h1, 'df_m15': df_m15, 'df_entry': df_m15, 'symbol': symbol}
+
+    if strategy_name == 'judas':
+        from . import judas_config as jc
+        agg = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
+        symbol = symbol or jc.BACKTEST_SYMBOL
+        if csv_path:
+            df_h1 = df.resample('1h').agg(agg).dropna()
+            df_m15 = df.resample('15min').agg(agg).dropna()
+        else:
+            df_h1 = fetch_data_yfinance(symbol, period='60d', interval='1h')
+            df_m15 = fetch_data_yfinance(symbol, period='60d', interval='15m')
+        for d in (df_h1, df_m15):
+            _strip_tz(d)
+        return df_m15, {'df_h1': df_h1, 'df_m15': df_m15, 'symbol': symbol}
+
     raise ValueError(f"Unknown strategy: {strategy_name}")
 
 
@@ -157,6 +187,39 @@ def run_strategy_at_time(strategy_name, data, current_time):
         signals_df = strat.run_backtest()
         if not signals_df.empty:
             signal = signals_df.iloc[-1].to_dict()
+    elif strategy_name == 'nas':
+        df_4h = data.get('df_4h')
+        df_h1 = data['df_h1'].loc[data['df_h1'].index <= current_time]
+        df_m15 = data['df_m15'].loc[data['df_m15'].index <= current_time]
+        df_entry = data.get('df_entry', df_m15)
+        if df_entry is not None:
+            df_entry = df_entry.loc[df_entry.index <= current_time]
+        if df_4h is not None:
+            df_4h = df_4h.loc[df_4h.index <= current_time]
+        if len(df_h1) < 20 or len(df_m15) < 100:
+            return None
+        strat = NasStrategy(
+            df_h1=df_h1,
+            df_m15=df_m15,
+            df_entry=df_entry if df_entry is not None else df_m15,
+            df_4h=df_4h,
+            symbol=symbol,
+            verbose=False,
+        )
+        strat.prepare_data()
+        signals_df = strat.run_backtest()
+        if not signals_df.empty:
+            signal = signals_df.iloc[-1].to_dict()
+    elif strategy_name == 'judas':
+        df_h1 = data['df_h1'].loc[data['df_h1'].index <= current_time]
+        df_m15 = data['df_m15'].loc[data['df_m15'].index <= current_time]
+        if len(df_h1) < 20 or len(df_m15) < 100:
+            return None
+        strat = JudasStrategy(df_h1=df_h1, df_m15=df_m15, symbol=symbol, verbose=False)
+        strat.prepare_data()
+        signals_df = strat.run_backtest()
+        if not signals_df.empty:
+            signal = signals_df.iloc[-1].to_dict()
     if signal is None:
         return None
     signal['symbol'] = symbol
@@ -175,6 +238,12 @@ def run_replay(strategy_name, symbol=None, csv_path=None, auto_approve=True):
         symbol = symbol or mc.MARVELLOUS_BACKTEST_SYMBOL
     elif strategy_name in ('kingsely_gold', 'test'):
         symbol = symbol or 'GC=F'
+    elif strategy_name == 'nas':
+        from . import nas_config as nc
+        symbol = symbol or nc.BACKTEST_SYMBOL
+    elif strategy_name == 'judas':
+        from . import judas_config as jc
+        symbol = symbol or jc.BACKTEST_SYMBOL
     print(f"Loading replay data for {strategy_name}...")
     entry_df, data = load_replay_data(strategy_name, symbol, csv_path)
     symbol = data.get('symbol', symbol or config.SYMBOLS[0])

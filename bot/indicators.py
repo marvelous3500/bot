@@ -79,12 +79,13 @@ def detect_rejection_candle(df, wick_ratio=0.55):
     return df
 
 
-def detect_displacement(df, threshold=1.5):
-    """Detects displacement: strong candles that indicate institutional activity."""
+def detect_displacement(df, threshold=1.5, window=10):
+    """Detects displacement: body > average of previous N candles (default 10 per spec)."""
+    df = df.copy()
     df['displacement_bull'] = False
     df['displacement_bear'] = False
     df['body_size'] = abs(df['close'] - df['open'])
-    df['avg_body'] = df['body_size'].rolling(window=20).mean()
+    df['avg_body'] = df['body_size'].rolling(window=window).mean()
     is_green = df['close'] > df['open']
     is_large_bull = df['body_size'] > (df['avg_body'] * threshold)
     df.loc[is_green & is_large_bull, 'displacement_bull'] = True

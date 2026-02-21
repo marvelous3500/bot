@@ -21,7 +21,7 @@ def build_parser():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["h1_m5_bos", "kingsely_gold", "marvellous", "test", "gold_compare", "marvellous_kingsley_compare", "all"],
+        choices=["h1_m5_bos", "kingsely_gold", "marvellous", "nas", "judas", "test", "gold_compare", "marvellous_kingsley_compare", "all"],
         default="h1_m5_bos",
         help="Strategy to use ('all' = run every strategy; 'marvellous_kingsley_compare' = Marvellous vs Kingsley on gold)",
     )
@@ -215,6 +215,8 @@ def run_backtest(args):
         run_bos_backtest,
         run_kingsley_backtest,
         run_marvellous_backtest,
+        run_nas_backtest,
+        run_judas_backtest,
         run_test_backtest,
     )
     if args.strategy == "gold_compare":
@@ -225,7 +227,7 @@ def run_backtest(args):
         return
 
     strategies = (
-        ["h1_m5_bos", "kingsely_gold", "marvellous", "test"]
+        ["h1_m5_bos", "kingsely_gold", "marvellous", "nas", "judas", "test"]
         if args.strategy == "all"
         else [args.strategy]
     )
@@ -248,6 +250,12 @@ def run_backtest(args):
                 elif name == "marvellous":
                     from bot import marvellous_config as mc
                     s = run_marvellous_backtest(symbol=mc.MARVELLOUS_BACKTEST_SYMBOL, period=period, return_stats=True)
+                elif name == "nas":
+                    from bot import nas_config as nc
+                    s = run_nas_backtest(symbol=nc.BACKTEST_SYMBOL, period=period, return_stats=True)
+                elif name == "judas":
+                    from bot import judas_config as jc
+                    s = run_judas_backtest(symbol=jc.BACKTEST_SYMBOL, period=period, return_stats=True)
                 else:
                     s = run_test_backtest(symbol="GC=F", period=period, return_stats=True)
                 rows.append(s)
@@ -267,6 +275,14 @@ def run_backtest(args):
             from bot import marvellous_config as mc
             kwargs["symbol"] = kwargs.get("symbol") or mc.MARVELLOUS_BACKTEST_SYMBOL
             run_marvellous_backtest(**kwargs)
+        elif name == "nas":
+            from bot import nas_config as nc
+            kwargs["symbol"] = kwargs.get("symbol") or nc.BACKTEST_SYMBOL
+            run_nas_backtest(**kwargs)
+        elif name == "judas":
+            from bot import judas_config as jc
+            kwargs["symbol"] = kwargs.get("symbol") or jc.BACKTEST_SYMBOL
+            run_judas_backtest(**kwargs)
         else:
             kwargs["symbol"] = kwargs.get("symbol") or "GC=F"
             run_test_backtest(**kwargs)

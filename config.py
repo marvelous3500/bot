@@ -228,3 +228,143 @@ USE_EXTRA_FILTERS = True
 MARVELLOUS_SYMBOL = None
 # Yahoo ticker -> MT5 symbol for Marvellous live trading
 MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}
+
+## ================================
+# NAS STRATEGY — BACKTEST MODE
+# ================================
+
+NAS_INSTRUMENT = 'NAS100'
+
+# ---------- Bias Filters ----------
+NAS_REQUIRE_H1_BIAS = True
+NAS_REQUIRE_4H_BIAS = False
+NAS_REQUIRE_DAILY_BIAS = False
+
+NAS_LOOKBACK_H1_HOURS = 24
+NAS_LOOKBACK_4H_BARS = 12
+
+# Reaction sensitivity (relaxed)
+NAS_REACTION_THRESHOLDS = {
+    'wick_pct': 0.25,
+    'body_pct': 0.15
+}
+
+# ---------- Sessions ----------
+NAS_ENABLE_ASIA = True
+NAS_ENABLE_LONDON = True
+NAS_ENABLE_NEWYORK = True
+
+NAS_LONDON_KZ = ('07:00', '11:00')
+NAS_NY_KZ = ('13:30', '17:00')
+
+NAS_TRADE_ONLY_KILLZONES = True   # allow trades anytime for testing
+
+# ---------- Volatility ----------
+NAS_MIN_ATR = 28        # lowered from 40
+NAS_MAX_SPREAD = 3.5    # relaxed
+
+# ---------- Liquidity Logic ----------
+NAS_MIN_SWEEP_POINTS = 7
+NAS_LIQ_SWEEP_LOOKBACK = 15
+
+# ---------- FVG ----------
+NAS_MIN_FVG_SIZE = 4
+NAS_MAX_FVG_AGE = 30
+
+# ---------- Order Block ----------
+NAS_OB_LOOKBACK = 30
+
+# ---------- News Filter ----------
+NAS_AVOID_NEWS = False  # disable for backtest testing
+
+NAS_NEWS_BUFFER_BEFORE = 20
+NAS_NEWS_BUFFER_AFTER = 20
+
+NAS_NEWS_COUNTRIES = ['United States']
+NAS_NEWS_API = 'investpy'
+
+# ---------- Risk ----------
+NAS_RISK_PER_TRADE = 0.005
+NAS_TP_MODEL = 'ladder'
+NAS_SL_BUFFER = 3
+
+# ---------- Entry Logic ----------
+NAS_ENTRY_WINDOW_HOURS = 12
+NAS_ENTRY_TIMEFRAME = '5m'
+NAS_SWING_LENGTH = 2
+
+# ---------- Symbols ----------
+NAS_BACKTEST_SYMBOL = '^NDX'
+NAS_LIVE_SYMBOL = 'NAS100m'
+
+# ---------- DEBUG ----------
+NAS_DEBUG_MODE = True
+NAS_LOG_REJECTIONS = True
+NAS_LOG_PASSED_STEPS = True
+NAS_DIAGNOSTIC_ENABLED = True   # Print rejection diagnostic report after backtest
+
+#Strategy (institutional Judas Swing manipulation on NAS100)
+JUDAS_INSTRUMENT = 'NAS100'
+JUDAS_ENTRY_TF = 'M15'
+JUDAS_BIAS_TF = 'H1'
+JUDAS_MIN_SWEEP_POINTS = 35
+JUDAS_MIN_DISPLACEMENT_RATIO = 1.
+JUDAS_MIN_FVG_SIZE = 18
+JUDAS_MIN_ATR = 45
+JUDAS_MAX_SPREAD = 2.8
+JUDAS_ENABLE_LONDON = True
+JUDAS_ENABLE_NEWYORK = True
+JUDAS_LONDON_KZ = ('03:00', '05:00')
+JUDAS_NY_KZ = ('09:30', '11:30')
+JUDAS_SL_BUFFER = 8
+JUDAS_RISK_PER_TRADE = 0.5
+JUDAS_TP_MODEL = 'ladder'
+JUDAS_BACKTEST_SYMBOL = '^NDX'
+JUDAS_LIVE_SYMBOL = 'NAS100m'
+JUDAS_SWING_LENGTH = 3
+JUDAS_LIQ_SWEEP_LOOKBACK = 5
+JUDAS_ENTRY_WINDOW_HOURS = 8
+JUDAS_VERBOSE = False
+JUDAS_USE_SL_FALLBACK = True
+JUDAS_SL_FALLBACK_DISTANCE = 10.0
+
+# Symbol-specific config overrides. When the bot trades this pair, it uses these values instead of defaults.
+# Keys: BACKTEST_SPREAD_PIPS, BACKTEST_SLIPPAGE_PIPS, PIP_SIZE, MARVELLOUS_MIN_ATR_THRESHOLD,
+#       MARVELLOUS_SL_BUFFER, MARVELLOUS_SL_FALLBACK_DISTANCE, MARVELLOUS_MAX_SPREAD_POINTS
+SYMBOL_CONFIGS = {
+    "NAS100m": {
+        "BACKTEST_SPREAD_PIPS": 2.5,
+        "PIP_SIZE": 1.0,                     # Index points
+        "MARVELLOUS_MIN_ATR_THRESHOLD": 40,
+    },
+}
+
+
+def _normalize_symbol_for_config(symbol):
+    """Map symbol to config key (BTCUSDm, BTC-USD, BTCUSD -> 'BTCUSDm')."""
+    if not symbol:
+        return None
+    s = str(symbol).upper().replace("-", "").replace("=", "").replace("^", "")
+    if "BTC" in s and "USD" in s:
+        return "BTCUSDm"
+    if "XAU" in s or "GC" in s or "GOLD" in s:
+        return "XAUUSDm"
+    if "NAS" in s or "NDX" in s:
+        return "NAS100m"
+    return None
+
+
+def get_symbol_config(symbol, key, default=None):
+    """Return symbol-specific config value, or default. Used when pair is BTCUSDm etc."""
+    norm = _normalize_symbol_for_config(symbol)
+    if norm is None:
+        return default
+    overrides = SYMBOL_CONFIGS.get(norm)
+    if overrides is None:
+        overrides = SYMBOL_CONFIGS.get("BTCUSDm") if "BTC" in norm else {}
+    if not overrides:
+        return default
+    val = overrides.get(key)
+    if val is not None:
+        return val
+    return default
