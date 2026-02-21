@@ -16,7 +16,6 @@ def _strip_tz(df):
         df.index = df.index.tz_convert(None)
     return df
 
-
 def load_replay_data(strategy_name, symbol, csv_path):
     symbol = symbol or config.SYMBOLS[0]
     if csv_path:
