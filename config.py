@@ -229,6 +229,7 @@ MARVELLOUS_SYMBOL = None
 # Yahoo ticker -> MT5 symbol for Marvellous live trading
 MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}
 
+
 ## ================================
 # NAS STRATEGY — BACKTEST MODE
 # ================================
