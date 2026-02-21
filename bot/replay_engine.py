@@ -43,14 +43,16 @@ def load_replay_data(strategy_name, symbol, csv_path):
     if strategy_name == 'kingsely_gold':
         agg = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
         symbol = symbol or 'GC=F'
+        entry_tf = getattr(config, 'KINGSLEY_ENTRY_TIMEFRAME', '5m')
+        resample_rule = '5min' if entry_tf == '5m' else '15min'
         if csv_path:
             df_h1 = df.resample('1h').agg(agg).dropna()
             df_4h = df_h1.resample('4h').agg(agg).dropna()
-            df_15m = df.resample('15min').agg(agg).dropna()
+            df_15m = df.resample(resample_rule).agg(agg).dropna()
         else:
             df_h1 = fetch_data_yfinance(symbol, period='60d', interval='1h')
             df_4h = df_h1.resample('4h').agg(agg).dropna()
-            df_15m = fetch_data_yfinance(symbol, period='60d', interval='15m')
+            df_15m = fetch_data_yfinance(symbol, period='60d', interval=entry_tf)
         df_daily = df_h1.resample('1D').agg(agg).dropna()
         df_4h = _strip_tz(df_4h)
         df_h1 = _strip_tz(df_h1)
@@ -68,14 +70,21 @@ def load_replay_data(strategy_name, symbol, csv_path):
             df_4h = df_h1.resample('4h').agg(agg).dropna()
             df_daily = df_h1.resample('1D').agg(agg).dropna()
             df_m15 = df.resample('15min').agg(agg).dropna()
-            df_entry = df.resample('5min').agg(agg).dropna()
+            if entry_tf == '15m':
+                df_entry = df_m15.copy()
+            else:
+                resample_entry = '5min' if entry_tf == '5m' else '1min'
+                df_entry = df.resample(resample_entry).agg(agg).dropna()
         else:
             fetch_period = '7d' if entry_tf == '1m' else '60d'
             df_h1 = fetch_data_yfinance(symbol, period=fetch_period, interval='1h')
             df_4h = df_h1.resample('4h').agg(agg).dropna()
             df_daily = df_h1.resample('1D').agg(agg).dropna()
             df_m15 = fetch_data_yfinance(symbol, period=fetch_period, interval='15m')
-            df_entry = fetch_data_yfinance(symbol, period=fetch_period, interval='1m' if entry_tf == '1m' else '5m')
+            if entry_tf == '15m':
+                df_entry = df_m15.copy()
+            else:
+                df_entry = fetch_data_yfinance(symbol, period=fetch_period, interval='1m' if entry_tf == '1m' else '5m')
         for d in (df_daily, df_4h, df_h1, df_m15, df_entry):
             _strip_tz(d)
         return df_entry, {'df_daily': df_daily, 'df_4h': df_4h, 'df_h1': df_h1, 'df_m15': df_m15, 'df_entry': df_entry, 'symbol': symbol}

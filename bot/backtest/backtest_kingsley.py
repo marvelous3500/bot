@@ -1,4 +1,4 @@
-"""Backtest runner for Kingsley Gold strategy (H1 + 15m, gold only)."""
+"""Backtest runner for Kingsley Gold strategy (H1 + entry TF 5m/15m, gold only)."""
 import pandas as pd
 import config
 from ..data_loader import fetch_data_yfinance, load_data_csv
@@ -21,21 +21,24 @@ def run_kingsley_backtest(csv_path=None, symbol=None, period=None, return_stats=
             df_daily = df_h1.resample('1D').agg(agg).dropna()
     elif csv_path:
         df = load_data_csv(csv_path)
+        entry_tf = getattr(config, 'KINGSLEY_ENTRY_TIMEFRAME', '5m')
+        resample_rule = '5min' if entry_tf == '5m' else '15min'
         df_h1 = df.resample('1h').agg(agg).dropna()
         df_4h = df_h1.resample('4h').agg(agg).dropna()
-        df_15m = df.resample('15min').agg(agg).dropna()
+        df_15m = df.resample(resample_rule).agg(agg).dropna()
         df_daily = df_h1.resample('1D').agg(agg).dropna()
     else:
         symbol = symbol or getattr(config, 'KINGSLEY_BACKTEST_SYMBOL', KINGSLEY_BACKTEST_SYMBOL)
         period = period or getattr(config, 'BACKTEST_PERIOD', '60d')
-        # Yahoo limits 15m to last 60 days; for 6mo+ use 60d and warn
+        entry_tf = getattr(config, 'KINGSLEY_ENTRY_TIMEFRAME', '5m')
+        # Yahoo limits 15m/5m to last 60 days; for 6mo+ use 60d and warn
         use_60d = period in ('6mo', '180d') or (isinstance(period, str) and ('mo' in period.lower() or 'y' in period.lower()))
         fetch_period = '60d' if use_60d else period
-        period_note = f" (Yahoo 15m limit; {period} requested)" if use_60d and period != '60d' else ""
+        period_note = f" (Yahoo {entry_tf} limit; {period} requested)" if use_60d and period != '60d' else ""
         display_period = fetch_period
         df_h1 = fetch_data_yfinance(symbol, period=fetch_period, interval='1h')
         df_4h = df_h1.resample('4h').agg(agg).dropna()
-        df_15m = fetch_data_yfinance(symbol, period=fetch_period, interval='15m')
+        df_15m = fetch_data_yfinance(symbol, period=fetch_period, interval=entry_tf)
         df_daily = df_h1.resample('1D').agg(agg).dropna()
     if df_4h.index.tz is not None:
         df_4h.index = df_4h.index.tz_convert(None)

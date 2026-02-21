@@ -183,6 +183,8 @@ class LiveTradingEngine:
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] Strategy returned 0 signals (no BOS + kill zone + entry)")
         elif self.strategy_name == 'kingsely_gold':
+            entry_tf = getattr(config, 'KINGSLEY_ENTRY_TIMEFRAME', '5m')
+            tf_entry = TIMEFRAME_M5 if entry_tf == '5m' else TIMEFRAME_M15
             gold_symbols = list(dict.fromkeys([
                 symbol, getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSD'), 'GOLD', 'XAUUSD'
             ]))
@@ -190,7 +192,7 @@ class LiveTradingEngine:
             for sym in gold_symbols:
                 df_4h = self.mt5.get_bars(sym, TIMEFRAME_H4, count=100)
                 df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
-                df_15m = self.mt5.get_bars(sym, TIMEFRAME_M15, count=1000)
+                df_15m = self.mt5.get_bars(sym, tf_entry, count=1000)
                 if getattr(config, 'USE_DAILY_BIAS_FILTER', False):
                     df_daily = self.mt5.get_bars(sym, TIMEFRAME_D1, count=50)
                 has_all = df_4h is not None and df_h1 is not None and df_15m is not None
@@ -202,20 +204,20 @@ class LiveTradingEngine:
                 if getattr(config, 'LIVE_DEBUG', False):
                     h4_ok = "OK" if df_4h is not None else "MISSING"
                     h1_ok = "OK" if df_h1 is not None else "MISSING"
-                    m15_ok = "OK" if df_15m is not None else "MISSING"
-                    print(f"[LIVE_DEBUG] kingsely_gold: Bar data missing — 4H={h4_ok}, H1={h1_ok}, 15m={m15_ok} (tried: {gold_symbols})")
+                    entry_ok = "OK" if df_15m is not None else "MISSING"
+                    print(f"[LIVE_DEBUG] kingsely_gold: Bar data missing — 4H={h4_ok}, H1={h1_ok}, {entry_tf}={entry_ok} (tried: {gold_symbols})")
                     print(f"[LIVE_DEBUG]   → Check: symbol in MT5 Market Watch, market open (not weekend), broker symbol name")
                 return []
             if getattr(config, 'LIVE_DEBUG', False):
                 last_4h = df_4h.index[-1] if len(df_4h) > 0 else None
                 last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
-                last_15m = df_15m.index[-1] if len(df_15m) > 0 else None
-                print(f"[LIVE_DEBUG] {symbol} 4H: {len(df_4h)} bars, last={last_4h} | H1: {len(df_h1)} bars, last={last_h1} | 15m: {len(df_15m)} bars, last={last_15m}")
+                last_entry = df_15m.index[-1] if len(df_15m) > 0 else None
+                print(f"[LIVE_DEBUG] {symbol} 4H: {len(df_4h)} bars, last={last_4h} | H1: {len(df_h1)} bars, last={last_h1} | {entry_tf}: {len(df_15m)} bars, last={last_entry}")
             strat = KingsleyGoldStrategy(df_4h, df_h1, df_15m, df_daily=df_daily, verbose=False)
             strat.prepare_data()
             signals_df = strat.run_backtest()
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] kingsely_gold: 0 signals (no H1+15m BOS + OB tap + Liq sweep + OB test)")
+                print(f"[LIVE_DEBUG] kingsely_gold: 0 signals (no H1+{entry_tf} BOS + OB tap + Liq sweep + OB test)")
         elif self.strategy_name == 'marvellous':
             from . import marvellous_config as mc
             # CLI --symbol overrides: try that MT5 symbol first (e.g. BTC-USD -> BTCUSDm)
@@ -231,9 +233,11 @@ class LiveTradingEngine:
                 df_4h = self.mt5.get_bars(sym, TIMEFRAME_H4, count=100)
                 df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
                 df_m15 = self.mt5.get_bars(sym, TIMEFRAME_M15, count=1000)
-                df_entry = self.mt5.get_bars(
-                    sym, TIMEFRAME_M1 if entry_tf == '1m' else TIMEFRAME_M5, count=1000
-                )
+                if entry_tf == '15m':
+                    df_entry = df_m15.copy() if df_m15 is not None else None
+                else:
+                    tf_entry = TIMEFRAME_M1 if entry_tf == '1m' else TIMEFRAME_M5
+                    df_entry = self.mt5.get_bars(sym, tf_entry, count=1000)
                 if all(x is not None for x in (df_daily, df_4h, df_h1, df_m15, df_entry)):
                     symbol = sym
                     break
@@ -242,7 +246,7 @@ class LiveTradingEngine:
                     print(f"[LIVE_DEBUG] marvellous: Bar data missing (tried: {gold_symbols})")
                 return []
             if getattr(config, 'LIVE_DEBUG', False):
-                print(f"[LIVE_DEBUG] {symbol} marvellous: D1/4H/H1/M15/Entry loaded")
+                print(f"[LIVE_DEBUG] {symbol} marvellous: D1/4H/H1/M15/Entry({entry_tf}) loaded")
             strat = MarvellousStrategy(
                 df_daily=df_daily,
                 df_4h=df_4h,

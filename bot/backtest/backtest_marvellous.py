@@ -28,7 +28,7 @@ def run_marvellous_backtest(
     df_m15=None,
     df_entry=None,
 ):
-    """Run Marvellous backtest. Entry TF from config (5m or 1m)."""
+    """Run Marvellous backtest. Entry TF from config (5m, 15m, or 1m)."""
     agg = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
     display_period = period or getattr(config, "BACKTEST_PERIOD", "60d")
     period_note = ""
@@ -45,7 +45,11 @@ def run_marvellous_backtest(
         df_4h = df_h1.resample("4h").agg(agg).dropna()
         df_daily = df_h1.resample("1D").agg(agg).dropna()
         df_m15 = df.resample("15min").agg(agg).dropna()
-        df_entry = df.resample("5min").agg(agg).dropna()
+        if entry_tf == "15m":
+            df_entry = df_m15.copy()
+        else:
+            resample_entry = "5min" if entry_tf == "5m" else "1min"
+            df_entry = df.resample(resample_entry).agg(agg).dropna()
     else:
         symbol = symbol or getattr(mc, "MARVELLOUS_BACKTEST_SYMBOL", "GC=F")
         period = period or getattr(config, "BACKTEST_PERIOD", "60d")
@@ -63,6 +67,8 @@ def run_marvellous_backtest(
         df_m15 = fetch_data_yfinance(symbol, period=fetch_period, interval="15m")
         if entry_tf == "1m":
             df_entry = fetch_data_yfinance(symbol, period=fetch_period, interval="1m")
+        elif entry_tf == "15m":
+            df_entry = df_m15.copy()
         else:
             df_entry = fetch_data_yfinance(symbol, period=fetch_period, interval="5m")
 

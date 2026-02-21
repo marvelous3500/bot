@@ -137,7 +137,8 @@ KINGSLEY_USE_KILL_ZONES = True
 KINGSLEY_USE_ASIAN_SESSION = True   # When True, also allow trades during Asian session
 KINGSLEY_ASIAN_SESSION_HOURS = [0, 1, 2, 3, 4]   # Tokyo session (UTC): 00:00-04:00
 KINGSLEY_USE_EMA_FILTER = False
-KINGSLEY_15M_WINDOW_HOURS = 8   # Max hours to wait for 15m setup after H1 BOS
+KINGSLEY_ENTRY_TIMEFRAME = '5m'   # Entry timeframe: '5m' or '15m' (BOS, OB tap, sweep, entry on this TF)
+KINGSLEY_15M_WINDOW_HOURS = 8   # Max hours to wait for entry-TF setup after H1 BOS
 KINGSLEY_DISPLACEMENT_RATIO = 0.6
 # Option A fine-tuning (swing detection, liquidity, TP target)
 KINGSLEY_SWING_LENGTH = 3        # Fractal lookback: 2=more swings, 5=fewer/cleaner
@@ -209,6 +210,7 @@ MARVELLOUS_MAX_SPREAD_POINTS = 50.0
 
 MARVELLOUS_USE_LIQUIDITY_MAP = False
 MARVELLOUS_LIQUIDITY_ZONE_STRENGTH_THRESHOLD = 0.5
+# Entry timeframe: '5m' (default), '15m', or '1m' — precision entry bar after M15 signal
 MARVELLOUS_ENTRY_TIMEFRAME = '5m'
 MARVELLOUS_BACKTEST_SYMBOL = 'GC=F'
 MARVELLOUS_LIVE_SYMBOL = 'XAUUSDm'

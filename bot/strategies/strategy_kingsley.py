@@ -1,8 +1,8 @@
 """
-Kingsley Gold Strategy: H1 trend + 15m BOS/ChoCH + zone→LQ + liquidity sweep + OB test.
-Rules: 1) 1H trend, 2) 15m BOS/ChoCH, 3) Shallow tap → zone=LQ → sweep high/low,
+Kingsley Gold Strategy: H1 trend + entry-TF (5m/15m) BOS/ChoCH + zone→LQ + liquidity sweep + OB test.
+Rules: 1) 1H trend, 2) Entry-TF BOS/ChoCH, 3) Shallow tap → zone=LQ → sweep high/low,
 4) Price returns, sweeps LQ, tests OB, 5) Entry, target high/low.
-Gold only (XAUUSD/GC=F).
+Entry TF from KINGSLEY_ENTRY_TIMEFRAME (default 5m). Gold only (XAUUSD/GC=F).
 When USE_EXTRA_FILTERS=True, uses same filters as Marvellous (MARVELLOUS_* config).
 """
 import pandas as pd
@@ -27,7 +27,7 @@ from ..news_filter import is_news_safe
 
 
 class KingsleyGoldStrategy:
-    """ICT-style: 4H + H1 trend + 15m BOS/ChoCH + zone→LQ + sweep + OB test + entry."""
+    """ICT-style: 4H + H1 trend + entry-TF (5m/15m) BOS/ChoCH + zone→LQ + sweep + OB test + entry."""
 
     def __init__(self, df_4h, df_h1, df_15m, df_daily=None, verbose=True):
         self.df_4h = df_4h.copy()
@@ -58,9 +58,9 @@ class KingsleyGoldStrategy:
         self.df_h1 = detect_swing_highs_lows(self.df_h1, swing_length=swing_len)
         self._log("Detecting Break of Structure on H1...")
         self.df_h1 = detect_break_of_structure(self.df_h1)
-        self._log("Detecting swing highs/lows on 15m...")
+        self._log("Detecting swing highs/lows on entry TF...")
         self.df_15m = detect_swing_highs_lows(self.df_15m, swing_length=swing_len)
-        self._log("Detecting Break of Structure on 15m...")
+        self._log("Detecting Break of Structure on entry TF...")
         self.df_15m = detect_break_of_structure(self.df_15m)
         if getattr(config, 'KINGSLEY_USE_EMA_FILTER', False):
             from ..indicators import calculate_ema
@@ -171,7 +171,7 @@ class KingsleyGoldStrategy:
                 elif use_kill_zone and idx_15.hour not in allowed_hours:
                     continue
 
-                # Rule 2: 15m BOS/ChoCH aligned with H1 bias
+                # Rule 2: Entry-TF BOS/ChoCH aligned with H1 bias
                 if not m15_bos_seen:
                     try:
                         loc = self.df_15m.index.get_loc(idx_15)
@@ -188,7 +188,7 @@ class KingsleyGoldStrategy:
                         if current_ob is None and m15_bos_seen:
                             m15_bos_seen = False
                         continue
-                    self._log(f"[15m] BOS/ChoCH at {idx_15}, OB: {current_ob}")
+                    self._log(f"[Entry-TF] BOS/ChoCH at {idx_15}, OB: {current_ob}")
 
                 # Rule 3: Shallow tap into OB
                 if current_ob is None:
@@ -200,10 +200,10 @@ class KingsleyGoldStrategy:
                     )
                     if tapped and current_bias == 'BULLISH' and row_15['close'] >= current_ob['midpoint']:
                         ob_tapped = True
-                        self._log(f"[15m] Shallow tap into bullish OB at {idx_15}")
+                        self._log(f"[Entry-TF] Shallow tap into bullish OB at {idx_15}")
                     elif tapped and current_bias == 'BEARISH' and row_15['close'] <= current_ob['midpoint']:
                         ob_tapped = True
-                        self._log(f"[15m] Shallow tap into bearish OB at {idx_15}")
+                        self._log(f"[Entry-TF] Shallow tap into bearish OB at {idx_15}")
                     continue
 
                 # Rule 3: Liquidity sweep (take out new high/low), zone becomes LQ
@@ -217,7 +217,7 @@ class KingsleyGoldStrategy:
                             if row_15['high'] > liq_high:
                                 lq_swept = True
                                 lq_level = row_15['low']
-                                self._log(f"[15m] Liq sweep (high) at {idx_15}, LQ={lq_level}")
+                                self._log(f"[Entry-TF] Liq sweep (high) at {idx_15}, LQ={lq_level}")
                     elif current_bias == 'BEARISH':
                         recent_lows = self.df_15m[
                             (self.df_15m.index < idx_15) & (self.df_15m['swing_low'] == True)
@@ -227,7 +227,7 @@ class KingsleyGoldStrategy:
                             if row_15['low'] < liq_low:
                                 lq_swept = True
                                 lq_level = row_15['high']
-                                self._log(f"[15m] Liq sweep (low) at {idx_15}, LQ={lq_level}")
+                                self._log(f"[Entry-TF] Liq sweep (low) at {idx_15}, LQ={lq_level}")
                     if not lq_swept:
                         continue
 
@@ -236,11 +236,11 @@ class KingsleyGoldStrategy:
                     if current_bias == 'BULLISH' and lq_level is not None:
                         if row_15['low'] <= lq_level:
                             lq_swept_back = True
-                            self._log(f"[15m] Price swept LQ at {idx_15}")
+                            self._log(f"[Entry-TF] Price swept LQ at {idx_15}")
                     elif current_bias == 'BEARISH' and lq_level is not None:
                         if row_15['high'] >= lq_level:
                             lq_swept_back = True
-                            self._log(f"[15m] Price swept LQ at {idx_15}")
+                            self._log(f"[Entry-TF] Price swept LQ at {idx_15}")
                     if not lq_swept_back:
                         continue
 
@@ -299,9 +299,9 @@ class KingsleyGoldStrategy:
                             'price': entry,
                             'sl': lq_level,
                             'tp': tp_price,
-                            'reason': 'Kingsley Gold: 4H+H1+15m BOS + OB tap + Liq sweep + OB test'
+                            'reason': 'Kingsley Gold: 4H+H1+entry-TF BOS + OB tap + Liq sweep + OB test'
                         })
-                        self._log(f"[15m] BUY signal at {idx_15}")
+                        self._log(f"[Entry-TF] BUY signal at {idx_15}")
                         break
                 elif current_bias == 'BEARISH':
                     is_bearish = row_15['close'] < row_15['open']
@@ -332,9 +332,9 @@ class KingsleyGoldStrategy:
                             'price': entry,
                             'sl': lq_level,
                             'tp': tp_price,
-                            'reason': 'Kingsley Gold: 4H+H1+15m BOS + OB tap + Liq sweep + OB test'
+                            'reason': 'Kingsley Gold: 4H+H1+entry-TF BOS + OB tap + Liq sweep + OB test'
                         })
-                        self._log(f"[15m] SELL signal at {idx_15}")
+                        self._log(f"[Entry-TF] SELL signal at {idx_15}")
                         break
 
         return pd.DataFrame(signals)

@@ -63,7 +63,7 @@ LIQUIDITY_ZONE_STRENGTH_THRESHOLD = _get(
     "MARVELLOUS_LIQUIDITY_ZONE_STRENGTH_THRESHOLD", 0.5
 )
 
-# Entry timeframe: "5m" or "1m"
+# Entry timeframe: "5m" (default), "15m", or "1m" — precision entry bar after M15 signal
 ENTRY_TIMEFRAME = _get("MARVELLOUS_ENTRY_TIMEFRAME", "5m")
 
 # Backtest / live symbols — MARVELLOUS_SYMBOL overrides when set (Yahoo ticker); None = gold
