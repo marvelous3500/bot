@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from .connector_interface import get_connector, TIMEFRAME_M1, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
 from .paper_trading import PaperTrading
 from .trade_approver import TradeApprover
-from .strategies import H1M5BOSStrategy, KingsleyGoldStrategy, MarvellousStrategy, NasStrategy, JudasStrategy, TestStrategy
+from .strategies import MarvellousStrategy, TestStrategy, VesterStrategy
 from .indicators_bos import detect_swing_highs_lows, detect_break_of_structure
 from ai import get_signal_confidence, explain_trade, speak
 from .telegram_notifier import send_setup_notification
@@ -37,7 +37,7 @@ def _print_live_checklist():
 class LiveTradingEngine:
     """Main live trading engine that runs strategies continuously."""
 
-    def __init__(self, strategy_name='h1_m5_bos', paper_mode=True, symbol=None):
+    def __init__(self, strategy_name='marvellous', paper_mode=True, symbol=None):
         self.strategy_name = strategy_name
         self.paper_mode = paper_mode
         self.cli_symbol = symbol  # --symbol from CLI (e.g. 'BTC-USD'); overrides config for live/paper
@@ -128,32 +128,17 @@ class LiveTradingEngine:
                 symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
             else:
                 symbol = getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
-        elif self.strategy_name == 'nas':
-            from . import nas_config as nc
+        elif self.strategy_name == 'vester':
+            from . import vester_config as vc
             if self.cli_symbol:
-                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'NAS_LIVE_SYMBOL', nc.LIVE_SYMBOL)
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'VESTER_LIVE_SYMBOL', vc.VESTER_LIVE_SYMBOL)
             else:
-                symbol = getattr(config, 'NAS_LIVE_SYMBOL', nc.LIVE_SYMBOL)
-        elif self.strategy_name == 'judas':
-            from . import judas_config as jc
-            if self.cli_symbol:
-                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'JUDAS_LIVE_SYMBOL', jc.LIVE_SYMBOL)
-            else:
-                symbol = getattr(config, 'JUDAS_LIVE_SYMBOL', jc.LIVE_SYMBOL)
-        elif self.strategy_name in ('kingsely_gold', 'test'):
-            if self.cli_symbol:
-                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or config.LIVE_SYMBOLS.get('XAUUSD') or getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSDm')
-            else:
-                symbol = (
-                    config.LIVE_SYMBOLS.get('XAUUSD') or
-                    getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSDm') or
-                    'XAUUSDm'
-                )
+                symbol = getattr(config, 'VESTER_LIVE_SYMBOL', vc.VESTER_LIVE_SYMBOL)
         else:
             if self.cli_symbol:
-                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or list(config.LIVE_SYMBOLS.values())[0]
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or config.LIVE_SYMBOLS.get('XAUUSD') or getattr(config, 'TEST_LIVE_SYMBOL', 'XAUUSDm')
             else:
-                symbol = list(config.LIVE_SYMBOLS.values())[0]
+                symbol = config.LIVE_SYMBOLS.get('XAUUSD') or getattr(config, 'TEST_LIVE_SYMBOL', 'XAUUSDm') or 'XAUUSDm'
         return symbol
 
     def _get_bias_of_day(self, symbol):
@@ -176,87 +161,14 @@ class LiveTradingEngine:
         return result
 
     def run_strategy(self):
-        if self.strategy_name in ('kingsely_gold', 'marvellous', 'test'):
-            symbol = (
-                (config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None) or
-                config.LIVE_SYMBOLS.get('XAUUSD') or
-                config.LIVE_SYMBOLS.get('GOLD') or
-                next((v for k, v in config.LIVE_SYMBOLS.items() if 'XAU' in k.upper() or 'GOLD' in k.upper()), None) or
-                list(config.LIVE_SYMBOLS.values())[0]
-            )
-        elif self.strategy_name == 'nas':
-            from . import nas_config as nc
-            symbol = (
-                config.LIVE_SYMBOLS.get('NAS100') or
-                config.LIVE_SYMBOLS.get('NDX') or
-                getattr(config, 'NAS_LIVE_SYMBOL', nc.LIVE_SYMBOL) or
-                list(config.LIVE_SYMBOLS.values())[0]
-            )
-        elif self.strategy_name == 'judas':
-            from . import judas_config as jc
-            symbol = (
-                config.LIVE_SYMBOLS.get('NAS100') or
-                config.LIVE_SYMBOLS.get('NDX') or
-                getattr(config, 'JUDAS_LIVE_SYMBOL', jc.LIVE_SYMBOL) or
-                list(config.LIVE_SYMBOLS.values())[0]
-            )
-        else:
-            symbol = list(config.LIVE_SYMBOLS.values())[0]
-        if self.strategy_name == 'h1_m5_bos':
-            df_h1 = self.mt5.get_bars(symbol, TIMEFRAME_H1, count=200)
-            df_5m = self.mt5.get_bars(symbol, TIMEFRAME_M5, count=1000)
-            df_4h = self.mt5.get_bars(symbol, TIMEFRAME_H4, count=100) if getattr(config, 'USE_4H_BIAS_FILTER', False) else None
-            df_daily = self.mt5.get_bars(symbol, TIMEFRAME_D1, count=50) if getattr(config, 'USE_DAILY_BIAS_FILTER', False) else None
-            if df_h1 is None or df_5m is None:
-                if getattr(config, 'LIVE_DEBUG', False):
-                    print(f"[LIVE_DEBUG] No data: H1={df_h1 is not None}, M5={df_5m is not None}")
-                return []
-            if getattr(config, 'LIVE_DEBUG', False):
-                last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
-                last_m5 = df_5m.index[-1] if len(df_5m) > 0 else None
-                print(f"[LIVE_DEBUG] {symbol} H1: {len(df_h1)} bars, last={last_h1} | M5: {len(df_5m)} bars, last={last_m5}")
-            strat = H1M5BOSStrategy(df_h1, df_5m, df_4h=df_4h, df_daily=df_daily)
-            strat.prepare_data()
-            signals_df = strat.run_backtest()
-            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] Strategy returned 0 signals (no BOS + kill zone + entry)")
-        elif self.strategy_name == 'kingsely_gold':
-            entry_tf = getattr(config, 'KINGSLEY_ENTRY_TIMEFRAME', '5m')
-            tf_entry = TIMEFRAME_M5 if entry_tf == '5m' else TIMEFRAME_M15
-            gold_symbols = list(dict.fromkeys([
-                symbol, getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSD'), 'GOLD', 'XAUUSD'
-            ]))
-            df_4h, df_h1, df_15m, df_daily = None, None, None, None
-            for sym in gold_symbols:
-                df_4h = self.mt5.get_bars(sym, TIMEFRAME_H4, count=100)
-                df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
-                df_15m = self.mt5.get_bars(sym, tf_entry, count=1000)
-                if getattr(config, 'USE_DAILY_BIAS_FILTER', False):
-                    df_daily = self.mt5.get_bars(sym, TIMEFRAME_D1, count=50)
-                has_all = df_4h is not None and df_h1 is not None and df_15m is not None
-                needs_daily = getattr(config, 'USE_DAILY_BIAS_FILTER', False)
-                if has_all and (not needs_daily or df_daily is not None):
-                    symbol = sym
-                    break
-            if df_4h is None or df_h1 is None or df_15m is None:
-                if getattr(config, 'LIVE_DEBUG', False):
-                    h4_ok = "OK" if df_4h is not None else "MISSING"
-                    h1_ok = "OK" if df_h1 is not None else "MISSING"
-                    entry_ok = "OK" if df_15m is not None else "MISSING"
-                    print(f"[LIVE_DEBUG] kingsely_gold: Bar data missing — 4H={h4_ok}, H1={h1_ok}, {entry_tf}={entry_ok} (tried: {gold_symbols})")
-                    print(f"[LIVE_DEBUG]   → Check: symbol in MT5 Market Watch, market open (not weekend), broker symbol name")
-                return []
-            if getattr(config, 'LIVE_DEBUG', False):
-                last_4h = df_4h.index[-1] if len(df_4h) > 0 else None
-                last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
-                last_entry = df_15m.index[-1] if len(df_15m) > 0 else None
-                print(f"[LIVE_DEBUG] {symbol} 4H: {len(df_4h)} bars, last={last_4h} | H1: {len(df_h1)} bars, last={last_h1} | {entry_tf}: {len(df_15m)} bars, last={last_entry}")
-            strat = KingsleyGoldStrategy(df_4h, df_h1, df_15m, df_daily=df_daily, verbose=False)
-            strat.prepare_data()
-            signals_df = strat.run_backtest()
-            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] kingsely_gold: 0 signals (no H1+{entry_tf} BOS + OB tap + Liq sweep + OB test)")
-        elif self.strategy_name == 'marvellous':
+        symbol = (
+            (config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None) or
+            config.LIVE_SYMBOLS.get('XAUUSD') or
+            config.LIVE_SYMBOLS.get('GOLD') or
+            next((v for k, v in config.LIVE_SYMBOLS.items() if 'XAU' in k.upper() or 'GOLD' in k.upper()), None) or
+            list(config.LIVE_SYMBOLS.values())[0]
+        )
+        if self.strategy_name == 'marvellous':
             from . import marvellous_config as mc
             # CLI --symbol overrides: try that MT5 symbol first (e.g. BTC-USD -> BTCUSDm)
             cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
@@ -298,82 +210,11 @@ class LiveTradingEngine:
             signals_df = strat.run_backtest()
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] marvellous: 0 signals")
-        elif self.strategy_name == 'nas':
-            from . import nas_config as nc
-            nas_symbols = [s for s in list(dict.fromkeys([
-                getattr(config, 'NAS_LIVE_SYMBOL', nc.LIVE_SYMBOL),
-                config.LIVE_SYMBOLS.get('NAS100'),
-                config.LIVE_SYMBOLS.get('NDX'),
-                'NAS100m',
-                'NAS100',
-            ])) if s]
-            df_4h = df_h1 = df_m15 = None
-            for sym in nas_symbols:
-                if sym is None:
-                    continue
-                df_4h = self.mt5.get_bars(sym, TIMEFRAME_H4, count=100)
-                df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
-                df_m15 = self.mt5.get_bars(sym, TIMEFRAME_M15, count=1000)
-                if all(x is not None for x in (df_4h, df_h1, df_m15)):
-                    symbol = sym
-                    break
-            if df_h1 is None or df_m15 is None:
-                if getattr(config, 'LIVE_DEBUG', False):
-                    print(f"[LIVE_DEBUG] nas: Bar data missing (tried: {nas_symbols})")
-                return []
-            if getattr(config, 'LIVE_DEBUG', False):
-                print(f"[LIVE_DEBUG] {symbol} nas: 4H/H1/M15 loaded")
-            strat = NasStrategy(
-                df_h1=df_h1,
-                df_m15=df_m15,
-                df_entry=df_m15,
-                df_4h=df_4h,
-                symbol=symbol,
-                verbose=False,
-            )
-            strat.prepare_data()
-            signals_df = strat.run_backtest()
-            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] nas: 0 signals")
-        elif self.strategy_name == 'judas':
-            from . import judas_config as jc
-            judas_symbols = [s for s in list(dict.fromkeys([
-                getattr(config, 'JUDAS_LIVE_SYMBOL', jc.LIVE_SYMBOL),
-                config.LIVE_SYMBOLS.get('NAS100'),
-                config.LIVE_SYMBOLS.get('NDX'),
-                'NAS100m',
-                'NAS100',
-            ])) if s]
-            df_h1 = df_m15 = None
-            for sym in judas_symbols:
-                if sym is None:
-                    continue
-                df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
-                df_m15 = self.mt5.get_bars(sym, TIMEFRAME_M15, count=1000)
-                if all(x is not None for x in (df_h1, df_m15)):
-                    symbol = sym
-                    break
-            if df_h1 is None or df_m15 is None:
-                if getattr(config, 'LIVE_DEBUG', False):
-                    print(f"[LIVE_DEBUG] judas: Bar data missing (tried: {judas_symbols})")
-                return []
-            if getattr(config, 'LIVE_DEBUG', False):
-                print(f"[LIVE_DEBUG] {symbol} judas: H1/M15 loaded")
-            strat = JudasStrategy(
-                df_h1=df_h1,
-                df_m15=df_m15,
-                symbol=symbol,
-                verbose=False,
-            )
-            strat.prepare_data()
-            signals_df = strat.run_backtest()
-            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] judas: 0 signals")
         elif self.strategy_name == 'test':
             gold_symbols = list(dict.fromkeys([
                 symbol,
                 getattr(config, 'TEST_LIVE_SYMBOL', 'XAUUSD'),
-                getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSDm'),  # Exness uses XAUUSDm
+                getattr(config, 'TEST_LIVE_SYMBOL', 'XAUUSDm'),  # Exness uses XAUUSDm
                 'GOLD',
                 'XAUUSD',
                 'XAUUSDm',
@@ -397,6 +238,41 @@ class LiveTradingEngine:
             signals_df = strat.run_backtest()
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] test: 0 signals (need at least 4 H1 bars)")
+        elif self.strategy_name == 'vester':
+            from . import vester_config as vc
+            cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
+            vester_live = getattr(config, 'VESTER_LIVE_SYMBOL', vc.VESTER_LIVE_SYMBOL)
+            vester_symbols = list(dict.fromkeys([
+                s for s in [cli_mt5, vester_live, symbol, 'XAUUSD', 'XAUUSDm'] if s
+            ]))
+            df_h1 = df_m5 = df_m1 = df_h4 = None
+            agg = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+            for sym in vester_symbols:
+                df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
+                df_m5 = self.mt5.get_bars(sym, TIMEFRAME_M5, count=1000)
+                df_m1 = self.mt5.get_bars(sym, TIMEFRAME_M1, count=1000)
+                if all(x is not None for x in (df_h1, df_m5, df_m1)):
+                    symbol = sym
+                    df_h4 = df_h1.resample("4h").agg(agg).dropna()
+                    break
+            if df_h1 is None or df_m5 is None or df_m1 is None:
+                if getattr(config, 'LIVE_DEBUG', False):
+                    print(f"[LIVE_DEBUG] vester: Bar data missing (tried: {vester_symbols})")
+                return []
+            if getattr(config, 'LIVE_DEBUG', False):
+                print(f"[LIVE_DEBUG] {symbol} vester: H1/M5/M1" + ("/4H" if df_h4 is not None else "") + " loaded")
+            strat = VesterStrategy(
+                df_h1=df_h1,
+                df_m5=df_m5,
+                df_m1=df_m1,
+                df_h4=df_h4,
+                symbol=symbol,
+                verbose=False,
+            )
+            strat.prepare_data()
+            signals_df = strat.run_backtest()
+            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
+                print(f"[LIVE_DEBUG] vester: 0 signals")
         else:
             print(f"Unknown strategy: {self.strategy_name}")
             return []
@@ -411,18 +287,12 @@ class LiveTradingEngine:
             elif tick:
                 latest_signal['symbol'] = symbol
                 latest_signal['price'] = tick['ask'] if latest_signal['type'] == 'BUY' else tick['bid']
-                # Kingsley/Marvellous/NAS/Judas: add buffer below/above lq_level so slight price move doesn't invalidate SL
-                if self.strategy_name in ('kingsely_gold', 'marvellous', 'nas', 'judas'):
+                # Marvellous/Vester: add buffer below/above so slight price move doesn't invalidate SL
+                if self.strategy_name in ('marvellous', 'vester'):
                     sl = latest_signal.get('sl')
                     if sl is not None:
-                        if self.strategy_name == 'marvellous':
-                            buf = config.get_symbol_config(symbol, 'MARVELLOUS_SL_BUFFER') or getattr(config, 'MARVELLOUS_SL_BUFFER', 1.0)
-                        elif self.strategy_name == 'nas':
-                            buf = config.get_symbol_config(symbol, 'NAS_SL_BUFFER') or getattr(config, 'NAS_SL_BUFFER', 5.0)
-                        elif self.strategy_name == 'judas':
-                            buf = getattr(config, 'JUDAS_SL_BUFFER', 8)
-                        else:
-                            buf = getattr(config, 'KINGSLEY_SL_BUFFER', 1.0)
+                        buf_key = 'MARVELLOUS_SL_BUFFER' if self.strategy_name == 'marvellous' else 'VESTER_SL_BUFFER'
+                        buf = config.get_symbol_config(symbol, buf_key) or getattr(config, buf_key, 1.0)
                         try:
                             sl_f = float(sl)
                             if latest_signal['type'] == 'BUY':
@@ -431,27 +301,15 @@ class LiveTradingEngine:
                                 latest_signal['sl'] = sl_f + buf  # Move SL higher for SELL
                         except (TypeError, ValueError):
                             pass
-                # Kingsley/Marvellous/NAS: if live price invalidated SL and fallback enabled, use fallback SL
-                use_fallback = (
-                    (self.strategy_name == 'kingsely_gold' and getattr(config, 'KINGSLEY_USE_SL_FALLBACK', False)) or
-                    (self.strategy_name == 'marvellous' and getattr(config, 'MARVELLOUS_USE_SL_FALLBACK', False)) or
-                    (self.strategy_name == 'nas' and getattr(config, 'NAS_USE_SL_FALLBACK', False)) or
-                    (self.strategy_name == 'judas' and getattr(config, 'JUDAS_USE_SL_FALLBACK', False))
-                )
+                # Marvellous: if live price invalidated SL and fallback enabled, use fallback SL
+                use_fallback = self.strategy_name == 'marvellous' and getattr(config, 'MARVELLOUS_USE_SL_FALLBACK', False)
                 if use_fallback:
                     sl = latest_signal.get('sl')
                     price = latest_signal['price']
                     if sl is not None:
                         try:
                             sl_f, price_f = float(sl), float(price)
-                            if self.strategy_name == 'marvellous':
-                                fallback_dist = config.get_symbol_config(symbol, 'MARVELLOUS_SL_FALLBACK_DISTANCE') or getattr(config, 'MARVELLOUS_SL_FALLBACK_DISTANCE', 5.0)
-                            elif self.strategy_name == 'nas':
-                                fallback_dist = config.get_symbol_config(symbol, 'NAS_SL_FALLBACK_DISTANCE') or getattr(config, 'NAS_SL_BUFFER', 5.0)
-                            elif self.strategy_name == 'judas':
-                                fallback_dist = getattr(config, 'JUDAS_SL_FALLBACK_DISTANCE', 10.0)
-                            else:
-                                fallback_dist = getattr(config, 'KINGSLEY_SL_FALLBACK_DISTANCE', 5.0)
+                            fallback_dist = config.get_symbol_config(symbol, 'MARVELLOUS_SL_FALLBACK_DISTANCE') or getattr(config, 'MARVELLOUS_SL_FALLBACK_DISTANCE', 5.0)
                             if latest_signal['type'] == 'BUY' and sl_f >= price_f:
                                 latest_signal['sl'] = price_f - fallback_dist
                             elif latest_signal['type'] == 'SELL' and sl_f <= price_f:
@@ -473,7 +331,7 @@ class LiveTradingEngine:
                     balance = account['balance'] if account else 0
                     sl = latest_signal.get('sl')
                     if sl is not None and balance > 0:
-                        risk_pct = getattr(config, 'NAS_RISK_PER_TRADE', 0.005) if self.strategy_name == 'nas' else config.RISK_PER_TRADE
+                        risk_pct = getattr(config, 'VESTER_RISK_PER_TRADE', config.RISK_PER_TRADE) if self.strategy_name == 'vester' else config.RISK_PER_TRADE
                         lot = self.mt5.calc_lot_size_from_risk(
                             symbol, balance, latest_signal['price'], sl, risk_pct
                         )
@@ -937,16 +795,12 @@ class LiveTradingEngine:
                     reason = signal.get('reason', '')
                     if reason:
                         print(f"[REASON] {reason}")
-                    diag = signal.get('kingsley_diagnostic')
-                    if diag and self.strategy_name == 'kingsely_gold':
-                        print(f"[KINGSLEY DIAGNOSTIC] Check 5m chart at these times:")
-                        print(f"  H1 bar:      {diag.get('h1_bar', 'N/A')}")
-                        print(f"  BOS bar:     {diag.get('bos_bar', 'N/A')}")
-                        print(f"  OB tap:      {diag.get('ob_tap_bar', 'N/A')}")
-                        print(f"  Liq sweep:   {diag.get('liq_sweep_bar', 'N/A')} (SL=LQ from this bar)")
-                        print(f"  LQ sweep:    {diag.get('lq_sweep_back_bar', 'N/A')}")
-                        print(f"  OB test:     {diag.get('ob_test_bar', 'N/A')}")
-                        print(f"  Entry bar:   {diag.get('entry_bar', 'N/A')}")
+                    diag = signal.get('marvellous_diagnostic')
+                    if diag and self.strategy_name == 'marvellous':
+                        print(f"[MARVELLOUS DIAGNOSTIC] Check chart at these times:")
+                        for k, v in diag.items():
+                            if v:
+                                print(f"  {k}: {v}")
                     if sl is not None:
                         print(f"[SL] Stop loss: {float(sl):.5f} | Risk in dollars: ${dollar_risk:.2f}" if dollar_risk is not None else f"[SL] Stop loss: {float(sl):.5f} | Risk in dollars: n/a")
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_SIGNAL:

@@ -9,7 +9,7 @@ alwaysApply: true
 
 ## Project Summary
 
-Python ICT-style trading bot: **backtest** (Yahoo/CSV), **paper**, **live** (MetaTrader 5), and **replay**. Three strategies: `h1_m5_bos`, `kingsely_gold`, `test`. Optional **AI** (confidence + explain) and **voice** alerts. Single config in `config.py`. Code layout: **ai/** (AI + voice), **bot/** (strategies, backtest, data_loader, indicators, live_trading, replay_engine, etc.).
+Python ICT-style trading bot: **backtest** (Yahoo/CSV), **paper**, **live** (MetaTrader 5), and **replay**. Two strategies: `marvellous`, `test`. Optional **AI** (confidence + explain) and **voice** alerts. Single config in `config.py`. Code layout: **ai/** (AI + voice), **bot/** (strategies, backtest, data_loader, indicators, live_trading, replay_engine, etc.).
 
 ## Architecture (Concise)
 
@@ -32,7 +32,7 @@ Python ICT-style trading bot: **backtest** (Yahoo/CSV), **paper**, **live** (Met
 | AI / voice | `ai/helper.py`, `ai/voice.py` |
 | Data | `bot/data_loader.py`, `bot/mt5_connector.py` |
 | Indicators | `bot/indicators.py`, `bot/indicators_bos.py` |
-| Strategies | `bot/strategies/` (strategy_bos.py, strategy_kingsley.py, strategy_test.py) |
+| Strategies | `bot/strategies/` (strategy_marvellous.py, strategy_test.py) |
 | Backtest | `bot/backtest/` (per-strategy runners) |
 | Live / paper / replay | `bot/live_trading.py`, `bot/paper_trading.py`, `bot/trade_approver.py`, `bot/replay_engine.py` |
 
