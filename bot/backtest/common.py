@@ -1,5 +1,16 @@
 """Shared utilities for backtest runners."""
+import pandas as pd
 import config
+
+
+def _update_per_day_session(trade_time, per_day, per_session):
+    """Update per_day and per_session dicts from trade_time."""
+    ts = pd.Timestamp(trade_time) if not hasattr(trade_time, "strftime") else trade_time
+    day_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts.date()) if hasattr(ts, "date") else "N/A"
+    hour = ts.hour if ts.tzinfo is None else ts.tz_convert("UTC").hour if ts.tzinfo else ts.hour
+    session = config.TRADE_SESSION_HOURS.get(hour, "other")
+    per_day[day_str] = per_day.get(day_str, 0) + 1
+    per_session[session] = per_session.get(session, 0) + 1
 
 
 def get_pip_size_for_symbol(symbol):

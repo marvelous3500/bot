@@ -460,6 +460,9 @@ class VesterStrategy(BaseStrategy):
         trades_per_session: Dict[str, int] = {}
         trades_per_day: Dict[str, int] = {}
         daily_loss: Dict[str, float] = {}
+        one_per_setup = getattr(vc, "VESTER_ONE_SIGNAL_PER_SETUP", True)
+        last_5m_bar_signaled = None
+        apply_limits = getattr(config, "BACKTEST_APPLY_TRADE_LIMITS", False)
 
         for i in range(100, len(entry_df)):
             idx = entry_df.index[i]
@@ -467,8 +470,17 @@ class VesterStrategy(BaseStrategy):
             session_key = config.TRADE_SESSION_HOURS.get(current_time.hour, "other")
             day_key = current_time.strftime("%Y-%m-%d") if hasattr(current_time, "strftime") else str(current_time.date())
 
-            if trades_per_session.get(session_key, 0) >= vc.MAX_TRADES_PER_SESSION:
-                continue
+            if apply_limits:
+                max_per_day = getattr(config, "BACKTEST_MAX_TRADES_PER_DAY", config.MAX_TRADES_PER_DAY)
+                max_per_session = getattr(config, "BACKTEST_MAX_TRADES_PER_SESSION", config.MAX_TRADES_PER_SESSION)
+                if trades_per_day.get(day_key, 0) >= max_per_day:
+                    continue
+                if max_per_session is not None and session_key != "other":
+                    if trades_per_session.get(session_key, 0) >= max_per_session:
+                        continue
+            else:
+                if trades_per_session.get(session_key, 0) >= vc.MAX_TRADES_PER_SESSION:
+                    continue
             if daily_loss.get(day_key, 0) >= config.INITIAL_BALANCE * (vc.DAILY_LOSS_LIMIT_PCT / 100.0):
                 continue
 
@@ -560,6 +572,11 @@ class VesterStrategy(BaseStrategy):
             )
             if not triggered or entry_price is None:
                 continue
+
+            if one_per_setup:
+                m5_bar_ts = idx.floor("5min") if hasattr(idx, "floor") else pd.Timestamp(idx).floor("5min")
+                if last_5m_bar_signaled == m5_bar_ts:
+                    continue
 
             print(f"[Vester] HTF bias detected ({bias})")
             print("[Vester] 5M sweep detected")
@@ -664,6 +681,10 @@ class VesterStrategy(BaseStrategy):
             reason = f"Vester: {htf_label} {bias} + 5M setup + {trigger_reason}"
             sig = self.placeTrade("BUY" if bias == "BULLISH" else "SELL", entry_price, sl, tp, idx, reason)
             signals.append(sig)
+            if one_per_setup:
+                m5_bar_ts = idx.floor("5min") if hasattr(idx, "floor") else pd.Timestamp(idx).floor("5min")
+                last_5m_bar_signaled = m5_bar_ts
             trades_per_session[session_key] = trades_per_session.get(session_key, 0) + 1
+            trades_per_day[day_key] = trades_per_day.get(day_key, 0) + 1
 
         return pd.DataFrame(signals)

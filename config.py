@@ -5,6 +5,24 @@
 # ^NDX : Nasdaq 100 Index
 SYMBOLS = [ 'GC=F', 'GBPUSD=X', 'BTC-USD', '^NDX']
 
+LIVE_MODE = True   # True = real money, False = paper trading
+MAX_TRADES_PER_DAY_PER_PAIR = False   # True = limits apply per symbol; False = global (legacy)
+MAX_TRADES_PER_DAY = 12
+MAX_TRADES_PER_SESSION = 4 
+MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
+LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
+MAX_LOT_LIVE = None   # Cap lot size in live mode (safety)
+  # Per session (London, NY); divides daily limit across sessions
+# Session hours (UTC) for per-session limit: London 7-10, NY 13-16, Asian 0-4
+TRADE_SESSION_HOURS = {
+    7: 'london', 8: 'london', 9: 'london', 10: 'london',
+    13: 'ny', 14: 'ny', 15: 'ny', 16: 'ny',
+    0: 'asian', 1: 'asian', 2: 'asian', 3: 'asian', 4: 'asian',
+}
+MAX_POSITION_SIZE = 0.04  # Fallback lot size when dynamic calc fails
+USE_DYNAMIC_POSITION_SIZING = True  # Risk % of current balance per trade (matches backtest)
+PAPER_TRADING_LOG = 'paper_trades.json'
+LIVE_TRADE_LOG = True   # Append trades to logs/trades_YYYYMMDD.json
 TP1_SL_TO_ENTRY_ENABLED = False   # True = move SL to entry when TP1 hit
 TP1_RATIO = 0.3   
 
@@ -15,6 +33,9 @@ RISK_REWARD_RATIO =5.0  # 1:5 Risk:Reward (win = 5× risk)
 INITIAL_BALANCE = 100
 RISK_PER_TRADE = 0.10  # 10% risk per trade
 BACKTEST_MAX_TRADES = None  # Stop after N trades (None = no limit)
+BACKTEST_APPLY_TRADE_LIMITS = False  # When True, apply trade limits in backtest (both strategies)
+BACKTEST_MAX_TRADES_PER_DAY = 6   # Backtest daily limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
+BACKTEST_MAX_TRADES_PER_SESSION = 2  # Backtest session limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
 BACKTEST_PERIOD = '60d'  # Data period: 12d, 60d, 6mo (set before run)
 BACKTEST_SPREAD_PIPS = 2.0       # e.g. 2.0 for gold, 1.0 for forex
 BACKTEST_COMMISSION_PER_LOT = 7.0  # round-trip per lot (e.g. 7.0)
@@ -29,23 +50,6 @@ from dotenv import load_dotenv
 
 load_dotenv()  # Load from .env file
 
-LIVE_MODE = True   # True = real money, False = paper trading
-MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
-LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
-MAX_LOT_LIVE = None   # Cap lot size in live mode (safety)
-MAX_TRADES_PER_DAY = 6
-MAX_TRADES_PER_SESSION = 2   # Per session (London, NY); divides daily limit across sessions
-MAX_TRADES_PER_DAY_PER_PAIR = True   # True = limits apply per symbol; False = global (legacy)
-# Session hours (UTC) for per-session limit: London 7-10, NY 13-16, Asian 0-4
-TRADE_SESSION_HOURS = {
-    7: 'london', 8: 'london', 9: 'london', 10: 'london',
-    13: 'ny', 14: 'ny', 15: 'ny', 16: 'ny',
-    0: 'asian', 1: 'asian', 2: 'asian', 3: 'asian', 4: 'asian',
-}
-MAX_POSITION_SIZE = 0.04  # Fallback lot size when dynamic calc fails
-USE_DYNAMIC_POSITION_SIZING = True  # Risk % of current balance per trade (matches backtest)
-PAPER_TRADING_LOG = 'paper_trades.json'
-LIVE_TRADE_LOG = True   # Append trades to logs/trades_YYYYMMDD.json
 
 # MT5 Settings (loaded from environment variables for security)
 MT5_LOGIN = os.getenv('MT5_LOGIN')  # Your MT5 account number
@@ -119,6 +123,7 @@ VOICE_ALERT_ON_REJECT = True   # speak when trade rejected and why
 # NOTE: REQUIRE_*_ZONE_CONFIRMATION only applies when that timeframe's REQUIRE_*_BIAS is True.
 #       E.g. REQUIRE_4H_ZONE_CONFIRMATION has no effect when REQUIRE_4H_BIAS=False.
 MARVELLOUS_INSTRUMENT = 'XAUUSD'
+MARVELLOUS_ONE_SIGNAL_PER_SETUP = False  # True = first qualifying bar only (fair 1m vs 5m comparison) # True = one signal per 5M setup (no multiple 1M entries)
 MARVELLOUS_REQUIRE_H1_BIAS = True
 MARVELLOUS_REQUIRE_4H_BIAS = False
 MARVELLOUS_REQUIRE_DAILY_BIAS = False
@@ -146,7 +151,7 @@ MARVELLOUS_MAX_SPREAD_POINTS = 50.0
 MARVELLOUS_USE_LIQUIDITY_MAP = False
 MARVELLOUS_LIQUIDITY_ZONE_STRENGTH_THRESHOLD = 0.5
 # Entry timeframe: '5m' (default), '15m', or '1m' — precision entry bar after M15 signal
-MARVELLOUS_ENTRY_TIMEFRAME = '5m'
+MARVELLOUS_ENTRY_TIMEFRAME = '1m'
 MARVELLOUS_BACKTEST_SYMBOL = 'GC=F'
 MARVELLOUS_LIVE_SYMBOL = 'XAUUSDm'
 MARVELLOUS_SWING_LENGTH = 3
@@ -158,6 +163,10 @@ MARVELLOUS_ENTRY_WINDOW_MINUTES = 60   # Minutes after M15 signal to allow 5m en
 MARVELLOUS_SL_BUFFER = 1.0
 MARVELLOUS_USE_SL_FALLBACK = True
 MARVELLOUS_SL_FALLBACK_DISTANCE = 5.0
+# SL method: 'OB' = M15 liquidity level (default), 'HYBRID' = swing + ATR buffer (tighter with 1m)
+MARVELLOUS_SL_METHOD = 'OB'
+MARVELLOUS_SL_ATR_MULT = 1.0   # Buffer = ATR × this (HYBRID only)
+MARVELLOUS_SL_MICRO_TF = '1m'  # Micro-structure timeframe: '1m' or '5m' (HYBRID only)
 
 # Extra filters: when True, Marvellous applies news/session/ATR/spread/liquidity filters.
 # When False, both skip them. Config comes from MARVELLOUS_* above.
@@ -170,6 +179,7 @@ MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 
 
 
 # VesterStrategy: multi-timeframe smart-money (1H bias -> 5M setup -> 1M entry)
+VESTER_ONE_SIGNAL_PER_SETUP = False 
 VESTER_BACKTEST_SYMBOL = 'GC=F'
 VESTER_LIVE_SYMBOL = 'XAUUSDm'
 VESTER_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}

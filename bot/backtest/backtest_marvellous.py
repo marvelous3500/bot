@@ -4,7 +4,7 @@ import config
 from .. import marvellous_config as mc
 from ..data_loader import fetch_data_yfinance, load_data_csv
 from ..strategies import MarvellousStrategy
-from .common import _stats_dict, get_pip_size_for_symbol, _apply_backtest_realism
+from .common import _stats_dict, get_pip_size_for_symbol, _apply_backtest_realism, _update_per_day_session
 
 
 def _strip_tz(df):
@@ -138,6 +138,8 @@ def run_marvellous_backtest(
     total_profit = 0.0
     total_loss = 0.0
     trade_details = [] if include_trade_details else None
+    per_day = {}
+    per_session = {}
 
     for _, trade in signals.iterrows():
         entry_price = trade["price"]
@@ -169,6 +171,7 @@ def run_marvellous_backtest(
                 balance += profit
                 wins += 1
                 buys += 1
+                _update_per_day_session(trade_time, per_day, per_session)
                 if trade_details is not None:
                     trade_details.append((trade_time, "WIN"))
             elif outcome == "LOSS":
@@ -177,6 +180,7 @@ def run_marvellous_backtest(
                 balance -= loss
                 losses += 1
                 buys += 1
+                _update_per_day_session(trade_time, per_day, per_session)
                 if trade_details is not None:
                     trade_details.append((trade_time, "LOSS"))
         elif trade["type"] == "SELL":
@@ -198,6 +202,7 @@ def run_marvellous_backtest(
                 balance += profit
                 wins += 1
                 sells += 1
+                _update_per_day_session(trade_time, per_day, per_session)
                 if trade_details is not None:
                     trade_details.append((trade_time, "WIN"))
             elif outcome == "LOSS":
@@ -206,6 +211,7 @@ def run_marvellous_backtest(
                 balance -= loss
                 losses += 1
                 sells += 1
+                _update_per_day_session(trade_time, per_day, per_session)
                 if trade_details is not None:
                     trade_details.append((trade_time, "LOSS"))
 
@@ -221,6 +227,10 @@ def run_marvellous_backtest(
 
     trade_limit = getattr(config, "BACKTEST_MAX_TRADES", None)
     trade_limit_str = "No trade limit" if trade_limit is None else str(trade_limit)
+    apply_limits = getattr(config, "BACKTEST_APPLY_TRADE_LIMITS", False)
+    max_day = getattr(config, "BACKTEST_MAX_TRADES_PER_DAY", config.MAX_TRADES_PER_DAY)
+    max_sess = getattr(config, "BACKTEST_MAX_TRADES_PER_SESSION", config.MAX_TRADES_PER_SESSION)
+    limits_str = f"{max_day}/day, {max_sess}/session" if apply_limits else "No"
     return_pct = ((balance - config.INITIAL_BALANCE) / config.INITIAL_BALANCE) * 100
     win_rate = (wins / (wins + losses) * 100) if (wins + losses) > 0 else 0
     print()
@@ -230,6 +240,7 @@ def run_marvellous_backtest(
     print(f"  Risk:Reward: 1:{risk}")
     print(f"  Entry TF: {entry_tf}")
     print(f"  Trade Limit: {trade_limit_str}")
+    print(f"  Daily/Session limits: {limits_str}")
     print(f"  Duration: {display_period}{period_note}")
     print()
     print("| Strategy   | Trades | Wins | Losses | Win rate  | Final balance | Return      |")
@@ -238,6 +249,11 @@ def run_marvellous_backtest(
     print(f"| marvellous | {wins + losses:>5} | {wins:>4} | {losses:>6} | {win_rate:>8.2f}% | ${balance:>11,.2f} | {ret_str:>10} |")
     print()
     print(f"  BUY: {buys} | SELL: {sells}")
+    if per_day or per_session:
+        day_str = " | ".join(f"{d}: {c}" for d, c in sorted(per_day.items())) if per_day else "—"
+        sess_str = " | ".join(f"{s}: {c}" for s, c in sorted(per_session.items())) if per_session else "—"
+        print(f"  Trades per day:     {day_str}")
+        print(f"  Trades per session: {sess_str}")
     print()
     if len(invalid_sl) > 0:
         print(f"Invalid SL (rejected): {len(invalid_sl)}")
