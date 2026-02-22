@@ -124,7 +124,8 @@ VOICE_ALERT_ON_REJECT = True   # speak when trade rejected and why
 # NOTE: REQUIRE_*_ZONE_CONFIRMATION only applies when that timeframe's REQUIRE_*_BIAS is True.
 #       E.g. REQUIRE_4H_ZONE_CONFIRMATION has no effect when REQUIRE_4H_BIAS=False.
 MARVELLOUS_INSTRUMENT = 'XAUUSD'
-MARVELLOUS_ONE_SIGNAL_PER_SETUP = False  # True = first qualifying bar only (fair 1m vs 5m comparison) # True = one signal per 5M setup (no multiple 1M entries)
+MARVELLOUS_ONE_SIGNAL_PER_SETUP = False  # Deprecated: use MARVELLOUS_MAX_TRADES_PER_SETUP
+MARVELLOUS_MAX_TRADES_PER_SETUP = 2     # Max entries per M15 setup (1 = one per setup, 3 = up to 3, None = unlimited)
 MARVELLOUS_REQUIRE_H1_BIAS = True
 MARVELLOUS_REQUIRE_4H_BIAS = False
 MARVELLOUS_REQUIRE_DAILY_BIAS = False
@@ -180,7 +181,8 @@ MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 
 
 
 # VesterStrategy: multi-timeframe smart-money (1H bias -> 5M setup -> 1M entry)
-VESTER_ONE_SIGNAL_PER_SETUP = False 
+VESTER_ONE_SIGNAL_PER_SETUP = False  # Deprecated: use VESTER_MAX_TRADES_PER_SETUP
+VESTER_MAX_TRADES_PER_SETUP = 2     # Max entries per 5M setup (1 = one per setup, 3 = up to 3, None = unlimited)
 VESTER_BACKTEST_SYMBOL = 'GC=F'
 VESTER_LIVE_SYMBOL = 'XAUUSDm'
 VESTER_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}

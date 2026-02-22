@@ -57,6 +57,60 @@ class LiveTradingEngine:
             self.approver = TradeApprover()
         self.trades_today = []
         self.running = False
+        self._trades_per_setup = {}  # (symbol, type, setup_key) -> count
+
+    def _get_setup_key(self, signal):
+        """Return hashable key (symbol, type, setup_str) for setup tracking, or None if not applicable."""
+        symbol = signal.get('symbol', '')
+        order_type = signal.get('type', '')
+        if not symbol or not order_type:
+            return None
+        setup_ts = None
+        if self.strategy_name == 'vester':
+            setup_ts = signal.get('setup_5m')
+            if setup_ts is None:
+                t = signal.get('time')
+                if t is not None:
+                    ts = t if hasattr(t, 'floor') else pd.Timestamp(t)
+                    setup_ts = ts.floor('5min')
+        elif self.strategy_name == 'marvellous':
+            setup_ts = signal.get('setup_m15')
+            if setup_ts is None:
+                t = signal.get('time')
+                if t is not None:
+                    ts = t if hasattr(t, 'floor') else pd.Timestamp(t)
+                    setup_ts = ts.floor('15min')
+        if setup_ts is None:
+            return None
+        setup_str = setup_ts.isoformat() if hasattr(setup_ts, 'isoformat') else str(setup_ts)
+        return (symbol, order_type, setup_str)
+
+    def _check_setup_limit(self, signal):
+        """Return (True, None) if OK to trade, else (False, reason)."""
+        max_per_setup = None
+        if self.strategy_name == 'vester':
+            max_per_setup = getattr(config, 'VESTER_MAX_TRADES_PER_SETUP', None)
+            if max_per_setup is None:
+                max_per_setup = 1 if getattr(config, 'VESTER_ONE_SIGNAL_PER_SETUP', True) else None
+        elif self.strategy_name == 'marvellous':
+            max_per_setup = getattr(config, 'MARVELLOUS_MAX_TRADES_PER_SETUP', None)
+            if max_per_setup is None:
+                max_per_setup = 1 if getattr(config, 'MARVELLOUS_ONE_SIGNAL_PER_SETUP', True) else None
+        if max_per_setup is None:
+            return True, None
+        key = self._get_setup_key(signal)
+        if key is None:
+            return True, None
+        count = self._trades_per_setup.get(key, 0)
+        if count >= max_per_setup:
+            return False, f"Max trades per setup reached ({count}/{max_per_setup})"
+        return True, None
+
+    def _record_setup_trade(self, signal):
+        """Increment trades-per-setup count after successful execution."""
+        key = self._get_setup_key(signal)
+        if key is not None:
+            self._trades_per_setup[key] = self._trades_per_setup.get(key, 0) + 1
 
     def connect(self):
         return self.mt5.connect()
@@ -738,6 +792,11 @@ class LiveTradingEngine:
                         if not can_trade:
                             print(f"[SKIP] {limit_reason}")
                             continue
+                    can_setup, setup_reason = self._check_setup_limit(signal)
+                    if not can_setup:
+                        self._last_run_errors.append(setup_reason)
+                        print(f"[SKIP] {setup_reason}")
+                        continue
                     sl = signal.get('sl')
                     sl_dist = abs(float(signal['price']) - float(sl)) if sl is not None else None
                     dollar_risk = self.mt5.calc_dollar_risk(
@@ -773,6 +832,7 @@ class LiveTradingEngine:
                             continue
                     result, exec_err = self.execute_signal(signal)
                     if result:
+                        self._record_setup_trade(signal)
                         last_signal_time = datetime.now()
                         if getattr(config, 'TELEGRAM_ENABLED', False):
                             send_setup_notification(signal, self.strategy_name)

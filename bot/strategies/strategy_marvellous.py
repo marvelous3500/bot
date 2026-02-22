@@ -348,8 +348,10 @@ class MarvellousStrategy:
         ob_lookback = mc.MARVELLOUS_OB_LOOKBACK
         liq_lookback = mc.MARVELLOUS_LIQ_SWEEP_LOOKBACK
         tp_lookahead = mc.MARVELLOUS_TP_SWING_LOOKAHEAD
-        one_per_setup = getattr(mc, "MARVELLOUS_ONE_SIGNAL_PER_SETUP", True)
-        last_m15_signaled = None
+        max_per_setup = getattr(mc, "MARVELLOUS_MAX_TRADES_PER_SETUP", None)
+        if max_per_setup is None:
+            max_per_setup = 1 if getattr(mc, "MARVELLOUS_ONE_SIGNAL_PER_SETUP", True) else None
+        trades_per_m15_setup: Dict = {}
         apply_limits = getattr(config, "BACKTEST_APPLY_TRADE_LIMITS", False)
         trades_per_day: Dict[str, int] = {}
         trades_per_session: Dict[str, int] = {}
@@ -526,7 +528,7 @@ class MarvellousStrategy:
 
             # Entry: setup complete and current entry bar is within window after signal
             if ob_tested and last_m15_signal_idx is not None and lq_level is not None:
-                if one_per_setup and last_m15_signaled == last_m15_signal_idx:
+                if max_per_setup is not None and trades_per_m15_setup.get(last_m15_signal_idx, 0) >= max_per_setup:
                     continue
                 entry_window_minutes = getattr(mc, "MARVELLOUS_ENTRY_WINDOW_MINUTES", 15)
                 window_end = last_m15_signal_idx + pd.Timedelta(minutes=entry_window_minutes)
@@ -593,19 +595,20 @@ class MarvellousStrategy:
                                     (self.df_m15.index > idx) & (self.df_m15["swing_high"] == True)
                                 ].head(tp_lookahead)
                                 tp_price = future_highs.iloc[0]["swing_high_price"] if not future_highs.empty else None
-                                signals.append({
+                                sig = {
                                     "time": idx,
                                     "type": "BUY",
                                     "price": row["close"],
                                     "sl": sl,
                                     "tp": tp_price,
                                     "reason": "Marvellous: H1+zone bias + M15 BOS + OB tap + sweep + OB test",
-                                })
+                                    "setup_m15": last_m15_signal_idx,
+                                }
+                                signals.append(sig)
                                 if apply_limits:
                                     trades_per_day[day_key] = trades_per_day.get(day_key, 0) + 1
                                     trades_per_session[session_key] = trades_per_session.get(session_key, 0) + 1
-                                if one_per_setup:
-                                    last_m15_signaled = last_m15_signal_idx
+                                trades_per_m15_setup[last_m15_signal_idx] = trades_per_m15_setup.get(last_m15_signal_idx, 0) + 1
                         elif h1_bias == "BEARISH":
                             is_bear = row["close"] < row["open"]
                             if is_bear and float(lq_level) > float(row["close"]):
@@ -613,18 +616,19 @@ class MarvellousStrategy:
                                     (self.df_m15.index > idx) & (self.df_m15["swing_low"] == True)
                                 ].head(tp_lookahead)
                                 tp_price = future_lows.iloc[0]["swing_low_price"] if not future_lows.empty else None
-                                signals.append({
+                                sig = {
                                     "time": idx,
                                     "type": "SELL",
                                     "price": row["close"],
                                     "sl": sl,
                                     "tp": tp_price,
                                     "reason": "Marvellous: H1+zone bias + M15 BOS + OB tap + sweep + OB test",
-                                })
+                                    "setup_m15": last_m15_signal_idx,
+                                }
+                                signals.append(sig)
                                 if apply_limits:
                                     trades_per_day[day_key] = trades_per_day.get(day_key, 0) + 1
                                     trades_per_session[session_key] = trades_per_session.get(session_key, 0) + 1
-                                if one_per_setup:
-                                    last_m15_signaled = last_m15_signal_idx
+                                trades_per_m15_setup[last_m15_signal_idx] = trades_per_m15_setup.get(last_m15_signal_idx, 0) + 1
 
         return pd.DataFrame(signals)

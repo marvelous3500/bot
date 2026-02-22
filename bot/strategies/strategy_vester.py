@@ -460,8 +460,10 @@ class VesterStrategy(BaseStrategy):
         trades_per_session: Dict[str, int] = {}
         trades_per_day: Dict[str, int] = {}
         daily_loss: Dict[str, float] = {}
-        one_per_setup = getattr(vc, "VESTER_ONE_SIGNAL_PER_SETUP", True)
-        last_5m_bar_signaled = None
+        max_per_setup = getattr(vc, "VESTER_MAX_TRADES_PER_SETUP", None)
+        if max_per_setup is None:
+            max_per_setup = 1 if getattr(vc, "VESTER_ONE_SIGNAL_PER_SETUP", True) else None
+        trades_per_5m_setup: Dict = {}
         apply_limits = getattr(config, "BACKTEST_APPLY_TRADE_LIMITS", False)
 
         for i in range(100, len(entry_df)):
@@ -573,10 +575,9 @@ class VesterStrategy(BaseStrategy):
             if not triggered or entry_price is None:
                 continue
 
-            if one_per_setup:
-                m5_bar_ts = idx.floor("5min") if hasattr(idx, "floor") else pd.Timestamp(idx).floor("5min")
-                if last_5m_bar_signaled == m5_bar_ts:
-                    continue
+            m5_bar_ts = idx.floor("5min") if hasattr(idx, "floor") else pd.Timestamp(idx).floor("5min")
+            if max_per_setup is not None and trades_per_5m_setup.get(m5_bar_ts, 0) >= max_per_setup:
+                continue
 
             print(f"[Vester] HTF bias detected ({bias})")
             print("[Vester] 5M sweep detected")
@@ -680,10 +681,9 @@ class VesterStrategy(BaseStrategy):
             htf_label = "1H+4H" if getattr(vc, "REQUIRE_4H_BIAS", False) else "1H"
             reason = f"Vester: {htf_label} {bias} + 5M setup + {trigger_reason}"
             sig = self.placeTrade("BUY" if bias == "BULLISH" else "SELL", entry_price, sl, tp, idx, reason)
+            sig["setup_5m"] = m5_bar_ts
             signals.append(sig)
-            if one_per_setup:
-                m5_bar_ts = idx.floor("5min") if hasattr(idx, "floor") else pd.Timestamp(idx).floor("5min")
-                last_5m_bar_signaled = m5_bar_ts
+            trades_per_5m_setup[m5_bar_ts] = trades_per_5m_setup.get(m5_bar_ts, 0) + 1
             trades_per_session[session_key] = trades_per_session.get(session_key, 0) + 1
             trades_per_day[day_key] = trades_per_day.get(day_key, 0) + 1
 
