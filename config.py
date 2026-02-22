@@ -90,7 +90,7 @@ PRINT_CHECKLIST_ON_START = True  # When True, print real-money checklist at live
 USE_MARGIN_CHECK = True   # Pre-trade margin check for live mode (skip if insufficient free margin)
 LIVE_DEBUG = True         # Log when no signals (data range, bar counts) to diagnose why live misses trades
 # Same symbol: do not take a new trade if we already have an open position on that pair, except when adding at TP1/TP2
-ALLOW_SAME_SYMBOL_AT_TP = True   # If True, allow new entry on same symbol only when price is at/near existing position's TP
+ALLOW_SAME_SYMBOL_AT_TP = False   # If True, allow new entry on same symbol only when price is at/near existing position's TP
 AT_TP_POINTS = 5.0               # Consider "at TP" when entry price is within this many points of position's TP (e.g. 5 for XAUUSD)
 
 # Breakeven: when position is in profit by BREAKEVEN_PIPS, move SL to half that (lock in half the pips)
