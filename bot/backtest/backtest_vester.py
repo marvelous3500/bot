@@ -250,12 +250,23 @@ def run_vester_backtest(
         print("=" * 60)
         print("TRADE LOG")
         print("=" * 60)
+        per_day = {}
+        per_session = {}
         for i, t in enumerate(trade_details, 1):
             trade_time, outcome, entry, sl, tp, bar_time, reason = t[0], t[1], t[2], t[3], t[4], t[5], t[6] if len(t) > 6 else ""
             bar_str = str(bar_time) if bar_time is not None else "N/A"
-            print(f"  #{i} {outcome:4} | Entry: {entry:.4f} | SL: {sl:.4f} | TP: {tp:.4f} | Bar hit: {bar_str}")
+            ts = pd.Timestamp(trade_time) if not hasattr(trade_time, "hour") else trade_time
+            day_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts.date()) if hasattr(ts, "date") else "N/A"
+            hour = ts.hour if ts.tzinfo is None else ts.tz_convert("UTC").hour
+            session = config.TRADE_SESSION_HOURS.get(hour, "other")
+            per_day[day_str] = per_day.get(day_str, 0) + 1
+            per_session[session] = per_session.get(session, 0) + 1
+            print(f"  #{i} {outcome:4} | Day: {day_str} | Session: {session} | Entry: {entry:.4f} | SL: {sl:.4f} | TP: {tp:.4f} | Bar hit: {bar_str}")
             if reason:
                 print(f"       Reason: {reason[:70]}{'...' if len(reason) > 70 else ''}")
+        print()
+        print("TRADES BY DAY:   " + " | ".join(f"{d}: {c}" for d, c in sorted(per_day.items())))
+        print("TRADES BY SESSION: " + " | ".join(f"{s}: {c}" for s, c in sorted(per_session.items())))
         if losing_trades:
             print()
             print("=" * 60)
@@ -263,9 +274,13 @@ def run_vester_backtest(
             print("=" * 60)
             for i, t in enumerate(losing_trades, 1):
                 trade_time, entry, sl, tp, bar_time, reason = t
+                ts = pd.Timestamp(trade_time) if not hasattr(trade_time, "hour") else trade_time
+                day_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts.date()) if hasattr(ts, "date") else "N/A"
+                hour = ts.hour if ts.tzinfo is None else ts.tz_convert("UTC").hour
+                session = config.TRADE_SESSION_HOURS.get(hour, "other")
                 sl_dist = abs(entry - sl)
                 rr = abs(tp - entry) / sl_dist if sl_dist > 0 else 0
-                print(f"  Loss #{i}: Entry {trade_time} @ {entry:.4f} | SL: {sl:.4f} | TP: {tp:.4f} | RR: 1:{rr:.1f}")
+                print(f"  Loss #{i}: Day: {day_str} | Session: {session} | Entry {trade_time} @ {entry:.4f} | SL: {sl:.4f} | TP: {tp:.4f} | RR: 1:{rr:.1f}")
                 print(f"           SL hit at bar: {bar_time}")
                 if reason:
                     print(f"           Reason: {reason[:70]}{'...' if len(reason) > 70 else ''}")

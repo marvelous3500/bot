@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from .connector_interface import get_connector, TIMEFRAME_M1, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
 from .paper_trading import PaperTrading
 from .trade_approver import TradeApprover
-from .strategies import MarvellousStrategy, TestStrategy, VesterStrategy
+from .strategies import MarvellousStrategy, VesterStrategy
 from .indicators_bos import detect_swing_highs_lows, detect_break_of_structure
 from ai import get_signal_confidence, explain_trade, speak
 from .telegram_notifier import send_setup_notification
@@ -136,9 +136,9 @@ class LiveTradingEngine:
                 symbol = getattr(config, 'VESTER_LIVE_SYMBOL', vc.VESTER_LIVE_SYMBOL)
         else:
             if self.cli_symbol:
-                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or config.LIVE_SYMBOLS.get('XAUUSD') or getattr(config, 'TEST_LIVE_SYMBOL', 'XAUUSDm')
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
             else:
-                symbol = config.LIVE_SYMBOLS.get('XAUUSD') or getattr(config, 'TEST_LIVE_SYMBOL', 'XAUUSDm') or 'XAUUSDm'
+                symbol = config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
         return symbol
 
     def _get_bias_of_day(self, symbol):
@@ -210,34 +210,6 @@ class LiveTradingEngine:
             signals_df = strat.run_backtest()
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] marvellous: 0 signals")
-        elif self.strategy_name == 'test':
-            gold_symbols = list(dict.fromkeys([
-                symbol,
-                getattr(config, 'TEST_LIVE_SYMBOL', 'XAUUSD'),
-                getattr(config, 'TEST_LIVE_SYMBOL', 'XAUUSDm'),  # Exness uses XAUUSDm
-                'GOLD',
-                'XAUUSD',
-                'XAUUSDm',
-            ]))
-            df_h1 = None
-            for sym in gold_symbols:
-                df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
-                if df_h1 is not None:
-                    symbol = sym
-                    break
-            if df_h1 is None:
-                if getattr(config, 'LIVE_DEBUG', False):
-                    print(f"[LIVE_DEBUG] test: No H1 data (tried: {gold_symbols})")
-                    print(f"[LIVE_DEBUG]   → Check: symbol in MT5 Market Watch, market open (not weekend), broker symbol name")
-                return []
-            if getattr(config, 'LIVE_DEBUG', False) or getattr(config, 'MT5_VERBOSE', False):
-                last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
-                print(f"[MT5] test: {symbol} H1: {len(df_h1)} bars, last={last_h1}")
-            strat = TestStrategy(df_h1, verbose=False)
-            strat.prepare_data()
-            signals_df = strat.run_backtest()
-            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] test: 0 signals (need at least 4 H1 bars)")
         elif self.strategy_name == 'vester':
             from . import vester_config as vc
             cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
@@ -321,12 +293,8 @@ class LiveTradingEngine:
                     latest_signal['tp'] = latest_signal['price'] + (sl_dist * config.RISK_REWARD_RATIO)
                 else:
                     latest_signal['tp'] = latest_signal['price'] - (sl_dist * config.RISK_REWARD_RATIO)
-                # Test strategy: use fixed small lot to ensure order goes through
-                if self.strategy_name == 'test':
-                    lot = getattr(config, 'TEST_FIXED_LOT', 0.01) or 0.01
-                    latest_signal['volume'] = max(0.01, float(lot))
                 # Dynamic lot size: risk % of current balance (matches backtest)
-                elif getattr(config, 'USE_DYNAMIC_POSITION_SIZING', True) and self.mt5.connected:
+                if getattr(config, 'USE_DYNAMIC_POSITION_SIZING', True) and self.mt5.connected:
                     account = self.paper.get_account_info() if self.paper_mode else self.mt5.get_account_info()
                     balance = account['balance'] if account else 0
                     sl = latest_signal.get('sl')
@@ -704,14 +672,7 @@ class LiveTradingEngine:
             if resp != 'yes':
                 print("Aborted.")
                 return
-        if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
-            print("Test strategy: single-run mode (take one trade and exit)")
-            if config.MANUAL_APPROVAL:
-                print("  Use --auto-approve to skip confirmation prompt.\n")
-            else:
-                print()
-        else:
-            print("Press Ctrl+C to stop\n")
+        print("Press Ctrl+C to stop\n")
         self.running = True
         last_signal_time = None
         self._last_run_errors = []  # Capture why trade wasn't executed
@@ -728,10 +689,6 @@ class LiveTradingEngine:
                     break
                 if not self.check_safety_limits():
                     reason = getattr(self, '_limit_reason', 'Trade limit reached')
-                    if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
-                        print(f"{reason}. Exiting.")
-                        self.running = False
-                        break
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
                         speak(f"Trade rejected. Reason: {reason}.")
                     print(f"Waiting... ({reason})")
@@ -827,26 +784,6 @@ class LiveTradingEngine:
                         print(f"[EXECUTE] Order failed — check [MT5] or [SAFETY] message above for reason.")
                 # Always show status (Open Positions + Total Trades) every loop
                 self.show_status()
-                # Test strategy: single-run mode — always exit after one check
-                if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
-                    if not signals:
-                        print("\nTest strategy: no signal (check XAUUSDm in Market Watch, market open). Exiting.")
-                    else:
-                        trades_done = len(self.trades_today)
-                        if trades_done == 0:
-                            print("\n" + "=" * 50)
-                            print("Test strategy: single run complete — but NO TRADE was executed.")
-                            if self._last_run_errors:
-                                print("Reason(s):")
-                                for e in self._last_run_errors:
-                                    print(f"  • {e}")
-                            else:
-                                print("  (No signal was generated — check data/symbol)")
-                            print("=" * 50)
-                        else:
-                            print(f"\nTest strategy: single run complete. {trades_done} trade(s) executed.")
-                    self.running = False
-                    break
                 # Compact status line so Strategy + Open Positions + Total Trades are always visible
                 if self.paper_mode:
                     n_pos = len(self.paper.get_positions())

@@ -4,7 +4,7 @@ Replay engine: runs the full live flow on historical data. No MT5 required.
 import pandas as pd
 import config
 from .data_loader import fetch_data_yfinance, load_data_csv
-from .strategies import MarvellousStrategy, TestStrategy, VesterStrategy
+from .strategies import MarvellousStrategy, VesterStrategy
 from ai import get_signal_confidence, explain_trade, speak
 
 
@@ -51,14 +51,6 @@ def load_replay_data(strategy_name, symbol, csv_path):
         for d in (df_daily, df_4h, df_h1, df_m15, df_entry):
             _strip_tz(d)
         return df_entry, {'df_daily': df_daily, 'df_4h': df_4h, 'df_h1': df_h1, 'df_m15': df_m15, 'df_entry': df_entry, 'symbol': symbol}
-
-    if strategy_name == 'test':
-        if csv_path:
-            df_h1 = df.resample('1h').agg({'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}).dropna()
-        else:
-            df_h1 = fetch_data_yfinance(symbol or 'GC=F', period='60d', interval='1h')
-        df_h1 = _strip_tz(df_h1)
-        return df_h1, {'df_h1': df_h1, 'symbol': symbol}
 
     if strategy_name == 'vester':
         from . import vester_config as vc
@@ -108,15 +100,6 @@ def run_strategy_at_time(strategy_name, data, current_time):
         signals_df = strat.run_backtest()
         if not signals_df.empty:
             signal = signals_df.iloc[-1].to_dict()
-    elif strategy_name == 'test':
-        df_h1 = data['df_h1'].loc[data['df_h1'].index <= current_time]
-        if len(df_h1) < 4:
-            return None
-        strat = TestStrategy(df_h1, verbose=False)
-        strat.prepare_data()
-        signals_df = strat.run_backtest()
-        if not signals_df.empty:
-            signal = signals_df.iloc[-1].to_dict()
     elif strategy_name == 'vester':
         df_h1 = data['df_h1'].loc[data['df_h1'].index <= current_time]
         df_m5 = data['df_m5'].loc[data['df_m5'].index <= current_time]
@@ -155,8 +138,6 @@ def run_replay(strategy_name, symbol=None, csv_path=None, auto_approve=True):
     if strategy_name == 'marvellous':
         from . import marvellous_config as mc
         symbol = symbol or mc.MARVELLOUS_BACKTEST_SYMBOL
-    elif strategy_name == 'test':
-        symbol = symbol or 'GC=F'
     elif strategy_name == 'vester':
         from . import vester_config as vc
         symbol = symbol or getattr(config, 'VESTER_BACKTEST_SYMBOL', vc.VESTER_BACKTEST_SYMBOL)

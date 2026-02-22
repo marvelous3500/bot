@@ -20,7 +20,7 @@ BACKTEST_SPREAD_PIPS = 2.0       # e.g. 2.0 for gold, 1.0 for forex
 BACKTEST_COMMISSION_PER_LOT = 7.0  # round-trip per lot (e.g. 7.0)
 BACKTEST_SLIPPAGE_PIPS = 0.5     # e.g. 0.5
 
-# Kill zone hours (UTC) — used by TestStrategy when TEST_USE_KILL_ZONES=True
+# Kill zone hours (UTC) — used by strategies for session filtering
 KILL_ZONE_HOURS = [7, 8, 9, 10, 13, 14, 15, 16]
 
 # Live Trading Settings
@@ -101,15 +101,6 @@ SHOW_BIAS_OF_DAY = True          # If True, print [BIAS OF DAY] Daily: X | H1: Y
 USE_LUXALGO_ICT = False
 LUXALGO_SWING_LENGTH = 5      # Pivot left/right (LuxAlgo default: 5)
 LUXALGO_OB_USE_BODY = True   # Use candle body for OB range (LuxAlgo default)
-
-# Test strategy (gold, verify live execution - takes trade immediately)
-TEST_SL_DISTANCE = 5.0   # Price units (e.g. $5 for gold)
-TEST_TP_DISTANCE = 15.0  # Price units
-TEST_USE_KILL_ZONES = False  # False = always emit, take trade on first run
-TEST_SINGLE_RUN = True   # True = run once, take one trade, exit (verify bot can execute)
-TEST_FIXED_LOT = 0.01    # Fixed lot for test (avoids lot calc issues; 0.01 = min for most brokers)
-TEST_BACKTEST_SYMBOL = 'GC=F'
-TEST_LIVE_SYMBOL = 'XAUUSDm'
 
 # Replay mode: run strategy every N bars (1 = every bar, most trades; 4 = faster, may miss some)
 REPLAY_STEP_BARS = 1
@@ -224,7 +215,7 @@ VESTER_SL_BUFFER = 1.0
 # SL method: 'HYBRID' = micro-structure swing + ATR buffer; 'OB' = OB/zone + fixed pip buffer
 VESTER_SL_METHOD = 'OB'
 VESTER_SL_ATR_MULT = 1.0  # Buffer = ATR × this (HYBRID only)
-VESTER_SL_MICRO_TF = '5m'  # Micro-structure timeframe: '1m' or '5m' (HYBRID only)
+VESTER_SL_MICRO_TF = '1m'  # Micro-structure timeframe: '1m' or '5m' (HYBRID only)
 
 
 # Symbol-specific config overrides. When the bot trades this pair, it uses these values instead of defaults.

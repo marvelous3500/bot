@@ -21,7 +21,7 @@ def build_parser():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["marvellous", "test", "vester", "all"],
+        choices=["marvellous", "vester", "all"],
         default="marvellous",
         help="Strategy to use ('all' = run both strategies)",
     )
@@ -119,10 +119,10 @@ def _print_summary_table(period_label, rows):
 
 def run_backtest(args):
     """Run backtest for the selected strategy (or all strategies if --strategy all)."""
-    from bot.backtest import run_marvellous_backtest, run_test_backtest, run_vester_backtest
+    from bot.backtest import run_marvellous_backtest, run_vester_backtest
 
     strategies = (
-        ["marvellous", "test", "vester"]
+        ["marvellous", "vester"]
         if args.strategy == "all"
         else [args.strategy]
     )
@@ -145,9 +145,6 @@ def run_backtest(args):
                     from bot import vester_config as vc
                     kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
                     s = run_vester_backtest(**kwargs)
-                else:
-                    kwargs["symbol"] = kwargs.get("symbol") or "GC=F"
-                    s = run_test_backtest(**kwargs)
                 rows.append(s)
             _print_summary_table(period_label, rows)
         return
@@ -166,9 +163,6 @@ def run_backtest(args):
             from bot import vester_config as vc
             kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
             run_vester_backtest(**kwargs)
-        else:
-            kwargs["symbol"] = kwargs.get("symbol") or "GC=F"
-            run_test_backtest(**kwargs)
 
 
 def run_replay_cmd(args):
@@ -209,8 +203,6 @@ def run_paper_or_live(args):
         engine.run()
     finally:
         engine.disconnect()
-    if args.strategy == "test" and getattr(config, "TEST_SINGLE_RUN", False):
-        sys.exit(0)
 
 
 def run(args):
