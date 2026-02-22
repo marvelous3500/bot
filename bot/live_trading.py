@@ -337,6 +337,8 @@ class LiveTradingEngine:
         symbol = signal.get('symbol')
         if not symbol:
             return True, None
+        if getattr(config, 'ALLOW_MULTIPLE_SAME_SYMBOL', False):
+            return True, None
         entry_price = signal.get('price')
         if entry_price is None:
             return True, None
