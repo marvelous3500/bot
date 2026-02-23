@@ -148,8 +148,8 @@ USE_DAILY_BIAS_FILTER = True – even stricter; test both together.
 KINGSLEY_DISPLACEMENT_RATIO = 0.7 – stricter (like BOS strategy), fewer but stronger entries.
 KINGSLEY_DISPLACEMENT_RATIO = 0.5 – looser, more trades.
 4. 15m window
-KINGSLEY_15M_WINDOW_HOURS = 4 – only recent setups.
-KINGSLEY_15M_WINDOW_HOURS = 12 – more setups, possibly noisier.
+KINGSLEY_5M_WINDOW_HOURS = 4 – only recent setups.
+KINGSLEY_5M_WINDOW_HOURS = 12 – more setups, possibly noisier.
 5. Risk:reward
 RISK_REWARD_RATIO = 3.0 – smaller TP, easier to hit, more wins.
 RISK_REWARD_RATIO = 5.0 – larger TP, fewer wins but bigger when they hit.

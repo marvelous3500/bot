@@ -131,6 +131,70 @@ def _identify_ob_kingsley(df, bos_index, ob_lookback=20):
                 }
     return None
 
+def detect_breaker_block(df, bias, ob_lookback=20, use_body=True):
+    """
+    Find a breaker block (invalidated OB) that aligns with bias.
+    - Bullish bias: need failed bearish OB (price swept ob_low before BOS)
+    - Bearish bias: need failed bullish OB (price swept ob_high before BOS)
+    Returns zone {high, low, midpoint, direction} or None.
+    """
+    if df is None or df.empty or len(df) < 5:
+        return None
+    # Find last BOS bar in bias direction
+    bos_idx = None
+    for i in range(len(df) - 1, -1, -1):
+        if bias == "BULLISH" and df.iloc[i].get("bos_bull"):
+            bos_idx = i
+            break
+        if bias == "BEARISH" and df.iloc[i].get("bos_bear"):
+            bos_idx = i
+            break
+    if bos_idx is None or bos_idx <= 0:
+        return None
+    # Look backward for OB in OPPOSITE direction
+    opp_direction = "BEARISH" if bias == "BULLISH" else "BULLISH"
+    for i in range(bos_idx - 1, max(0, bos_idx - ob_lookback), -1):
+        candle = df.iloc[i]
+        if opp_direction == "BEARISH":
+            if candle["close"] >= candle["open"]:
+                continue
+            ob_high = max(candle["open"], candle["close"]) if use_body else candle["high"]
+            ob_low = min(candle["open"], candle["close"]) if use_body else candle["low"]
+            # Check if broken: any bar between OB and BOS has low < ob_low
+            broken = False
+            for j in range(i + 1, bos_idx):
+                if df.iloc[j]["low"] < ob_low:
+                    broken = True
+                    break
+            if broken:
+                return {
+                    "high": ob_high,
+                    "low": ob_low,
+                    "midpoint": (ob_high + ob_low) / 2,
+                    "time": df.index[i],
+                    "direction": "BULLISH",
+                }
+        else:
+            if candle["close"] <= candle["open"]:
+                continue
+            ob_high = max(candle["open"], candle["close"]) if use_body else candle["high"]
+            ob_low = min(candle["open"], candle["close"]) if use_body else candle["low"]
+            broken = False
+            for j in range(i + 1, bos_idx):
+                if df.iloc[j]["high"] > ob_high:
+                    broken = True
+                    break
+            if broken:
+                return {
+                    "high": ob_high,
+                    "low": ob_low,
+                    "midpoint": (ob_high + ob_low) / 2,
+                    "time": df.index[i],
+                    "direction": "BEARISH",
+                }
+    return None
+
+
 def detect_shallow_tap(price_low, price_high, ob_high, ob_low, ob_midpoint):
     """Checks if price tapped into the OB."""
     entered_ob = price_low <= ob_high and price_high >= ob_low

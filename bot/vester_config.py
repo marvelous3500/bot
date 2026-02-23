@@ -1,0 +1,70 @@
+"""
+VesterStrategy configuration: multi-timeframe smart-money (1H bias -> 5M setup -> 1M entry).
+Reads from config.VESTER_* with fallback defaults.
+"""
+try:
+    import config
+except ImportError:
+    config = None
+
+
+def _get(key, default):
+    """Get from config or vester defaults."""
+    if config and hasattr(config, key):
+        return getattr(config, key)
+    return default
+
+
+# Symbols
+VESTER_BACKTEST_SYMBOL = _get("VESTER_BACKTEST_SYMBOL", "GC=F")
+VESTER_LIVE_SYMBOL = _get("VESTER_LIVE_SYMBOL", "XAUUSDm")
+VESTER_YAHOO_TO_MT5 = _get("VESTER_YAHOO_TO_MT5", {"GC=F": "XAUUSDm", "GBPUSD=X": "GBPUSDm", "BTC-USD": "BTCUSDm", "^NDX": "NAS100m"})
+
+# Structure detection
+SWING_LENGTH = _get("VESTER_SWING_LENGTH", 3)
+OB_LOOKBACK = _get("VESTER_OB_LOOKBACK", 20)
+FVG_LOOKBACK = _get("VESTER_FVG_LOOKBACK", 30)
+LIQUIDITY_LOOKBACK = _get("VESTER_LIQUIDITY_LOOKBACK", 5)
+
+# HTF bias (1H)
+HTF_LOOKBACK_HOURS = _get("VESTER_HTF_LOOKBACK_HOURS", 48)
+REQUIRE_HTF_ZONE_CONFIRMATION = _get("VESTER_REQUIRE_HTF_ZONE_CONFIRMATION", False)
+REJECTION_WICK_RATIO = _get("VESTER_REJECTION_WICK_RATIO", 0.5)
+REJECTION_BODY_RATIO = _get("VESTER_REJECTION_BODY_RATIO", 0.3)
+
+# 4H confirmation (same logic as 1H)
+REQUIRE_4H_BIAS = _get("VESTER_REQUIRE_4H_BIAS", False)
+H4_AS_FILTER = _get("VESTER_4H_AS_FILTER", True)  # True = block only when 4H opposite; False = require match
+REQUIRE_4H_ZONE_CONFIRMATION = _get("VESTER_REQUIRE_4H_ZONE_CONFIRMATION", True)
+H4_LOOKBACK_BARS = _get("VESTER_4H_LOOKBACK_BARS", 24)
+REQUIRE_BREAKER_BLOCK = _get("VESTER_REQUIRE_BREAKER_BLOCK", False)
+BREAKER_BLOCK_4H = _get("VESTER_BREAKER_BLOCK_4H", False)
+
+# 5M setup window (hours)
+M5_WINDOW_HOURS = _get("VESTER_M5_WINDOW_HOURS", 12)
+USE_LIQ_LEVEL_AS_ZONE = _get("VESTER_USE_LIQ_LEVEL_AS_ZONE", True)
+LIQ_ZONE_ATR_MULT = _get("VESTER_LIQ_ZONE_ATR_MULT", 0.5)
+ALLOW_SIMPLE_ZONE_ENTRY = _get("VESTER_ALLOW_SIMPLE_ZONE_ENTRY", True)
+REQUIRE_5M_SWEEP = _get("VESTER_REQUIRE_5M_SWEEP", False)
+
+# Filters
+MAX_SPREAD_POINTS = _get("VESTER_MAX_SPREAD_POINTS", 50.0)
+MAX_CANDLE_VOLATILITY_ATR_MULT = _get("VESTER_MAX_CANDLE_VOLATILITY_ATR_MULT", 4.0)
+USE_NEWS_FILTER = _get("VESTER_USE_NEWS_FILTER", False)
+NEWS_BUFFER_MINUTES = _get("VESTER_NEWS_BUFFER_MINUTES", 15)
+
+# Risk management
+RISK_PER_TRADE = _get("VESTER_RISK_PER_TRADE", 0.10)
+MAX_TRADES_PER_SESSION = _get("VESTER_MAX_TRADES_PER_SESSION", 2)
+DAILY_LOSS_LIMIT_PCT = _get("VESTER_DAILY_LOSS_LIMIT_PCT", 5.0)
+USE_TRAILING_STOP = _get("VESTER_USE_TRAILING_STOP", False)
+MIN_RR = _get("VESTER_MIN_RR", 3.0)
+
+# Displacement candle
+DISPLACEMENT_RATIO = _get("VESTER_DISPLACEMENT_RATIO", 0.5)
+SL_BUFFER = _get("VESTER_SL_BUFFER", 1.0)
+SL_METHOD = _get("VESTER_SL_METHOD", "HYBRID")
+SL_ATR_MULT = _get("VESTER_SL_ATR_MULT", 0.5)
+SL_MICRO_TF = _get("VESTER_SL_MICRO_TF", "1m")
+VESTER_ONE_SIGNAL_PER_SETUP = _get("VESTER_ONE_SIGNAL_PER_SETUP", True)
+VESTER_MAX_TRADES_PER_SETUP = _get("VESTER_MAX_TRADES_PER_SETUP", None)  # None = unlimited, 1 = one per setup, 3 = up to 3

@@ -227,6 +227,23 @@ class MT5Connector:
         margin = mt5.order_calc_margin(trade_type, symbol, volume, price)
         return float(margin) if margin is not None else None
 
+    def is_market_open(self, symbol):
+        """Return True if market is open for trading. False on weekend (forex/gold) or when trade_mode is disabled.
+        Crypto (BTC, ETH, etc.) trades 24/7 — skip weekend check for those."""
+        from datetime import datetime
+        now_utc = datetime.utcnow()
+        s = (symbol or "").upper().replace("-", "").replace("_", "")
+        is_crypto = "BTC" in s or "ETH" in s or "CRYPTO" in s
+        if not is_crypto and now_utc.weekday() >= 5:  # Saturday=5, Sunday=6 — forex/gold closed
+            return False
+        info = mt5.symbol_info(symbol)
+        if info is None:
+            return False
+        trade_mode = getattr(info, 'trade_mode', None)
+        if trade_mode == 0:  # SYMBOL_TRADE_MODE_DISABLED
+            return False
+        return True
+
     def get_symbol_info(self, symbol):
         info = mt5.symbol_info(symbol)
         if info is None:

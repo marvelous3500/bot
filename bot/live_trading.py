@@ -6,16 +6,41 @@ from datetime import datetime, timedelta
 from .connector_interface import get_connector, TIMEFRAME_M1, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
 from .paper_trading import PaperTrading
 from .trade_approver import TradeApprover
-from .strategies import H1M5BOSStrategy, KingsleyGoldStrategy, MarvellousStrategy, TestStrategy
+from .strategies import MarvellousStrategy, VesterStrategy
 from .indicators_bos import detect_swing_highs_lows, detect_break_of_structure
 from ai import get_signal_confidence, explain_trade, speak
+from .telegram_notifier import send_setup_notification
+
+
+def _print_live_checklist():
+    """Print real-money checklist at live startup. See REAL_MONEY_CHECKLIST.md for full details."""
+    print("\n" + "=" * 50)
+    print("LIVE TRADING CHECKLIST (verify before continuing)")
+    print("=" * 50)
+    items = [
+        ("Paper traded 2+ weeks with target strategy", True),
+        ("Backtest with spread/commission shows acceptable performance", True),
+        ("MANUAL_APPROVAL = True for first live runs", config.MANUAL_APPROVAL),
+        ("MAX_TRADES_PER_DAY = 2 or 3", config.MAX_TRADES_PER_DAY <= 3),
+        (".env has correct MT5 server for real account (not Trial)", True),
+        ("Position size = 0.01 or minimum for first trades", True),
+        ("LIVE_CONFIRM_ON_START = True to confirm before loop", getattr(config, 'LIVE_CONFIRM_ON_START', False)),
+        ("SKIP_WHEN_MARKET_CLOSED = True (no weekend trades)", getattr(config, 'SKIP_WHEN_MARKET_CLOSED', True)),
+    ]
+    for desc, ok in items:
+        mark = "[OK]" if ok else "[?]"
+        print(f"  {mark} {desc}")
+    print("  [ ] Real money at risk. Only use capital you can afford to lose.")
+    print("=" * 50 + "\n")
+
 
 class LiveTradingEngine:
     """Main live trading engine that runs strategies continuously."""
 
-    def __init__(self, strategy_name='h1_m5_bos', paper_mode=True):
+    def __init__(self, strategy_name='marvellous', paper_mode=True, symbol=None):
         self.strategy_name = strategy_name
         self.paper_mode = paper_mode
+        self.cli_symbol = symbol  # --symbol from CLI (e.g. 'BTC-USD'); overrides config for live/paper
         self.mt5 = get_connector(
             login=config.MT5_LOGIN,
             password=config.MT5_PASSWORD,
@@ -32,6 +57,60 @@ class LiveTradingEngine:
             self.approver = TradeApprover()
         self.trades_today = []
         self.running = False
+        self._trades_per_setup = {}  # (symbol, type, setup_key) -> count
+
+    def _get_setup_key(self, signal):
+        """Return hashable key (symbol, type, setup_str) for setup tracking, or None if not applicable."""
+        symbol = signal.get('symbol', '')
+        order_type = signal.get('type', '')
+        if not symbol or not order_type:
+            return None
+        setup_ts = None
+        if self.strategy_name == 'vester':
+            setup_ts = signal.get('setup_5m')
+            if setup_ts is None:
+                t = signal.get('time')
+                if t is not None:
+                    ts = t if hasattr(t, 'floor') else pd.Timestamp(t)
+                    setup_ts = ts.floor('5min')
+        elif self.strategy_name == 'marvellous':
+            setup_ts = signal.get('setup_m15')
+            if setup_ts is None:
+                t = signal.get('time')
+                if t is not None:
+                    ts = t if hasattr(t, 'floor') else pd.Timestamp(t)
+                    setup_ts = ts.floor('15min')
+        if setup_ts is None:
+            return None
+        setup_str = setup_ts.isoformat() if hasattr(setup_ts, 'isoformat') else str(setup_ts)
+        return (symbol, order_type, setup_str)
+
+    def _check_setup_limit(self, signal):
+        """Return (True, None) if OK to trade, else (False, reason)."""
+        max_per_setup = None
+        if self.strategy_name == 'vester':
+            max_per_setup = getattr(config, 'VESTER_MAX_TRADES_PER_SETUP', None)
+            if max_per_setup is None:
+                max_per_setup = 1 if getattr(config, 'VESTER_ONE_SIGNAL_PER_SETUP', True) else None
+        elif self.strategy_name == 'marvellous':
+            max_per_setup = getattr(config, 'MARVELLOUS_MAX_TRADES_PER_SETUP', None)
+            if max_per_setup is None:
+                max_per_setup = 1 if getattr(config, 'MARVELLOUS_ONE_SIGNAL_PER_SETUP', True) else None
+        if max_per_setup is None:
+            return True, None
+        key = self._get_setup_key(signal)
+        if key is None:
+            return True, None
+        count = self._trades_per_setup.get(key, 0)
+        if count >= max_per_setup:
+            return False, f"Max trades per setup reached ({count}/{max_per_setup})"
+        return True, None
+
+    def _record_setup_trade(self, signal):
+        """Increment trades-per-setup count after successful execution."""
+        key = self._get_setup_key(signal)
+        if key is not None:
+            self._trades_per_setup[key] = self._trades_per_setup.get(key, 0) + 1
 
     def connect(self):
         return self.mt5.connect()
@@ -96,18 +175,24 @@ class LiveTradingEngine:
         return True, None
 
     def _get_symbol_for_bias(self):
-        """Return the symbol used for bias-of-day (matches strategy's primary symbol)."""
+        """Return the symbol used for bias-of-day and market-open check (matches strategy's trading symbol)."""
         if self.strategy_name == 'marvellous':
             from . import marvellous_config as mc
-            symbol = getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
-        elif self.strategy_name in ('kingsely_gold', 'test'):
-            symbol = (
-                config.LIVE_SYMBOLS.get('XAUUSD') or
-                getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSDm') or
-                'XAUUSDm'
-            )
+            if self.cli_symbol:
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
+            else:
+                symbol = getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
+        elif self.strategy_name == 'vester':
+            from . import vester_config as vc
+            if self.cli_symbol:
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'VESTER_LIVE_SYMBOL', vc.VESTER_LIVE_SYMBOL)
+            else:
+                symbol = getattr(config, 'VESTER_LIVE_SYMBOL', vc.VESTER_LIVE_SYMBOL)
         else:
-            symbol = list(config.LIVE_SYMBOLS.values())[0]
+            if self.cli_symbol:
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
+            else:
+                symbol = config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
         return symbol
 
     def _get_bias_of_day(self, symbol):
@@ -130,76 +215,20 @@ class LiveTradingEngine:
         return result
 
     def run_strategy(self):
-        if self.strategy_name in ('kingsely_gold', 'marvellous', 'test'):
-            symbol = (
-                config.LIVE_SYMBOLS.get('XAUUSD') or
-                config.LIVE_SYMBOLS.get('GOLD') or
-                next((v for k, v in config.LIVE_SYMBOLS.items() if 'XAU' in k.upper() or 'GOLD' in k.upper()), None) or
-                list(config.LIVE_SYMBOLS.values())[0]
-            )
-        else:
-            symbol = list(config.LIVE_SYMBOLS.values())[0]
-        if self.strategy_name == 'h1_m5_bos':
-            df_h1 = self.mt5.get_bars(symbol, TIMEFRAME_H1, count=200)
-            df_5m = self.mt5.get_bars(symbol, TIMEFRAME_M5, count=1000)
-            df_4h = self.mt5.get_bars(symbol, TIMEFRAME_H4, count=100) if getattr(config, 'USE_4H_BIAS_FILTER', False) else None
-            df_daily = self.mt5.get_bars(symbol, TIMEFRAME_D1, count=50) if getattr(config, 'USE_DAILY_BIAS_FILTER', False) else None
-            if df_h1 is None or df_5m is None:
-                if getattr(config, 'LIVE_DEBUG', False):
-                    print(f"[LIVE_DEBUG] No data: H1={df_h1 is not None}, M5={df_5m is not None}")
-                return []
-            if getattr(config, 'LIVE_DEBUG', False):
-                last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
-                last_m5 = df_5m.index[-1] if len(df_5m) > 0 else None
-                print(f"[LIVE_DEBUG] {symbol} H1: {len(df_h1)} bars, last={last_h1} | M5: {len(df_5m)} bars, last={last_m5}")
-            strat = H1M5BOSStrategy(df_h1, df_5m, df_4h=df_4h, df_daily=df_daily)
-            strat.prepare_data()
-            signals_df = strat.run_backtest()
-            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] Strategy returned 0 signals (no BOS + kill zone + entry)")
-        elif self.strategy_name == 'kingsely_gold':
-            gold_symbols = list(dict.fromkeys([
-                symbol, getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSD'), 'GOLD', 'XAUUSD'
-            ]))
-            df_4h, df_h1, df_15m, df_daily = None, None, None, None
-            for sym in gold_symbols:
-                df_4h = self.mt5.get_bars(sym, TIMEFRAME_H4, count=100)
-                df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
-                df_15m = self.mt5.get_bars(sym, TIMEFRAME_M15, count=1000)
-                if getattr(config, 'USE_DAILY_BIAS_FILTER', False):
-                    df_daily = self.mt5.get_bars(sym, TIMEFRAME_D1, count=50)
-                has_all = df_4h is not None and df_h1 is not None and df_15m is not None
-                needs_daily = getattr(config, 'USE_DAILY_BIAS_FILTER', False)
-                if has_all and (not needs_daily or df_daily is not None):
-                    symbol = sym
-                    break
-            if df_4h is None or df_h1 is None or df_15m is None:
-                if getattr(config, 'LIVE_DEBUG', False):
-                    h4_ok = "OK" if df_4h is not None else "MISSING"
-                    h1_ok = "OK" if df_h1 is not None else "MISSING"
-                    m15_ok = "OK" if df_15m is not None else "MISSING"
-                    print(f"[LIVE_DEBUG] kingsely_gold: Bar data missing — 4H={h4_ok}, H1={h1_ok}, 15m={m15_ok} (tried: {gold_symbols})")
-                    print(f"[LIVE_DEBUG]   → Check: symbol in MT5 Market Watch, market open (not weekend), broker symbol name")
-                return []
-            if getattr(config, 'LIVE_DEBUG', False):
-                last_4h = df_4h.index[-1] if len(df_4h) > 0 else None
-                last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
-                last_15m = df_15m.index[-1] if len(df_15m) > 0 else None
-                print(f"[LIVE_DEBUG] {symbol} 4H: {len(df_4h)} bars, last={last_4h} | H1: {len(df_h1)} bars, last={last_h1} | 15m: {len(df_15m)} bars, last={last_15m}")
-            strat = KingsleyGoldStrategy(df_4h, df_h1, df_15m, df_daily=df_daily, verbose=False)
-            strat.prepare_data()
-            signals_df = strat.run_backtest()
-            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] kingsely_gold: 0 signals (no H1+15m BOS + OB tap + Liq sweep + OB test)")
-        elif self.strategy_name == 'marvellous':
+        symbol = (
+            (config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None) or
+            config.LIVE_SYMBOLS.get('XAUUSD') or
+            config.LIVE_SYMBOLS.get('GOLD') or
+            next((v for k, v in config.LIVE_SYMBOLS.items() if 'XAU' in k.upper() or 'GOLD' in k.upper()), None) or
+            list(config.LIVE_SYMBOLS.values())[0]
+        )
+        if self.strategy_name == 'marvellous':
             from . import marvellous_config as mc
-            # Use configured Marvellous symbol first (gold when MARVELLOUS_SYMBOL is None)
+            # CLI --symbol overrides: try that MT5 symbol first (e.g. BTC-USD -> BTCUSDm)
+            cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
             marv_live = getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
             gold_symbols = list(dict.fromkeys([
-                marv_live,
-                symbol,
-                'XAUUSD',
-                'XAUUSDm',
+                s for s in [cli_mt5, marv_live, symbol, 'XAUUSD', 'XAUUSDm'] if s
             ]))
             entry_tf = getattr(mc, 'ENTRY_TIMEFRAME', '5m')
             df_daily = df_4h = df_h1 = df_m15 = df_entry = None
@@ -208,9 +237,11 @@ class LiveTradingEngine:
                 df_4h = self.mt5.get_bars(sym, TIMEFRAME_H4, count=100)
                 df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
                 df_m15 = self.mt5.get_bars(sym, TIMEFRAME_M15, count=1000)
-                df_entry = self.mt5.get_bars(
-                    sym, TIMEFRAME_M1 if entry_tf == '1m' else TIMEFRAME_M5, count=1000
-                )
+                if entry_tf == '15m':
+                    df_entry = df_m15.copy() if df_m15 is not None else None
+                else:
+                    tf_entry = TIMEFRAME_M1 if entry_tf == '1m' else TIMEFRAME_M5
+                    df_entry = self.mt5.get_bars(sym, tf_entry, count=1000)
                 if all(x is not None for x in (df_daily, df_4h, df_h1, df_m15, df_entry)):
                     symbol = sym
                     break
@@ -219,47 +250,55 @@ class LiveTradingEngine:
                     print(f"[LIVE_DEBUG] marvellous: Bar data missing (tried: {gold_symbols})")
                 return []
             if getattr(config, 'LIVE_DEBUG', False):
-                print(f"[LIVE_DEBUG] {symbol} marvellous: D1/4H/H1/M15/Entry loaded")
+                print(f"[LIVE_DEBUG] {symbol} marvellous: D1/4H/H1/M15/Entry({entry_tf}) loaded")
             strat = MarvellousStrategy(
                 df_daily=df_daily,
                 df_4h=df_4h,
                 df_h1=df_h1,
                 df_m15=df_m15,
                 df_entry=df_entry,
+                symbol=symbol,
                 verbose=False,
             )
             strat.prepare_data()
             signals_df = strat.run_backtest()
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] marvellous: 0 signals")
-        elif self.strategy_name == 'test':
-            gold_symbols = list(dict.fromkeys([
-                symbol,
-                getattr(config, 'TEST_LIVE_SYMBOL', 'XAUUSD'),
-                getattr(config, 'KINGSLEY_LIVE_SYMBOL', 'XAUUSDm'),  # Exness uses XAUUSDm
-                'GOLD',
-                'XAUUSD',
-                'XAUUSDm',
+        elif self.strategy_name == 'vester':
+            from . import vester_config as vc
+            cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
+            vester_live = getattr(config, 'VESTER_LIVE_SYMBOL', vc.VESTER_LIVE_SYMBOL)
+            vester_symbols = list(dict.fromkeys([
+                s for s in [cli_mt5, vester_live, symbol, 'XAUUSD', 'XAUUSDm'] if s
             ]))
-            df_h1 = None
-            for sym in gold_symbols:
+            df_h1 = df_m5 = df_m1 = df_h4 = None
+            agg = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+            for sym in vester_symbols:
                 df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
-                if df_h1 is not None:
+                df_m5 = self.mt5.get_bars(sym, TIMEFRAME_M5, count=1000)
+                df_m1 = self.mt5.get_bars(sym, TIMEFRAME_M1, count=1000)
+                if all(x is not None for x in (df_h1, df_m5, df_m1)):
                     symbol = sym
+                    df_h4 = df_h1.resample("4h").agg(agg).dropna()
                     break
-            if df_h1 is None:
+            if df_h1 is None or df_m5 is None or df_m1 is None:
                 if getattr(config, 'LIVE_DEBUG', False):
-                    print(f"[LIVE_DEBUG] test: No H1 data (tried: {gold_symbols})")
-                    print(f"[LIVE_DEBUG]   → Check: symbol in MT5 Market Watch, market open (not weekend), broker symbol name")
+                    print(f"[LIVE_DEBUG] vester: Bar data missing (tried: {vester_symbols})")
                 return []
-            if getattr(config, 'LIVE_DEBUG', False) or getattr(config, 'MT5_VERBOSE', False):
-                last_h1 = df_h1.index[-1] if len(df_h1) > 0 else None
-                print(f"[MT5] test: {symbol} H1: {len(df_h1)} bars, last={last_h1}")
-            strat = TestStrategy(df_h1, verbose=False)
+            if getattr(config, 'LIVE_DEBUG', False):
+                print(f"[LIVE_DEBUG] {symbol} vester: H1/M5/M1" + ("/4H" if df_h4 is not None else "") + " loaded")
+            strat = VesterStrategy(
+                df_h1=df_h1,
+                df_m5=df_m5,
+                df_m1=df_m1,
+                df_h4=df_h4,
+                symbol=symbol,
+                verbose=False,
+            )
             strat.prepare_data()
             signals_df = strat.run_backtest()
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] test: 0 signals (need at least 4 H1 bars)")
+                print(f"[LIVE_DEBUG] vester: 0 signals")
         else:
             print(f"Unknown strategy: {self.strategy_name}")
             return []
@@ -274,11 +313,12 @@ class LiveTradingEngine:
             elif tick:
                 latest_signal['symbol'] = symbol
                 latest_signal['price'] = tick['ask'] if latest_signal['type'] == 'BUY' else tick['bid']
-                # Kingsley/Marvellous Gold: add buffer below/above lq_level so slight price move doesn't invalidate SL
-                if self.strategy_name in ('kingsely_gold', 'marvellous'):
+                # Marvellous/Vester: add buffer below/above so slight price move doesn't invalidate SL
+                if self.strategy_name in ('marvellous', 'vester'):
                     sl = latest_signal.get('sl')
                     if sl is not None:
-                        buf = getattr(config, 'MARVELLOUS_SL_BUFFER', 1.0) if self.strategy_name == 'marvellous' else getattr(config, 'KINGSLEY_SL_BUFFER', 1.0)
+                        buf_key = 'MARVELLOUS_SL_BUFFER' if self.strategy_name == 'marvellous' else 'VESTER_SL_BUFFER'
+                        buf = config.get_symbol_config(symbol, buf_key) or getattr(config, buf_key, 1.0)
                         try:
                             sl_f = float(sl)
                             if latest_signal['type'] == 'BUY':
@@ -287,41 +327,57 @@ class LiveTradingEngine:
                                 latest_signal['sl'] = sl_f + buf  # Move SL higher for SELL
                         except (TypeError, ValueError):
                             pass
-                # Kingsley/Marvellous Gold: if live price invalidated SL and fallback enabled, use fallback SL
-                use_fallback = (
-                    (self.strategy_name == 'kingsely_gold' and getattr(config, 'KINGSLEY_USE_SL_FALLBACK', False)) or
-                    (self.strategy_name == 'marvellous' and getattr(config, 'MARVELLOUS_USE_SL_FALLBACK', False))
-                )
+                # Marvellous: if live price invalidated SL and fallback enabled, use fallback SL
+                use_fallback = self.strategy_name == 'marvellous' and getattr(config, 'MARVELLOUS_USE_SL_FALLBACK', False)
                 if use_fallback:
                     sl = latest_signal.get('sl')
                     price = latest_signal['price']
                     if sl is not None:
                         try:
                             sl_f, price_f = float(sl), float(price)
-                            fallback_dist = getattr(config, 'MARVELLOUS_SL_FALLBACK_DISTANCE', 5.0) if self.strategy_name == 'marvellous' else getattr(config, 'KINGSLEY_SL_FALLBACK_DISTANCE', 5.0)
+                            fallback_dist = config.get_symbol_config(symbol, 'MARVELLOUS_SL_FALLBACK_DISTANCE') or getattr(config, 'MARVELLOUS_SL_FALLBACK_DISTANCE', 5.0)
                             if latest_signal['type'] == 'BUY' and sl_f >= price_f:
                                 latest_signal['sl'] = price_f - fallback_dist
                             elif latest_signal['type'] == 'SELL' and sl_f <= price_f:
                                 latest_signal['sl'] = price_f + fallback_dist
                         except (TypeError, ValueError):
                             pass
+                # Cap SL at MAX_SL_PIPS (converted per symbol's pip size)
+                # Use PIP_SIZE from SYMBOL_CONFIGS if set, else MT5's get_pip_size (e.g. gold 0.10)
+                max_sl_pips = getattr(config, 'MAX_SL_PIPS', None)
+                if max_sl_pips is not None and max_sl_pips > 0 and self.mt5.connected:
+                    pip_size = config.get_symbol_config(symbol, 'PIP_SIZE')
+                    if pip_size is None:
+                        pip_size = self.mt5.get_pip_size(symbol)
+                    if pip_size is not None and pip_size > 0:
+                        max_dist = max_sl_pips * pip_size
+                        price_f = float(latest_signal['price'])
+                        sl = latest_signal.get('sl')
+                        if sl is not None:
+                            try:
+                                sl_f = float(sl)
+                                sl_dist = abs(price_f - sl_f)
+                                if sl_dist > max_dist:
+                                    if latest_signal['type'] == 'BUY':
+                                        latest_signal['sl'] = price_f - max_dist
+                                    else:
+                                        latest_signal['sl'] = price_f + max_dist
+                            except (TypeError, ValueError):
+                                pass
                 sl_dist = abs(latest_signal['price'] - latest_signal.get('sl', 0))
                 if latest_signal['type'] == 'BUY':
                     latest_signal['tp'] = latest_signal['price'] + (sl_dist * config.RISK_REWARD_RATIO)
                 else:
                     latest_signal['tp'] = latest_signal['price'] - (sl_dist * config.RISK_REWARD_RATIO)
-                # Test strategy: use fixed small lot to ensure order goes through
-                if self.strategy_name == 'test':
-                    lot = getattr(config, 'TEST_FIXED_LOT', 0.01) or 0.01
-                    latest_signal['volume'] = max(0.01, float(lot))
                 # Dynamic lot size: risk % of current balance (matches backtest)
-                elif getattr(config, 'USE_DYNAMIC_POSITION_SIZING', True) and self.mt5.connected:
+                if getattr(config, 'USE_DYNAMIC_POSITION_SIZING', True) and self.mt5.connected:
                     account = self.paper.get_account_info() if self.paper_mode else self.mt5.get_account_info()
                     balance = account['balance'] if account else 0
                     sl = latest_signal.get('sl')
                     if sl is not None and balance > 0:
+                        risk_pct = getattr(config, 'VESTER_RISK_PER_TRADE', config.RISK_PER_TRADE) if self.strategy_name == 'vester' else config.RISK_PER_TRADE
                         lot = self.mt5.calc_lot_size_from_risk(
-                            symbol, balance, latest_signal['price'], sl, config.RISK_PER_TRADE
+                            symbol, balance, latest_signal['price'], sl, risk_pct
                         )
                         if lot is not None:
                             latest_signal['volume'] = lot
@@ -356,6 +412,8 @@ class LiveTradingEngine:
         """Allow new entry on same symbol only when we have no position or when adding at TP1/TP2."""
         symbol = signal.get('symbol')
         if not symbol:
+            return True, None
+        if getattr(config, 'ALLOW_MULTIPLE_SAME_SYMBOL', False):
             return True, None
         entry_price = signal.get('price')
         if entry_price is None:
@@ -504,58 +562,55 @@ class LiveTradingEngine:
             if closed:
                 print(f"[UPDATE] {len(closed)} positions closed automatically")
 
-    def _check_breakeven(self):
-        """When a position is in profit by BREAKEVEN_PIPS, move SL to half breakeven (lock in half the pips). Live only."""
-        if self.paper_mode or not getattr(config, 'BREAKEVEN_ENABLED', False):
+    def _check_lock_in(self):
+        """When price reaches LOCK_IN_TRIGGER_RR (e.g. 3.3R), move SL to LOCK_IN_AT_RR (e.g. 3R). Live only."""
+        if self.paper_mode or not getattr(config, 'LOCK_IN_ENABLED', True):
             return
-        required_pips = getattr(config, 'BREAKEVEN_PIPS', 3.0)
-        half_pips = required_pips / 2.0
+        trigger_rr = getattr(config, 'LOCK_IN_TRIGGER_RR', 3.3)
+        lock_at_rr = getattr(config, 'LOCK_IN_AT_RR', 3.0)
+        risk_ratio = getattr(config, 'RISK_REWARD_RATIO', 5.0)
         positions = self.mt5.get_positions()
         for pos in positions:
             ticket = pos.get('ticket')
             symbol = pos.get('symbol')
             price_open = pos.get('price_open')
+            tp = pos.get('tp')
             sl = pos.get('sl')
             pos_type = pos.get('type')
-            if ticket is None or symbol is None or price_open is None:
+            if ticket is None or symbol is None or price_open is None or tp is None:
                 continue
             try:
                 price_open = float(price_open)
+                tp = float(tp)
             except (TypeError, ValueError):
                 continue
-            pip_size = self.mt5.get_pip_size(symbol)
-            if pip_size is None or pip_size <= 0:
+            sl_dist = abs(tp - price_open) / risk_ratio
+            if sl_dist <= 0:
+                continue
+            if pos_type == 'BUY':
+                lock_in_trigger = price_open + sl_dist * trigger_rr
+                lock_in_sl = price_open + sl_dist * lock_at_rr
+                sl_ok = sl is not None and sl != 0 and float(sl) >= lock_in_sl - 0.00001
+            else:
+                lock_in_trigger = price_open - sl_dist * trigger_rr
+                lock_in_sl = price_open - sl_dist * lock_at_rr
+                sl_ok = sl is not None and sl != 0 and float(sl) <= lock_in_sl + 0.00001
+            if sl_ok:
                 continue
             tick = self.mt5.get_live_price(symbol)
             if not tick:
                 continue
-            if pos_type == 'BUY':
-                current = tick.get('bid')
-            else:
-                current = tick.get('ask')
-            if current is None:
+            current = float(tick.get('bid' if pos_type == 'BUY' else 'ask') or 0)
+            if current == 0:
                 continue
-            try:
-                current = float(current)
-            except (TypeError, ValueError):
+            triggered = (pos_type == 'BUY' and current >= lock_in_trigger) or (pos_type == 'SELL' and current <= lock_in_trigger)
+            if not triggered:
                 continue
-            if pos_type == 'BUY':
-                profit_pips = (current - price_open) / pip_size
-                target_sl = price_open + half_pips * pip_size
-                sl_already_ok = (sl is not None and sl != 0 and float(sl) >= target_sl - pip_size)
-            else:
-                profit_pips = (price_open - current) / pip_size
-                target_sl = price_open - half_pips * pip_size
-                sl_already_ok = (sl is not None and sl != 0 and float(sl) <= target_sl + pip_size)
-            if profit_pips < required_pips:
-                continue
-            if sl_already_ok:
-                continue
-            ok, err = self.mt5.modify_position(ticket, sl=target_sl, tp=pos.get('tp'))
+            ok, err = self.mt5.modify_position(ticket, sl=lock_in_sl, tp=tp)
             if ok:
-                print(f"[BREAKEVEN] Position {ticket} SL moved to half breakeven ({half_pips:.1f} pips) at {target_sl:.5f} (profit was {profit_pips:.1f} pips)")
+                print(f"[LOCK-IN] Position {ticket} SL moved to {lock_at_rr}R at {lock_in_sl:.5f} (price reached {trigger_rr}R)")
             elif getattr(config, 'MT5_VERBOSE', False):
-                print(f"[BREAKEVEN] Failed to move SL for {ticket}: {err}")
+                print(f"[LOCK-IN] Failed to move SL for {ticket}: {err}")
 
     def _log_trade(self, signal, result):
         """Append trade to logs/trades_YYYYMMDD.json."""
@@ -588,63 +643,6 @@ class LiveTradingEngine:
         except Exception as e:
             if getattr(config, 'MT5_VERBOSE', False):
                 print(f"[LOG] Failed to write trade log: {e}")
-
-    def _check_tp1_sl_to_entry(self):
-        """When price reaches TP1, move SL to entry (breakeven). Live only."""
-        if self.paper_mode or not getattr(config, 'TP1_SL_TO_ENTRY_ENABLED', False):
-            return
-        ratio = getattr(config, 'TP1_RATIO', 0.5)
-        positions = self.mt5.get_positions()
-        for pos in positions:
-            ticket = pos.get('ticket')
-            symbol = pos.get('symbol')
-            price_open = pos.get('price_open')
-            tp = pos.get('tp')
-            sl = pos.get('sl')
-            pos_type = pos.get('type')
-            if ticket is None or symbol is None or price_open is None or tp is None:
-                continue
-            try:
-                price_open = float(price_open)
-                tp = float(tp)
-            except (TypeError, ValueError):
-                continue
-            pip_size = self.mt5.get_pip_size(symbol)
-            if pip_size is None or pip_size <= 0:
-                pip_size = 0.0001
-            tolerance = pip_size
-            if pos_type == 'BUY':
-                tp1 = price_open + (tp - price_open) * ratio
-                sl_at_entry = sl is not None and sl != 0 and abs(float(sl) - price_open) <= tolerance
-            else:
-                tp1 = price_open - (price_open - tp) * ratio
-                sl_at_entry = sl is not None and sl != 0 and abs(float(sl) - price_open) <= tolerance
-            if sl_at_entry:
-                continue
-            tick = self.mt5.get_live_price(symbol)
-            if not tick:
-                continue
-            if pos_type == 'BUY':
-                current = tick.get('bid')
-            else:
-                current = tick.get('ask')
-            if current is None:
-                continue
-            try:
-                current = float(current)
-            except (TypeError, ValueError):
-                continue
-            if pos_type == 'BUY':
-                tp1_reached = current >= tp1
-            else:
-                tp1_reached = current <= tp1
-            if not tp1_reached:
-                continue
-            ok, err = self.mt5.modify_position(ticket, sl=price_open, tp=tp)
-            if ok:
-                print(f"[TP1] Position {ticket} SL moved to entry (breakeven) at TP1")
-            elif getattr(config, 'MT5_VERBOSE', False):
-                print(f"[TP1] Failed to move SL for {ticket}: {err}")
 
     def show_status(self):
         if self.paper_mode:
@@ -685,19 +683,14 @@ class LiveTradingEngine:
         per_pair = getattr(config, 'MAX_TRADES_PER_DAY_PER_PAIR', False)
         limit_str = f"{config.MAX_TRADES_PER_DAY}/day per pair" if per_pair else f"{config.MAX_TRADES_PER_DAY}/day"
         print(f"Max trades: {limit_str}" + (f" ({session_limit} per session per pair)" if per_pair and session_limit else (f" ({session_limit} per session)" if session_limit else "")))
+        if not self.paper_mode and getattr(config, 'PRINT_CHECKLIST_ON_START', True):
+            _print_live_checklist()
         if not self.paper_mode and getattr(config, 'LIVE_CONFIRM_ON_START', False):
             resp = input("LIVE MODE — REAL MONEY. Type 'yes' to continue: ").strip().lower()
             if resp != 'yes':
                 print("Aborted.")
                 return
-        if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
-            print("Test strategy: single-run mode (take one trade and exit)")
-            if config.MANUAL_APPROVAL:
-                print("  Use --auto-approve to skip confirmation prompt.\n")
-            else:
-                print()
-        else:
-            print("Press Ctrl+C to stop\n")
+        print("Press Ctrl+C to stop\n")
         self.running = True
         last_signal_time = None
         self._last_run_errors = []  # Capture why trade wasn't executed
@@ -714,18 +707,21 @@ class LiveTradingEngine:
                     break
                 if not self.check_safety_limits():
                     reason = getattr(self, '_limit_reason', 'Trade limit reached')
-                    if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
-                        print(f"{reason}. Exiting.")
-                        self.running = False
-                        break
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_REJECT:
                         speak(f"Trade rejected. Reason: {reason}.")
                     print(f"Waiting... ({reason})")
                     time.sleep(config.LIVE_CHECK_INTERVAL)
                     continue
+                # Skip strategy run when market is closed (weekend or trade disabled)
+                if getattr(config, 'SKIP_WHEN_MARKET_CLOSED', True):
+                    sym = self._get_symbol_for_bias()
+                    if self.mt5.connected and not self.mt5.is_market_open(sym):
+                        if getattr(config, 'MT5_VERBOSE', False):
+                            print(f"[MT5] Market closed for {sym} (weekend or trading disabled). Skipping.")
+                        time.sleep(config.LIVE_CHECK_INTERVAL)
+                        continue
                 self.update_positions()
-                self._check_breakeven()
-                self._check_tp1_sl_to_entry()
+                self._check_lock_in()
                 self._last_run_errors = []
                 if getattr(config, "SHOW_BIAS_OF_DAY", False) and not self.paper_mode and self.mt5.connected:
                     sym = self._get_symbol_for_bias()
@@ -748,6 +744,19 @@ class LiveTradingEngine:
                     signal_time = signal.get('time', datetime.now())
                     if isinstance(signal_time, pd.Timestamp):
                         signal_time = signal_time.to_pydatetime()
+                    # Skip stale signals (setup detected hours/minutes ago)
+                    max_age_min = (
+                        getattr(config, f'{self.strategy_name.upper()}_SIGNAL_MAX_AGE_MINUTES', None)
+                        or getattr(config, 'SIGNAL_MAX_AGE_MINUTES', None)
+                    )
+                    if max_age_min is not None and signal_time:
+                        now = datetime.utcnow()
+                        st = signal_time.replace(tzinfo=None) if hasattr(signal_time, 'tzinfo') and signal_time.tzinfo else signal_time
+                        age_sec = max(0, (now - st).total_seconds())
+                        if age_sec > max_age_min * 60:
+                            self._last_run_errors.append(f"Signal too old ({age_sec/60:.0f} min)")
+                            print(f"[SKIP] Signal too old ({age_sec/60:.0f} min, max {max_age_min} min)")
+                            continue
                     if last_signal_time and abs((signal_time - last_signal_time).total_seconds()) < 300:
                         self._last_run_errors.append("5 min cooldown")
                         print(f"[SKIP] Signal within 5 min of last execution (cooldown)")
@@ -757,6 +766,11 @@ class LiveTradingEngine:
                         if not can_trade:
                             print(f"[SKIP] {limit_reason}")
                             continue
+                    can_setup, setup_reason = self._check_setup_limit(signal)
+                    if not can_setup:
+                        self._last_run_errors.append(setup_reason)
+                        print(f"[SKIP] {setup_reason}")
+                        continue
                     sl = signal.get('sl')
                     sl_dist = abs(float(signal['price']) - float(sl)) if sl is not None else None
                     dollar_risk = self.mt5.calc_dollar_risk(
@@ -773,14 +787,29 @@ class LiveTradingEngine:
                     reason = signal.get('reason', '')
                     if reason:
                         print(f"[REASON] {reason}")
+                    diag = signal.get('marvellous_diagnostic')
+                    if diag and self.strategy_name == 'marvellous':
+                        print(f"[MARVELLOUS DIAGNOSTIC] Check chart at these times:")
+                        for k, v in diag.items():
+                            if v:
+                                print(f"  {k}: {v}")
                     if sl is not None:
                         print(f"[SL] Stop loss: {float(sl):.5f} | Risk in dollars: ${dollar_risk:.2f}" if dollar_risk is not None else f"[SL] Stop loss: {float(sl):.5f} | Risk in dollars: n/a")
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_SIGNAL:
                         reason = signal.get('reason', 'Strategy signal')
                         speak(f"Trade found. {signal['type']} {signal['symbol']}. {reason}. Checking approval.")
+                    # Skip Telegram + execution if market closed (avoid retcode 10018, don't alert on impossible trades)
+                    if getattr(config, 'SKIP_WHEN_MARKET_CLOSED', True) and self.mt5.connected:
+                        sym = signal.get('symbol', '')
+                        if sym and not self.mt5.is_market_open(sym):
+                            print(f"[SKIP] Market closed for {sym}. Not sending to Telegram or executing.")
+                            continue
                     result, exec_err = self.execute_signal(signal)
                     if result:
+                        self._record_setup_trade(signal)
                         last_signal_time = datetime.now()
+                        if getattr(config, 'TELEGRAM_ENABLED', False):
+                            send_setup_notification(signal, self.strategy_name)
                         exec_reason = signal.get('reason', '')
                         print(f"[EXECUTE] Order placed: {result.get('type')} {result.get('volume')} {result.get('symbol')} @ {result.get('price')}")
                         if exec_reason:
@@ -791,26 +820,6 @@ class LiveTradingEngine:
                         print(f"[EXECUTE] Order failed — check [MT5] or [SAFETY] message above for reason.")
                 # Always show status (Open Positions + Total Trades) every loop
                 self.show_status()
-                # Test strategy: single-run mode — always exit after one check
-                if self.strategy_name == 'test' and getattr(config, 'TEST_SINGLE_RUN', False):
-                    if not signals:
-                        print("\nTest strategy: no signal (check XAUUSDm in Market Watch, market open). Exiting.")
-                    else:
-                        trades_done = len(self.trades_today)
-                        if trades_done == 0:
-                            print("\n" + "=" * 50)
-                            print("Test strategy: single run complete — but NO TRADE was executed.")
-                            if self._last_run_errors:
-                                print("Reason(s):")
-                                for e in self._last_run_errors:
-                                    print(f"  • {e}")
-                            else:
-                                print("  (No signal was generated — check data/symbol)")
-                            print("=" * 50)
-                        else:
-                            print(f"\nTest strategy: single run complete. {trades_done} trade(s) executed.")
-                    self.running = False
-                    break
                 # Compact status line so Strategy + Open Positions + Total Trades are always visible
                 if self.paper_mode:
                     n_pos = len(self.paper.get_positions())

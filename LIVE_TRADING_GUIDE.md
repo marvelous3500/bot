@@ -85,19 +85,6 @@ When voice is on, the bot speaks: **trade found** (direction, symbol, reason, â€
 | `LUXALGO_SWING_LENGTH` | Pivot lookback when LuxAlgo enabled (LuxAlgo default: 5) | `5` |
 | `LUXALGO_OB_USE_BODY` | Use candle body (vs full range) for OB when LuxAlgo enabled | `True` |
 
-#### Kingsley Gold (kingsely_gold strategy)
-
-| Setting | Description | Default |
-|--------|-------------|---------|
-| `KINGSLEY_USE_KILL_ZONES` | Only trade during London/NY sessions | `True` |
-| `KINGSLEY_USE_EMA_FILTER` | Require price in direction of EMA | `False` |
-| `KINGSLEY_15M_WINDOW_HOURS` | Max hours to wait for 15m setup after H1 BOS | `8` |
-| `KINGSLEY_DISPLACEMENT_RATIO` | Candle body must be this fraction of range | `0.6` |
-| `KINGSLEY_BACKTEST_SYMBOL` | Yahoo symbol for backtest (e.g. GC=F) | `GC=F` |
-| `KINGSLEY_LIVE_SYMBOL` | MT5 symbol for live/paper (e.g. XAUUSD) | `XAUUSD` |
-| `KINGSLEY_SL_BUFFER` | Price units buffer below/above lq_level for live execution (reduces "Stop loss invalid" when market moves) | `1.0` |
-| `KINGSLEY_USE_SL_FALLBACK` | When True: use fallback SL when live price invalidates lq_level. When False: reject invalid signals. | `True` |
-| `KINGSLEY_SL_FALLBACK_DISTANCE` | Price units for fallback SL (e.g. $5 for gold). Only used when `KINGSLEY_USE_SL_FALLBACK=True`. | `5.0` |
 
 ### 2.2 Environment (.env)
 

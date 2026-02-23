@@ -16,6 +16,7 @@ from ..indicators_bos import (
     detect_break_of_structure,
     identify_order_block,
     detect_shallow_tap,
+    detect_breaker_block,
 )
 from ..news_filter import is_news_safe
 
@@ -89,6 +90,9 @@ def calculate_h1_bias_with_zone_validation(
     if bias == "NEUTRAL":
         return {"bias": "NEUTRAL", "proof": None}
     if not require_zone:
+        if getattr(mc, "REQUIRE_BREAKER_BLOCK", False) and getattr(mc, "BREAKER_BLOCK_TF", "H1").upper() == "H1":
+            if detect_breaker_block(df, bias, ob_lookback=getattr(mc, "MARVELLOUS_OB_LOOKBACK", 20)) is None:
+                return {"bias": "NEUTRAL", "proof": None}
         return {"bias": bias, "proof": {"structure": "BOS", "zone_type": None, "zone_coordinates": None}}
     # Find FVG/OB in lookback
     for i in range(len(df) - 1, max(0, len(df) - 30), -1):
@@ -105,6 +109,9 @@ def calculate_h1_bias_with_zone_validation(
             if ob is not None:
                 zone_top, zone_bottom = ob["high"], ob["low"]
             if _zone_respected(df, zone_top, zone_bottom, wick_pct, body_pct, i, len(df), bias == "BULLISH"):
+                if getattr(mc, "REQUIRE_BREAKER_BLOCK", False) and getattr(mc, "BREAKER_BLOCK_TF", "H1").upper() == "H1":
+                    if detect_breaker_block(df, bias, ob_lookback=getattr(mc, "MARVELLOUS_OB_LOOKBACK", 20)) is None:
+                        return {"bias": "NEUTRAL", "proof": None}
                 return {
                     "bias": bias,
                     "proof": {
@@ -139,6 +146,9 @@ def calculate_4h_bias_with_zone_validation(
     if bias == "NEUTRAL":
         return {"bias": "NEUTRAL", "proof": None}
     if not require_zone:
+        if getattr(mc, "REQUIRE_BREAKER_BLOCK", False) and getattr(mc, "BREAKER_BLOCK_TF", "H1").upper() == "4H":
+            if detect_breaker_block(df, bias, ob_lookback=getattr(mc, "MARVELLOUS_OB_LOOKBACK", 20)) is None:
+                return {"bias": "NEUTRAL", "proof": None}
         return {"bias": bias, "proof": {"structure": "BOS"}}
     for i in range(len(df) - 1, max(0, len(df) - 20), -1):
         row = df.iloc[i]
@@ -151,6 +161,9 @@ def calculate_4h_bias_with_zone_validation(
             zone_bottom = row["high"]
         if zone_top is not None and zone_bottom is not None:
             if _zone_respected(df, zone_top, zone_bottom, wick_pct, body_pct, i, len(df), bias == "BULLISH"):
+                if getattr(mc, "REQUIRE_BREAKER_BLOCK", False) and getattr(mc, "BREAKER_BLOCK_TF", "H1").upper() == "4H":
+                    if detect_breaker_block(df, bias, ob_lookback=getattr(mc, "MARVELLOUS_OB_LOOKBACK", 20)) is None:
+                        return {"bias": "NEUTRAL", "proof": None}
                 return {"bias": bias, "proof": {"structure": "BOS", "zone_coordinates": (zone_top, zone_bottom)}}
     return {"bias": "NEUTRAL", "proof": None}
 
@@ -177,6 +190,9 @@ def calculate_daily_bias_with_ict_rules_and_zone_validation(
     if bias == "NEUTRAL":
         return {"bias": "NEUTRAL", "proof": None}
     if not require_zone:
+        if getattr(mc, "REQUIRE_BREAKER_BLOCK", False) and getattr(mc, "BREAKER_BLOCK_TF", "H1").upper() == "DAILY":
+            if detect_breaker_block(df, bias, ob_lookback=getattr(mc, "MARVELLOUS_OB_LOOKBACK", 20)) is None:
+                return {"bias": "NEUTRAL", "proof": None}
         return {"bias": bias, "proof": {"structure": "BOS"}}
     for i in range(len(df) - 1, max(0, len(df) - 15), -1):
         row = df.iloc[i]
@@ -189,6 +205,9 @@ def calculate_daily_bias_with_ict_rules_and_zone_validation(
             zone_bottom = row["high"]
         if zone_top is not None and zone_bottom is not None:
             if _zone_respected(df, zone_top, zone_bottom, wick_pct, body_pct, i, len(df), bias == "BULLISH"):
+                if getattr(mc, "REQUIRE_BREAKER_BLOCK", False) and getattr(mc, "BREAKER_BLOCK_TF", "H1").upper() == "DAILY":
+                    if detect_breaker_block(df, bias, ob_lookback=getattr(mc, "MARVELLOUS_OB_LOOKBACK", 20)) is None:
+                        return {"bias": "NEUTRAL", "proof": None}
                 return {"bias": bias, "proof": {"structure": "BOS", "zone_coordinates": (zone_top, zone_bottom)}}
     return {"bias": "NEUTRAL", "proof": None}
 
@@ -290,6 +309,7 @@ class MarvellousStrategy:
         df_m15: pd.DataFrame,
         df_entry: pd.DataFrame,
         df_daily_raw: Optional[pd.DataFrame] = None,
+        symbol: Optional[str] = None,
         verbose: bool = False,
     ):
         self.df_daily = df_daily.copy() if df_daily is not None and not df_daily.empty else None
@@ -298,6 +318,7 @@ class MarvellousStrategy:
         self.df_m15 = df_m15.copy()
         self.df_entry = df_entry.copy()
         self.df_daily_raw = df_daily_raw or df_daily
+        self.symbol = symbol
         self.verbose = verbose
 
     def _log(self, msg: str):
@@ -346,6 +367,19 @@ class MarvellousStrategy:
         ob_lookback = mc.MARVELLOUS_OB_LOOKBACK
         liq_lookback = mc.MARVELLOUS_LIQ_SWEEP_LOOKBACK
         tp_lookahead = mc.MARVELLOUS_TP_SWING_LOOKAHEAD
+        max_per_setup = getattr(mc, "MARVELLOUS_MAX_TRADES_PER_SETUP", None)
+        if max_per_setup is None:
+            max_per_setup = 1 if getattr(mc, "MARVELLOUS_ONE_SIGNAL_PER_SETUP", True) else None
+        trades_per_m15_setup: Dict = {}
+        apply_limits = getattr(config, "BACKTEST_APPLY_TRADE_LIMITS", False)
+        trades_per_day: Dict[str, int] = {}
+        trades_per_session: Dict[str, int] = {}
+        sl_method = getattr(mc, "MARVELLOUS_SL_METHOD", "OB")
+        sl_atr_mult = getattr(mc, "MARVELLOUS_SL_ATR_MULT", 1.0)
+        sl_micro_tf = getattr(mc, "MARVELLOUS_SL_MICRO_TF", "1m")
+        entry_tf = getattr(mc, "ENTRY_TIMEFRAME", "5m")
+        agg = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+        pip = 0.01 if ("XAU" in str(self.symbol or "") or "GC" in str(self.symbol or "")) else 0.0001
 
         for i in range(len(entry_df)):
             idx = entry_df.index[i]
@@ -409,7 +443,8 @@ class MarvellousStrategy:
                     ):
                         continue
                 atr_val = atr_series.iloc[i] if i < len(atr_series) and atr_series is not None else None
-                if atr_val is not None and not pd.isna(atr_val) and atr_val < mc.MIN_ATR_THRESHOLD:
+                min_atr = config.get_symbol_config(self.symbol, "MARVELLOUS_MIN_ATR_THRESHOLD") or mc.MIN_ATR_THRESHOLD
+                if atr_val is not None and not pd.isna(atr_val) and atr_val < min_atr:
                     continue
 
             # 6. Lower-TF zone + structure + sweep + entry
@@ -512,6 +547,8 @@ class MarvellousStrategy:
 
             # Entry: setup complete and current entry bar is within window after signal
             if ob_tested and last_m15_signal_idx is not None and lq_level is not None:
+                if max_per_setup is not None and trades_per_m15_setup.get(last_m15_signal_idx, 0) >= max_per_setup:
+                    continue
                 entry_window_minutes = getattr(mc, "MARVELLOUS_ENTRY_WINDOW_MINUTES", 15)
                 window_end = last_m15_signal_idx + pd.Timedelta(minutes=entry_window_minutes)
                 if last_m15_signal_idx <= idx < window_end:
@@ -520,6 +557,56 @@ class MarvellousStrategy:
                     candle_range = row["high"] - row["low"]
                     is_displacement = candle_body > (candle_range * disp_ratio) if candle_range > 0 else False
                     if is_displacement:
+                        session_key = config.TRADE_SESSION_HOURS.get(current_time.hour, "other")
+                        day_key = current_time.strftime("%Y-%m-%d") if hasattr(current_time, "strftime") else str(current_time.date())
+                        if apply_limits:
+                            max_per_day = getattr(config, "BACKTEST_MAX_TRADES_PER_DAY", config.MAX_TRADES_PER_DAY)
+                            max_per_session = getattr(config, "BACKTEST_MAX_TRADES_PER_SESSION", config.MAX_TRADES_PER_SESSION)
+                            if trades_per_day.get(day_key, 0) >= max_per_day:
+                                continue
+                            if max_per_session is not None and config.TRADE_SESSION_HOURS.get(current_time.hour) is not None:
+                                if trades_per_session.get(session_key, 0) >= max_per_session:
+                                    continue
+                        entry_price = float(row["close"])
+                        sl = float(lq_level)
+                        if sl_method == "HYBRID":
+                            micro_df = None
+                            if sl_micro_tf == "1m" and entry_tf == "1m":
+                                micro_df = entry_df[entry_df.index <= idx]
+                            elif sl_micro_tf == "5m":
+                                if entry_tf == "5m":
+                                    micro_df = entry_df[entry_df.index <= idx]
+                                elif entry_tf == "1m":
+                                    entry_slice = entry_df[entry_df.index <= idx]
+                                    micro_df = entry_slice.resample("5min").agg(agg).dropna()
+                                    if not micro_df.empty:
+                                        micro_df = detect_swing_highs_lows(micro_df, swing_length=mc.MARVELLOUS_SWING_LENGTH)
+                                elif entry_tf == "15m":
+                                    m15_slice = self.df_m15[self.df_m15.index <= idx]
+                                    micro_df = m15_slice.resample("5min").agg(agg).ffill().dropna()
+                                    if not micro_df.empty:
+                                        micro_df = detect_swing_highs_lows(micro_df, swing_length=mc.MARVELLOUS_SWING_LENGTH)
+                            if micro_df is not None and not micro_df.empty:
+                                atr_val = atr_series.iloc[i] if i < len(atr_series) and atr_series is not None else np.nan
+                                if sl_micro_tf == "5m" and entry_tf in ("5m", "15m"):
+                                    atr_micro = _atr(micro_df, 14)
+                                    atr_val = atr_micro.iloc[-1] if not atr_micro.empty else atr_val
+                                atr_val = float(atr_val) if not pd.isna(atr_val) and atr_val > 0 else (row["high"] - row["low"]) * 2
+                                buf = atr_val * sl_atr_mult
+                                if h1_bias == "BULLISH":
+                                    swing_lows = micro_df[micro_df["swing_low"] == True]
+                                    if not swing_lows.empty:
+                                        base_swing = float(swing_lows.iloc[-1]["swing_low_price"])
+                                        sl = base_swing - buf
+                                        if sl >= entry_price:
+                                            sl = entry_price - pip
+                                else:
+                                    swing_highs = micro_df[micro_df["swing_high"] == True]
+                                    if not swing_highs.empty:
+                                        base_swing = float(swing_highs.iloc[-1]["swing_high_price"])
+                                        sl = base_swing + buf
+                                        if sl <= entry_price:
+                                            sl = entry_price + pip
                         if h1_bias == "BULLISH":
                             is_bull = row["close"] > row["open"]
                             if is_bull and float(lq_level) < float(row["close"]):
@@ -527,14 +614,20 @@ class MarvellousStrategy:
                                     (self.df_m15.index > idx) & (self.df_m15["swing_high"] == True)
                                 ].head(tp_lookahead)
                                 tp_price = future_highs.iloc[0]["swing_high_price"] if not future_highs.empty else None
-                                signals.append({
+                                sig = {
                                     "time": idx,
                                     "type": "BUY",
                                     "price": row["close"],
-                                    "sl": lq_level,
+                                    "sl": sl,
                                     "tp": tp_price,
                                     "reason": "Marvellous: H1+zone bias + M15 BOS + OB tap + sweep + OB test",
-                                })
+                                    "setup_m15": last_m15_signal_idx,
+                                }
+                                signals.append(sig)
+                                if apply_limits:
+                                    trades_per_day[day_key] = trades_per_day.get(day_key, 0) + 1
+                                    trades_per_session[session_key] = trades_per_session.get(session_key, 0) + 1
+                                trades_per_m15_setup[last_m15_signal_idx] = trades_per_m15_setup.get(last_m15_signal_idx, 0) + 1
                         elif h1_bias == "BEARISH":
                             is_bear = row["close"] < row["open"]
                             if is_bear and float(lq_level) > float(row["close"]):
@@ -542,13 +635,19 @@ class MarvellousStrategy:
                                     (self.df_m15.index > idx) & (self.df_m15["swing_low"] == True)
                                 ].head(tp_lookahead)
                                 tp_price = future_lows.iloc[0]["swing_low_price"] if not future_lows.empty else None
-                                signals.append({
+                                sig = {
                                     "time": idx,
                                     "type": "SELL",
                                     "price": row["close"],
-                                    "sl": lq_level,
+                                    "sl": sl,
                                     "tp": tp_price,
                                     "reason": "Marvellous: H1+zone bias + M15 BOS + OB tap + sweep + OB test",
-                                })
+                                    "setup_m15": last_m15_signal_idx,
+                                }
+                                signals.append(sig)
+                                if apply_limits:
+                                    trades_per_day[day_key] = trades_per_day.get(day_key, 0) + 1
+                                    trades_per_session[session_key] = trades_per_session.get(session_key, 0) + 1
+                                trades_per_m15_setup[last_m15_signal_idx] = trades_per_m15_setup.get(last_m15_signal_idx, 0) + 1
 
         return pd.DataFrame(signals)

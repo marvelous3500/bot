@@ -18,9 +18,8 @@ This document describes the **treading-bot** (ICT Trading Bot) project: purpose,
 
 | Strategy ID        | Module (under `bot/strategies/`) | Description |
 |--------------------|----------------------------------|-------------|
-| `h1_m5_bos`        | `strategy_bos.py`   | H1 Break of Structure + OB → M5 shallow tap + liquidity sweep + entry |
-| `kingsely_gold`    | `strategy_kingsley.py` | H1 trend + 15m BOS/ChoCH + zone→LQ + OB test (gold only) |
-| `test`             | `strategy_test.py` | Minimal trend follow (gold, smoke test) |
+| `marvellous`       | `strategy_marvellous.py` | Daily/4H/H1 bias + M15 BOS + OB tap + sweep + entry |
+| `vester`           | `strategy_vester.py` | 1H bias → 5M sweep + BOS + zone → 1M entry |
 
 ---
 
@@ -31,7 +30,7 @@ This document describes the **treading-bot** (ICT Trading Bot) project: purpose,
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  main.py (CLI)                                                              │
-│  --mode: backtest | paper | live    --strategy: h1_m5_bos | kingsely_gold | test
+│  --mode: backtest | paper | live    --strategy: marvellous | vester
 └─────────────────────────────────────────────────────────────────────────────┘
          │
          ├── backtest ──► bot/backtest/ (per-strategy runners)
@@ -60,9 +59,8 @@ This document describes the **treading-bot** (ICT Trading Bot) project: purpose,
 | **bot/indicators.py** | FVG, order block, liquidity sweep, EMA, displacement. Adds boolean/float columns to DataFrame. |
 | **bot/indicators_bos.py** | Swing highs/lows, break of structure (BOS), order block identification, shallow tap. Dispatches to Kingsley (fractal) or LuxAlgo-style (pivot) per `USE_LUXALGO_ICT`. |
 | **bot/indicators_luxalgo.py** | LuxAlgo-style ICT parity: pivot swings, MSS/BOS, OB with breaker. Used when `USE_LUXALGO_ICT=True`. |
-| **bot/strategies/strategy_bos.py** | `H1M5BOSStrategy`: H1 + M5 DataFrames; `prepare_data()` then `run_backtest()` → signals. |
-| **bot/strategies/strategy_kingsley.py** | `KingsleyGoldStrategy`: 4H + H1 + 15m; BOS/ChoCH + zone→LQ + OB test (gold). |
-| **bot/strategies/strategy_test.py** | `TestStrategy`: H1 trend follow (gold, smoke test). |
+| **bot/strategies/strategy_marvellous.py** | `MarvellousStrategy`: Daily/4H/H1 bias + M15 BOS + OB tap + sweep + entry. |
+| **bot/strategies/strategy_vester.py** | `VesterStrategy`: 1H bias → 5M sweep + BOS + zone → 1M entry. |
 | **bot/backtest/** | Per-strategy backtest runners: load data, build strategy, run strategy, simulate trades (SL/TP hit first), print results. |
 | **bot/live_trading.py** | `LiveTradingEngine`: MT5 data → run_strategy() → optional TradeApprover → execute_signal (paper or MT5). Loop with LIVE_CHECK_INTERVAL. |
 | **bot/paper_trading.py** | Virtual balance/positions, place_order, update_positions (MT5 prices for SL/TP), save/load session JSON. |
@@ -120,10 +118,9 @@ This document describes the **treading-bot** (ICT Trading Bot) project: purpose,
 | `bot/mt5_connector.py` | MT5Connector: connect, get_bars, get_live_price, place_order, get_positions, close_position. |
 | `bot/indicators.py` | FVG, OB, liquidity sweep, EMA, displacement. |
 | `bot/indicators_bos.py` | Swing high/low, BOS, identify_order_block, detect_shallow_tap. |
-| `bot/strategies/strategy_bos.py` | H1M5BOSStrategy (H1 BOS + OB, M5 tap + sweep + entry). |
-| `bot/strategies/strategy_kingsley.py` | KingsleyGoldStrategy (H1 + 15m BOS/ChoCH + OB test, gold). |
-| `bot/strategies/strategy_test.py` | TestStrategy (minimal trend, smoke test). |
-| `bot/backtest/` | Per-strategy backtest runners (bos, kingsley, test). |
+| `bot/strategies/strategy_marvellous.py` | MarvellousStrategy (Daily/4H/H1 bias + M15 BOS + OB tap + sweep + entry). |
+| `bot/strategies/strategy_vester.py` | VesterStrategy (1H bias → 5M sweep + BOS + zone → 1M entry). |
+| `bot/backtest/` | Per-strategy backtest runners (marvellous, vester). |
 | `bot/live_trading.py` | LiveTradingEngine: connect, run_strategy, execute_signal, update_positions, run() loop. |
 | `bot/paper_trading.py` | PaperTrading: virtual orders, positions, P&L, session JSON. |
 | `bot/trade_approver.py` | TradeApprover: request_approval, show_daily_summary. |
@@ -138,15 +135,15 @@ This document describes the **treading-bot** (ICT Trading Bot) project: purpose,
 ### 5.1 Backtest
 
 ```bash
-# Default: backtest h1_m5_bos
+# Default: backtest marvellous
 python main.py --mode backtest
 
 # With strategy and symbol
-python main.py --mode backtest --strategy h1_m5_bos --symbol "GC=F"
-python main.py --mode backtest --strategy kingsely_gold --symbol "GC=F"
+python main.py --mode backtest --strategy marvellous --symbol "GC=F"
+python main.py --mode backtest --strategy vester --symbol "GC=F"
 
 # From CSV (must have time/open/high/low/close/volume)
-python main.py --mode backtest --strategy h1_m5_bos --csv path/to/data.csv
+python main.py --mode backtest --strategy marvellous --csv path/to/data.csv
 ```
 
 ### 5.2 Paper Trading

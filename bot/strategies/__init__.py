@@ -1,12 +1,10 @@
 """Trading strategies."""
-from .strategy_bos import H1M5BOSStrategy
-from .strategy_kingsley import KingsleyGoldStrategy
+from .base import BaseStrategy
 from .strategy_marvellous import MarvellousStrategy
-from .strategy_test import TestStrategy
+from .strategy_vester import VesterStrategy
 
 __all__ = [
-    "H1M5BOSStrategy",
-    "KingsleyGoldStrategy",
+    "BaseStrategy",
     "MarvellousStrategy",
-    "TestStrategy",
+    "VesterStrategy",
 ]
