@@ -58,6 +58,11 @@ def build_parser():
         action="store_true",
         help="Run backtest with and without breaker block; show side-by-side comparison for each strategy.",
     )
+    parser.add_argument(
+        "--compare-premium-discount",
+        action="store_true",
+        help="Run backtest with and without premium/discount filter; show side-by-side comparison for each strategy.",
+    )
     return parser
 
 
@@ -156,6 +161,40 @@ def _print_breaker_block_comparison(strategy_name, without_bb, with_bb):
     print()
 
 
+def _print_premium_discount_comparison(strategy_name, without_pd, with_pd):
+    """Print side-by-side comparison: without vs with premium/discount filter."""
+    print()
+    print(f"  {strategy_name.upper()} — Premium/Discount Comparison")
+    print("  " + "-" * 70)
+    print("  | {:20} | {:24} | {:24} |".format("Metric", "Without P/D Filter", "With P/D Filter"))
+    print("  |" + "-" * 22 + "|" + "-" * 26 + "|" + "-" * 26 + "|")
+    for key, label in [
+        ("trades", "Trades"),
+        ("wins", "Wins"),
+        ("losses", "Losses"),
+        ("win_rate", "Win rate"),
+        ("final_balance", "Final balance"),
+        ("return_pct", "Return"),
+    ]:
+        v0 = without_pd.get(key, 0)
+        v1 = with_pd.get(key, 0)
+        if key == "win_rate":
+            v0_str = f"{v0:.2f}%"
+            v1_str = f"{v1:.2f}%"
+        elif key == "return_pct":
+            v0_str = f"{'+' if v0 >= 0 else ''}{v0:,.2f}%"
+            v1_str = f"{'+' if v1 >= 0 else ''}{v1:,.2f}%"
+        elif key == "final_balance":
+            v0_str = _fmt_money(v0)
+            v1_str = _fmt_money(v1)
+        else:
+            v0_str = str(v0)
+            v1_str = str(v1)
+        print("  | {:20} | {:>24} | {:>24} |".format(label, v0_str, v1_str))
+    print("  " + "-" * 70)
+    print()
+
+
 def run_backtest(args):
     """Run backtest for the selected strategy (or all strategies if --strategy all)."""
     from bot.backtest import run_marvellous_backtest, run_vester_backtest
@@ -165,6 +204,33 @@ def run_backtest(args):
         if args.strategy == "all"
         else [args.strategy]
     )
+
+    # Premium/Discount comparison: run each strategy with and without P/D filter
+    if getattr(args, "compare_premium_discount", False):
+        period = args.period if args.period != "both" else "60d"
+        for name in strategies:
+            print(f"\n{'='*60}\nBacktesting {name} on {args.symbol} (premium/discount comparison)\n{'='*60}")
+            kwargs = dict(csv_path=args.csv, symbol=args.symbol, period=period, return_stats=True)
+            if name == "marvellous":
+                from bot import marvellous_config as mc
+                kwargs["symbol"] = kwargs.get("symbol") or mc.MARVELLOUS_BACKTEST_SYMBOL
+                orig = getattr(mc, "USE_PREMIUM_DISCOUNT", False)
+                mc.USE_PREMIUM_DISCOUNT = False
+                without_pd = run_marvellous_backtest(**kwargs)
+                mc.USE_PREMIUM_DISCOUNT = True
+                with_pd = run_marvellous_backtest(**kwargs)
+                mc.USE_PREMIUM_DISCOUNT = orig
+            else:
+                from bot import vester_config as vc
+                kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
+                orig = getattr(vc, "USE_PREMIUM_DISCOUNT", False)
+                vc.USE_PREMIUM_DISCOUNT = False
+                without_pd = run_vester_backtest(**kwargs)
+                vc.USE_PREMIUM_DISCOUNT = True
+                with_pd = run_vester_backtest(**kwargs)
+                vc.USE_PREMIUM_DISCOUNT = orig
+            _print_premium_discount_comparison(name, without_pd, with_pd)
+        return
 
     # Breaker block comparison: run each strategy with and without breaker block
     if getattr(args, "compare_breaker_block", False):

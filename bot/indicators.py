@@ -1,4 +1,5 @@
 import pandas as pd
+from typing import Optional
 
 
 def calculate_pdl_pdh(daily_df, current_date):
@@ -77,6 +78,31 @@ def detect_rejection_candle(df, wick_ratio=0.55):
     df.loc[(lower_wick / rng > wick_ratio) & (df['close'] > df['open']), 'rejection_bull'] = True
     df.loc[(upper_wick / rng > wick_ratio) & (df['close'] < df['open']), 'rejection_bear'] = True
     return df
+
+
+def get_equilibrium(df: pd.DataFrame, lookback: int) -> Optional[float]:
+    """
+    ICT equilibrium: 50% of high-low range over lookback bars.
+    Returns (range_high + range_low) / 2, or None if insufficient data.
+    """
+    if df is None or df.empty or len(df) < 2:
+        return None
+    slice_df = df.tail(lookback)
+    if slice_df.empty:
+        return None
+    rng_high = slice_df["high"].max()
+    rng_low = slice_df["low"].min()
+    return (rng_high + rng_low) / 2
+
+
+def get_equilibrium_from_daily(daily_df: pd.DataFrame, current_date) -> Optional[float]:
+    """
+    ICT equilibrium from PDH/PDL: 50% of previous day's range.
+    """
+    pdh, pdl = calculate_pdl_pdh(daily_df, current_date)
+    if pdh is None or pdl is None:
+        return None
+    return (pdh + pdl) / 2
 
 
 def detect_displacement(df, threshold=1.5, window=10):
