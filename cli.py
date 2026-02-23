@@ -21,9 +21,9 @@ def build_parser():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["marvellous", "vester", "all"],
+        choices=["marvellous", "vester", "follow", "all"],
         default="marvellous",
-        help="Strategy to use ('all' = run both strategies)",
+        help="Strategy to use ('all' = run marvellous+vester; 'follow' = test strategy for lot size)",
     )
     parser.add_argument(
         "--csv",
@@ -197,7 +197,7 @@ def _print_premium_discount_comparison(strategy_name, without_pd, with_pd):
 
 def run_backtest(args):
     """Run backtest for the selected strategy (or all strategies if --strategy all)."""
-    from bot.backtest import run_marvellous_backtest, run_vester_backtest
+    from bot.backtest import run_marvellous_backtest, run_vester_backtest, run_follow_backtest
 
     strategies = (
         ["marvellous", "vester"]
@@ -299,6 +299,9 @@ def run_backtest(args):
             from bot import vester_config as vc
             kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
             run_vester_backtest(**kwargs)
+        elif name == "follow":
+            kwargs["symbol"] = kwargs.get("symbol") or getattr(config, "VESTER_BACKTEST_SYMBOL", "GC=F")
+            run_follow_backtest(**kwargs)
 
 
 def run_replay_cmd(args):

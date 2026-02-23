@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from .connector_interface import get_connector, TIMEFRAME_M1, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
 from .paper_trading import PaperTrading
 from .trade_approver import TradeApprover
-from .strategies import MarvellousStrategy, VesterStrategy
+from .strategies import MarvellousStrategy, VesterStrategy, FollowStrategy
 from .indicators_bos import detect_swing_highs_lows, detect_break_of_structure
 from ai import get_signal_confidence, explain_trade, speak
 from .telegram_notifier import send_setup_notification
@@ -66,7 +66,7 @@ class LiveTradingEngine:
         if not symbol or not order_type:
             return None
         setup_ts = None
-        if self.strategy_name == 'vester':
+        if self.strategy_name in ('vester', 'follow'):
             setup_ts = signal.get('setup_5m')
             if setup_ts is None:
                 t = signal.get('time')
@@ -96,6 +96,8 @@ class LiveTradingEngine:
             max_per_setup = getattr(config, 'MARVELLOUS_MAX_TRADES_PER_SETUP', None)
             if max_per_setup is None:
                 max_per_setup = 1 if getattr(config, 'MARVELLOUS_ONE_SIGNAL_PER_SETUP', True) else None
+        elif self.strategy_name == 'follow':
+            max_per_setup = getattr(config, 'FOLLOW_MAX_TRADES_PER_SETUP', None)  # None = no limit for testing
         if max_per_setup is None:
             return True, None
         key = self._get_setup_key(signal)
@@ -299,6 +301,28 @@ class LiveTradingEngine:
             signals_df = strat.run_backtest()
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] vester: 0 signals")
+        elif self.strategy_name == 'follow':
+            cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
+            follow_symbols = list(dict.fromkeys([
+                s for s in [cli_mt5, symbol, 'XAUUSD', 'XAUUSDm'] if s
+            ]))
+            df_m5 = None
+            for sym in follow_symbols:
+                df_m5 = self.mt5.get_bars(sym, TIMEFRAME_M5, count=1000)
+                if df_m5 is not None and not df_m5.empty:
+                    symbol = sym
+                    break
+            if df_m5 is None or df_m5.empty:
+                if getattr(config, 'LIVE_DEBUG', False):
+                    print(f"[LIVE_DEBUG] follow: M5 bar data missing (tried: {follow_symbols})")
+                return []
+            if getattr(config, 'LIVE_DEBUG', False):
+                print(f"[LIVE_DEBUG] {symbol} follow: M5 loaded")
+            strat = FollowStrategy(df=df_m5, symbol=symbol, verbose=False)
+            strat.prepare_data()
+            signals_df = strat.run_backtest()
+            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
+                print(f"[LIVE_DEBUG] follow: 0 signals")
         else:
             print(f"Unknown strategy: {self.strategy_name}")
             return []
@@ -381,6 +405,17 @@ class LiveTradingEngine:
                         )
                         if lot is not None:
                             latest_signal['volume'] = lot
+                            # Safety cap: never risk more than MAX_RISK_PCT_LIVE
+                            max_risk_pct = getattr(config, 'MAX_RISK_PCT_LIVE', None)
+                            if max_risk_pct is not None and max_risk_pct > 0:
+                                dollar_risk = self.mt5.calc_dollar_risk(
+                                    symbol, latest_signal['price'], sl, lot
+                                )
+                                if dollar_risk is not None and dollar_risk > 0:
+                                    max_risk_dollars = balance * max_risk_pct
+                                    if dollar_risk > max_risk_dollars:
+                                        lot = max(0.01, round(lot * max_risk_dollars / dollar_risk, 2))
+                                        latest_signal['volume'] = lot
                 if latest_signal.get('volume') is None:
                     latest_signal['volume'] = config.MAX_POSITION_SIZE
                 return [latest_signal]
@@ -783,7 +818,9 @@ class LiveTradingEngine:
                             sl_info += f" (dist: {sl_dist:.2f})"
                         if dollar_risk is not None:
                             sl_info += f" | Risk: ${dollar_risk:.2f}"
-                    print(f"\n[SIGNAL] {signal['type']} {signal['symbol']} @ {signal['price']:.5f}{sl_info}")
+                    vol = signal.get('volume')
+                    lot_str = f" | Lot: {vol:.2f}" if vol is not None else ""
+                    print(f"\n[SIGNAL] {signal['type']} {signal['symbol']} @ {signal['price']:.5f}{lot_str}{sl_info}")
                     reason = signal.get('reason', '')
                     if reason:
                         print(f"[REASON] {reason}")
@@ -811,23 +848,45 @@ class LiveTradingEngine:
                         if getattr(config, 'TELEGRAM_ENABLED', False):
                             send_setup_notification(signal, self.strategy_name)
                         exec_reason = signal.get('reason', '')
-                        print(f"[EXECUTE] Order placed: {result.get('type')} {result.get('volume')} {result.get('symbol')} @ {result.get('price')}")
+                        vol = result.get('volume')
+                        risk_str = ""
+                        if sl is not None and vol is not None:
+                            dr = self.mt5.calc_dollar_risk(signal['symbol'], signal['price'], sl, vol)
+                            if dr is not None:
+                                risk_str = f" | Risk: ${dr:.2f}"
+                        print(f"[EXECUTE] Order placed: {result.get('type')} {vol} {result.get('symbol')} @ {result.get('price')}{risk_str}")
                         if exec_reason:
                             print(f"[EXECUTE] Reason: {exec_reason}")
                     else:
                         if exec_err:
                             self._last_run_errors.append(exec_err)
                         print(f"[EXECUTE] Order failed — check [MT5] or [SAFETY] message above for reason.")
-                # Always show status (Open Positions + Total Trades) every loop
+                # Always show status (Open Positions + Total Trades + Lot Size + Risk) every loop
                 self.show_status()
-                # Compact status line so Strategy + Open Positions + Total Trades are always visible
+                # Compact status line: Strategy + Open Positions + Total Trades + Lot Size + Risk
                 if self.paper_mode:
-                    n_pos = len(self.paper.get_positions())
+                    positions = self.paper.get_positions()
+                    n_pos = len(positions)
                     n_trades = self.paper.get_stats().get('total_trades', 0)
                 else:
-                    n_pos = len(self.mt5.get_positions())
+                    positions = self.mt5.get_positions()
+                    n_pos = len(positions)
                     n_trades = len(self.trades_today)
-                print(f"\n[{self.strategy_name}] Open Positions: {n_pos} | Total Trades: {n_trades}")
+                total_lot = sum(float(p.get('volume', 0)) for p in positions)
+                total_risk = 0.0
+                if self.mt5.connected:
+                    for p in positions:
+                        sym = p.get('symbol')
+                        entry = p.get('price_open')
+                        sl = p.get('sl')
+                        vol = p.get('volume')
+                        if sym and entry is not None and sl is not None and vol is not None:
+                            dr = self.mt5.calc_dollar_risk(sym, entry, sl, vol)
+                            if dr is not None:
+                                total_risk += dr
+                lot_str = f"{total_lot:.2f}" if total_lot > 0 else "0"
+                risk_str = f"${total_risk:.2f}" if total_risk > 0 else "$0"
+                print(f"\n[{self.strategy_name}] Open Positions: {n_pos} | Total Trades: {n_trades} | Lot Size: {lot_str} | Risk: {risk_str}")
                 print(f"Next check in {config.LIVE_CHECK_INTERVAL}s...")
                 time.sleep(config.LIVE_CHECK_INTERVAL)
         except KeyboardInterrupt:
