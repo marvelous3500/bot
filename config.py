@@ -89,8 +89,8 @@ LIVE_SYMBOLS = {
 LIVE_CHECK_INTERVAL = 15  # Seconds between strategy checks
 # Signal freshness: only take signals where bar time is within last N minutes (avoids stale setups)
 SIGNAL_MAX_AGE_MINUTES = 5   # Default; Vester uses 5M setup, Marvellous uses M15
-VESTER_SIGNAL_MAX_AGE_MINUTES = 5    # 1 × 5M bar
-MARVELLOUS_SIGNAL_MAX_AGE_MINUTES = 15  # 1 × M15 bar
+VESTER_SIGNAL_MAX_AGE_MINUTES = 15   # 3 × 5M bars (more tolerance for live)
+MARVELLOUS_SIGNAL_MAX_AGE_MINUTES = 45   # 3 × M15 bars (more tolerance for live)
 SKIP_WHEN_MARKET_CLOSED = True   # When True, skip strategy run and execution on weekend or when symbol trade_mode is disabled
 PRINT_CHECKLIST_ON_START = True  # When True, print real-money checklist at live startup (paper mode: no)
 USE_MARGIN_CHECK = True   # Pre-trade margin check for live mode (skip if insufficient free margin)
@@ -173,6 +173,10 @@ MARVELLOUS_SL_MICRO_TF = '1m'  # Micro-structure timeframe: '1m' or '5m' (HYBRID
 # Breaker block: failed OB that aligns with bias; used as HTF filter, not entry
 MARVELLOUS_REQUIRE_BREAKER_BLOCK = False
 MARVELLOUS_BREAKER_BLOCK_TF = 'H1'  # H1, 4H, or DAILY
+# Premium/Discount (ICT): only buy in discount, sell in premium. False = disabled.
+MARVELLOUS_USE_PREMIUM_DISCOUNT = False
+MARVELLOUS_EQUILIBRIUM_LOOKBACK = 24   # Bars for range
+MARVELLOUS_EQUILIBRIUM_TF = 'H1'       # H1, 4H, or DAILY
 
 # Extra filters: when True, Marvellous applies news/session/ATR/spread/liquidity filters.
 # When False, both skip them. Config comes from MARVELLOUS_* above.
@@ -218,6 +222,10 @@ VESTER_LIQ_ZONE_ATR_MULT = 0.5  # Zone width = ± this * ATR around sweep level
 VESTER_ALLOW_SIMPLE_ZONE_ENTRY = True
 # Require 5M liquidity sweep before entry (False = more trades, sweep optional)
 VESTER_REQUIRE_5M_SWEEP = False
+# Premium/Discount (ICT): only buy in discount, sell in premium. False = disabled.
+VESTER_USE_PREMIUM_DISCOUNT = False
+VESTER_EQUILIBRIUM_LOOKBACK = 24   # Bars for range (H1=24h, 4H=~4 days)
+VESTER_EQUILIBRIUM_TF = 'H1'       # H1 or 4H (Vester has no daily data)
 # Filters
 VESTER_MAX_SPREAD_POINTS = 50.0
 VESTER_MAX_CANDLE_VOLATILITY_ATR_MULT = 4.0

@@ -10,7 +10,7 @@ from typing import Optional, Dict, Any, Tuple
 
 import config
 from .. import marvellous_config as mc
-from ..indicators import detect_fvg
+from ..indicators import detect_fvg, get_equilibrium, get_equilibrium_from_daily
 from ..indicators_bos import (
     detect_swing_highs_lows,
     detect_break_of_structure,
@@ -419,6 +419,22 @@ class MarvellousStrategy:
             )
             if overall_bias == "NEUTRAL":
                 continue
+
+            if getattr(mc, "USE_PREMIUM_DISCOUNT", False):
+                eq_lookback = getattr(mc, "EQUILIBRIUM_LOOKBACK", 24)
+                eq_tf = getattr(mc, "EQUILIBRIUM_TF", "H1").upper()
+                if eq_tf == "DAILY" and self.df_daily is not None and not self.df_daily.empty:
+                    equilibrium = get_equilibrium_from_daily(self.df_daily, current_time)
+                else:
+                    df_eq = self.df_h1 if eq_tf == "H1" else (self.df_4h if self.df_4h is not None and not self.df_4h.empty else self.df_h1)
+                    df_eq_slice = df_eq[df_eq.index <= idx].tail(eq_lookback)
+                    equilibrium = get_equilibrium(df_eq_slice, eq_lookback)
+                if equilibrium is not None:
+                    current_close = float(entry_df.iloc[i]["close"])
+                    if overall_bias == "BULLISH" and current_close > equilibrium:
+                        continue
+                    if overall_bias == "BEARISH" and current_close < equilibrium:
+                        continue
 
             # 2–5. Extra filters (session, news, liquidity, ATR) — only when USE_EXTRA_FILTERS=True
             if getattr(config, "USE_EXTRA_FILTERS", True):

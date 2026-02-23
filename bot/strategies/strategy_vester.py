@@ -9,7 +9,7 @@ from datetime import datetime
 
 import config
 from .. import vester_config as vc
-from ..indicators import detect_fvg, detect_rejection_candle, detect_displacement
+from ..indicators import detect_fvg, detect_rejection_candle, detect_displacement, get_equilibrium
 from ..indicators_bos import (
     detect_swing_highs_lows,
     detect_break_of_structure,
@@ -518,6 +518,19 @@ class VesterStrategy(BaseStrategy):
                 if getattr(vc, "BREAKER_BLOCK_4H", False):
                     bb = detect_breaker_block(df_h4_slice, bias, ob_lookback=vc.OB_LOOKBACK)
                     if bb is None:
+                        continue
+
+            if getattr(vc, "USE_PREMIUM_DISCOUNT", False):
+                eq_lookback = getattr(vc, "EQUILIBRIUM_LOOKBACK", 24)
+                eq_tf = getattr(vc, "EQUILIBRIUM_TF", "H1").upper()
+                df_eq = self.df_h1 if eq_tf == "H1" else (self.df_h4 if self.df_h4 is not None and not self.df_h4.empty else self.df_h1)
+                df_eq_slice = df_eq[df_eq.index <= idx].tail(eq_lookback)
+                equilibrium = get_equilibrium(df_eq_slice, eq_lookback)
+                if equilibrium is not None:
+                    current_close = float(entry_df.iloc[i]["close"])
+                    if bias == "BULLISH" and current_close > equilibrium:
+                        continue
+                    if bias == "BEARISH" and current_close < equilibrium:
                         continue
 
             m5_window = getattr(vc, "M5_WINDOW_HOURS", 12)
