@@ -106,7 +106,10 @@ def run_marvellous_backtest(
     invalid_sl = signals[~signals.apply(_valid_sl, axis=1)] if not signals.empty else pd.DataFrame()
     signals = signals[signals.apply(_valid_sl, axis=1)] if not signals.empty else pd.DataFrame()
 
-    risk = getattr(config, "RISK_REWARD_RATIO", 3.0)
+    risk = getattr(config, "RISK_REWARD_RATIO", 5.0)
+    lock_in_enabled = getattr(config, "LOCK_IN_ENABLED", True)
+    lock_in_trigger = getattr(config, "LOCK_IN_TRIGGER_RR", 3.3)
+    lock_in_at = getattr(config, "LOCK_IN_AT_RR", 3.0)
 
     if signals.empty:
         if return_stats:
@@ -157,16 +160,25 @@ def run_marvellous_backtest(
             tp_price = trade.get("tp")
             if tp_price is None or tp_price <= adj_entry:
                 tp_price = adj_entry + (sl_dist * risk)
+            lock_in_sl = adj_entry + (sl_dist * lock_in_at) if lock_in_enabled else None
+            lock_in_trigger_price = adj_entry + (sl_dist * lock_in_trigger) if lock_in_enabled else None
             outcome = None
+            outcome_rr = risk
+            lock_in_triggered = False
             for idx, bar in future_prices.iterrows():
-                if bar["low"] <= adj_sl:
-                    outcome = "LOSS"
+                if lock_in_enabled and lock_in_trigger_price and lock_in_sl and bar["high"] >= lock_in_trigger_price:
+                    lock_in_triggered = True
+                effective_sl = lock_in_sl if lock_in_triggered else adj_sl
+                if bar["low"] <= effective_sl:
+                    outcome = "LOSS" if effective_sl == adj_sl else "WIN"
+                    outcome_rr = 0.0 if outcome == "LOSS" else lock_in_at
                     break
                 if bar["high"] >= tp_price:
                     outcome = "WIN"
+                    outcome_rr = risk
                     break
             if outcome == "WIN":
-                profit = (balance * config.RISK_PER_TRADE) * risk - spread_cost - commission
+                profit = (balance * config.RISK_PER_TRADE) * outcome_rr - spread_cost - commission
                 total_profit += profit
                 balance += profit
                 wins += 1
@@ -188,16 +200,25 @@ def run_marvellous_backtest(
             tp_price = trade.get("tp")
             if tp_price is None or tp_price >= adj_entry:
                 tp_price = adj_entry - (sl_dist * risk)
+            lock_in_sl = adj_entry - (sl_dist * lock_in_at) if lock_in_enabled else None
+            lock_in_trigger_price = adj_entry - (sl_dist * lock_in_trigger) if lock_in_enabled else None
             outcome = None
+            outcome_rr = risk
+            lock_in_triggered = False
             for idx, bar in future_prices.iterrows():
-                if bar["high"] >= adj_sl:
-                    outcome = "LOSS"
+                if lock_in_enabled and lock_in_trigger_price and lock_in_sl and bar["low"] <= lock_in_trigger_price:
+                    lock_in_triggered = True
+                effective_sl = lock_in_sl if lock_in_triggered else adj_sl
+                if bar["high"] >= effective_sl:
+                    outcome = "LOSS" if effective_sl == adj_sl else "WIN"
+                    outcome_rr = 0.0 if outcome == "LOSS" else lock_in_at
                     break
                 if bar["low"] <= tp_price:
                     outcome = "WIN"
+                    outcome_rr = risk
                     break
             if outcome == "WIN":
-                profit = (balance * config.RISK_PER_TRADE) * risk - spread_cost - commission
+                profit = (balance * config.RISK_PER_TRADE) * outcome_rr - spread_cost - commission
                 total_profit += profit
                 balance += profit
                 wins += 1

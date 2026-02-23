@@ -51,8 +51,10 @@ class PaperTrading:
 
     def update_positions(self, mt5_connector):
         closed_positions = []
-        tp1_enabled = config and getattr(config, 'TP1_SL_TO_ENTRY_ENABLED', False)
-        tp1_ratio = getattr(config, 'TP1_RATIO', 0.5) if config else 0.5
+        lock_in_enabled = config and getattr(config, 'LOCK_IN_ENABLED', True)
+        lock_in_trigger = getattr(config, 'LOCK_IN_TRIGGER_RR', 3.3) if config else 3.3
+        lock_in_at = getattr(config, 'LOCK_IN_AT_RR', 3.0) if config else 3.0
+        risk_ratio = getattr(config, 'RISK_REWARD_RATIO', 5.0) if config else 5.0
         for position in self.positions[:]:
             symbol = position['symbol']
             tick = mt5_connector.get_live_price(symbol)
@@ -61,17 +63,19 @@ class PaperTrading:
             if position['type'] == 'BUY':
                 current_price = tick['bid']
                 price_diff = current_price - position['price_open']
-                if tp1_enabled and position.get('tp'):
+                if lock_in_enabled and position.get('tp'):
                     price_open = position['price_open']
                     tp = position['tp']
-                    tp1 = price_open + (tp - price_open) * tp1_ratio
+                    sl_dist = abs(tp - price_open) / risk_ratio
+                    lock_in_trigger_price = price_open + sl_dist * lock_in_trigger
+                    lock_in_sl = price_open + sl_dist * lock_in_at
                     sl = position.get('sl')
-                    pip_size = mt5_connector.get_pip_size(symbol) if mt5_connector else None
-                    tolerance = (pip_size or 0.0001) * 2
-                    sl_at_entry = sl is not None and abs(float(sl) - float(price_open)) <= tolerance
-                    if current_price >= tp1 and not sl_at_entry:
-                        position['sl'] = price_open
-                        print(f"[PAPER] Position {position['ticket']} SL moved to entry (TP1 hit)")
+                    pip_size = mt5_connector.get_pip_size(symbol) if mt5_connector else 0.0001
+                    tolerance = pip_size * 2
+                    sl_already_at_lock = sl is not None and abs(float(sl) - lock_in_sl) <= tolerance
+                    if current_price >= lock_in_trigger_price and not sl_already_at_lock:
+                        position['sl'] = lock_in_sl
+                        print(f"[PAPER] Position {position['ticket']} SL moved to {lock_in_at}R (price reached {lock_in_trigger}R)")
                 if position['tp'] and current_price >= position['tp']:
                     self.close_position(position['ticket'], position['tp'], 'TP Hit')
                     closed_positions.append(position['ticket'])
@@ -83,17 +87,19 @@ class PaperTrading:
             else:
                 current_price = tick['ask']
                 price_diff = position['price_open'] - current_price
-                if tp1_enabled and position.get('tp'):
+                if lock_in_enabled and position.get('tp'):
                     price_open = position['price_open']
                     tp = position['tp']
-                    tp1 = price_open - (price_open - tp) * tp1_ratio
+                    sl_dist = abs(price_open - tp) / risk_ratio
+                    lock_in_trigger_price = price_open - sl_dist * lock_in_trigger
+                    lock_in_sl = price_open - sl_dist * lock_in_at
                     sl = position.get('sl')
-                    pip_size = mt5_connector.get_pip_size(symbol) if mt5_connector else None
-                    tolerance = (pip_size or 0.0001) * 2
-                    sl_at_entry = sl is not None and abs(float(sl) - float(price_open)) <= tolerance
-                    if current_price <= tp1 and not sl_at_entry:
-                        position['sl'] = price_open
-                        print(f"[PAPER] Position {position['ticket']} SL moved to entry (TP1 hit)")
+                    pip_size = mt5_connector.get_pip_size(symbol) if mt5_connector else 0.0001
+                    tolerance = pip_size * 2
+                    sl_already_at_lock = sl is not None and abs(float(sl) - lock_in_sl) <= tolerance
+                    if current_price <= lock_in_trigger_price and not sl_already_at_lock:
+                        position['sl'] = lock_in_sl
+                        print(f"[PAPER] Position {position['ticket']} SL moved to {lock_in_at}R (price reached {lock_in_trigger}R)")
                 if position['tp'] and current_price <= position['tp']:
                     self.close_position(position['ticket'], position['tp'], 'TP Hit')
                     closed_positions.append(position['ticket'])

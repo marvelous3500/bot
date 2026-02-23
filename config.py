@@ -23,11 +23,12 @@ MAX_POSITION_SIZE = 0.04  # Fallback lot size when dynamic calc fails
 USE_DYNAMIC_POSITION_SIZING = True  # Risk % of current balance per trade (matches backtest)
 PAPER_TRADING_LOG = 'paper_trades.json'
 LIVE_TRADE_LOG = True   # Append trades to logs/trades_YYYYMMDD.json
-TP1_SL_TO_ENTRY_ENABLED = False   # True = move SL to entry when TP1 hit
-TP1_RATIO = 0.3   
-
 # Risk Management
-RISK_REWARD_RATIO =5.0  # 1:5 Risk:Reward (win = 5× risk)
+RISK_REWARD_RATIO = 5.0  # 1:5 Risk:Reward (TP = 5× risk)
+# Lock-in: when price reaches LOCK_IN_TRIGGER_RR, move SL to LOCK_IN_AT_RR (e.g. 3.3R trigger → SL to 3R)
+LOCK_IN_ENABLED = True
+LOCK_IN_TRIGGER_RR = 3.3   # When price reaches this (e.g. 3.3× SL dist), activate lock-in
+LOCK_IN_AT_RR = 3.0       # Move SL to this level (e.g. 3R = lock in 3× profit)
 MAX_SL_PIPS = 50        # Max SL distance in pips for all pairs (converted per symbol's pip size)
 
 # Backtesting
@@ -99,11 +100,6 @@ ALLOW_MULTIPLE_SAME_SYMBOL = True  # If True, allow multiple positions on same s
 ALLOW_SAME_SYMBOL_AT_TP = True   # If True, allow new entry on same symbol only when price is at/near existing position's TP (ignored if ALLOW_MULTIPLE_SAME_SYMBOL=True)
 AT_TP_POINTS = 5.0               # Consider "at TP" when entry price is within this many points of position's TP (e.g. 5 for XAUUSD)
 
-# Breakeven: when position is in profit by BREAKEVEN_PIPS, move SL to half that (lock in half the pips)
-BREAKEVEN_ENABLED = False         # If True, move SL to half breakeven once profit reaches BREAKEVEN_PIPS
-BREAKEVEN_PIPS = 10.0            # Trigger when trade is in profit by this many pips; SL moves to entry + half (e.g. 10 → 5 pips locked)
-
-
 # Bias of the day (ICT-style): show Daily + H1 BOS bias in live loop when True
 SHOW_BIAS_OF_DAY = True          # If True, print [BIAS OF DAY] Daily: X | H1: Y each cycle
 
@@ -174,6 +170,9 @@ MARVELLOUS_SL_FALLBACK_DISTANCE = 5.0
 MARVELLOUS_SL_METHOD = 'OB'
 MARVELLOUS_SL_ATR_MULT = 1.0   # Buffer = ATR × this (HYBRID only)
 MARVELLOUS_SL_MICRO_TF = '1m'  # Micro-structure timeframe: '1m' or '5m' (HYBRID only)
+# Breaker block: failed OB that aligns with bias; used as HTF filter, not entry
+MARVELLOUS_REQUIRE_BREAKER_BLOCK = False
+MARVELLOUS_BREAKER_BLOCK_TF = 'H1'  # H1, 4H, or DAILY
 
 # Extra filters: when True, Marvellous applies news/session/ATR/spread/liquidity filters.
 # When False, both skip them. Config comes from MARVELLOUS_* above.
@@ -205,6 +204,9 @@ VESTER_REQUIRE_4H_BIAS = True
 VESTER_4H_AS_FILTER = True  # True = block only when 4H opposite; False = require 4H to match
 VESTER_REQUIRE_4H_ZONE_CONFIRMATION = False
 VESTER_4H_LOOKBACK_BARS = 24  # 4H bars to look back (~4 days)
+# Breaker block: failed OB that aligns with bias; used as HTF filter, not entry
+VESTER_REQUIRE_BREAKER_BLOCK = False
+VESTER_BREAKER_BLOCK_4H = False  # When REQUIRE_4H_BIAS=True, also require breaker on 4H
 VESTER_REJECTION_WICK_RATIO = 0.5
 VESTER_REJECTION_BODY_RATIO = 0.3
 # 5M setup window (hours to look back for sweep + BOS + zone)

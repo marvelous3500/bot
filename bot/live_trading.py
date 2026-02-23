@@ -562,58 +562,55 @@ class LiveTradingEngine:
             if closed:
                 print(f"[UPDATE] {len(closed)} positions closed automatically")
 
-    def _check_breakeven(self):
-        """When a position is in profit by BREAKEVEN_PIPS, move SL to half breakeven (lock in half the pips). Live only."""
-        if self.paper_mode or not getattr(config, 'BREAKEVEN_ENABLED', False):
+    def _check_lock_in(self):
+        """When price reaches LOCK_IN_TRIGGER_RR (e.g. 3.3R), move SL to LOCK_IN_AT_RR (e.g. 3R). Live only."""
+        if self.paper_mode or not getattr(config, 'LOCK_IN_ENABLED', True):
             return
-        required_pips = getattr(config, 'BREAKEVEN_PIPS', 3.0)
-        half_pips = required_pips / 2.0
+        trigger_rr = getattr(config, 'LOCK_IN_TRIGGER_RR', 3.3)
+        lock_at_rr = getattr(config, 'LOCK_IN_AT_RR', 3.0)
+        risk_ratio = getattr(config, 'RISK_REWARD_RATIO', 5.0)
         positions = self.mt5.get_positions()
         for pos in positions:
             ticket = pos.get('ticket')
             symbol = pos.get('symbol')
             price_open = pos.get('price_open')
+            tp = pos.get('tp')
             sl = pos.get('sl')
             pos_type = pos.get('type')
-            if ticket is None or symbol is None or price_open is None:
+            if ticket is None or symbol is None or price_open is None or tp is None:
                 continue
             try:
                 price_open = float(price_open)
+                tp = float(tp)
             except (TypeError, ValueError):
                 continue
-            pip_size = self.mt5.get_pip_size(symbol)
-            if pip_size is None or pip_size <= 0:
+            sl_dist = abs(tp - price_open) / risk_ratio
+            if sl_dist <= 0:
+                continue
+            if pos_type == 'BUY':
+                lock_in_trigger = price_open + sl_dist * trigger_rr
+                lock_in_sl = price_open + sl_dist * lock_at_rr
+                sl_ok = sl is not None and sl != 0 and float(sl) >= lock_in_sl - 0.00001
+            else:
+                lock_in_trigger = price_open - sl_dist * trigger_rr
+                lock_in_sl = price_open - sl_dist * lock_at_rr
+                sl_ok = sl is not None and sl != 0 and float(sl) <= lock_in_sl + 0.00001
+            if sl_ok:
                 continue
             tick = self.mt5.get_live_price(symbol)
             if not tick:
                 continue
-            if pos_type == 'BUY':
-                current = tick.get('bid')
-            else:
-                current = tick.get('ask')
-            if current is None:
+            current = float(tick.get('bid' if pos_type == 'BUY' else 'ask') or 0)
+            if current == 0:
                 continue
-            try:
-                current = float(current)
-            except (TypeError, ValueError):
+            triggered = (pos_type == 'BUY' and current >= lock_in_trigger) or (pos_type == 'SELL' and current <= lock_in_trigger)
+            if not triggered:
                 continue
-            if pos_type == 'BUY':
-                profit_pips = (current - price_open) / pip_size
-                target_sl = price_open + half_pips * pip_size
-                sl_already_ok = (sl is not None and sl != 0 and float(sl) >= target_sl - pip_size)
-            else:
-                profit_pips = (price_open - current) / pip_size
-                target_sl = price_open - half_pips * pip_size
-                sl_already_ok = (sl is not None and sl != 0 and float(sl) <= target_sl + pip_size)
-            if profit_pips < required_pips:
-                continue
-            if sl_already_ok:
-                continue
-            ok, err = self.mt5.modify_position(ticket, sl=target_sl, tp=pos.get('tp'))
+            ok, err = self.mt5.modify_position(ticket, sl=lock_in_sl, tp=tp)
             if ok:
-                print(f"[BREAKEVEN] Position {ticket} SL moved to half breakeven ({half_pips:.1f} pips) at {target_sl:.5f} (profit was {profit_pips:.1f} pips)")
+                print(f"[LOCK-IN] Position {ticket} SL moved to {lock_at_rr}R at {lock_in_sl:.5f} (price reached {trigger_rr}R)")
             elif getattr(config, 'MT5_VERBOSE', False):
-                print(f"[BREAKEVEN] Failed to move SL for {ticket}: {err}")
+                print(f"[LOCK-IN] Failed to move SL for {ticket}: {err}")
 
     def _log_trade(self, signal, result):
         """Append trade to logs/trades_YYYYMMDD.json."""
@@ -646,63 +643,6 @@ class LiveTradingEngine:
         except Exception as e:
             if getattr(config, 'MT5_VERBOSE', False):
                 print(f"[LOG] Failed to write trade log: {e}")
-
-    def _check_tp1_sl_to_entry(self):
-        """When price reaches TP1, move SL to entry (breakeven). Live only."""
-        if self.paper_mode or not getattr(config, 'TP1_SL_TO_ENTRY_ENABLED', False):
-            return
-        ratio = getattr(config, 'TP1_RATIO', 0.5)
-        positions = self.mt5.get_positions()
-        for pos in positions:
-            ticket = pos.get('ticket')
-            symbol = pos.get('symbol')
-            price_open = pos.get('price_open')
-            tp = pos.get('tp')
-            sl = pos.get('sl')
-            pos_type = pos.get('type')
-            if ticket is None or symbol is None or price_open is None or tp is None:
-                continue
-            try:
-                price_open = float(price_open)
-                tp = float(tp)
-            except (TypeError, ValueError):
-                continue
-            pip_size = self.mt5.get_pip_size(symbol)
-            if pip_size is None or pip_size <= 0:
-                pip_size = 0.0001
-            tolerance = pip_size
-            if pos_type == 'BUY':
-                tp1 = price_open + (tp - price_open) * ratio
-                sl_at_entry = sl is not None and sl != 0 and abs(float(sl) - price_open) <= tolerance
-            else:
-                tp1 = price_open - (price_open - tp) * ratio
-                sl_at_entry = sl is not None and sl != 0 and abs(float(sl) - price_open) <= tolerance
-            if sl_at_entry:
-                continue
-            tick = self.mt5.get_live_price(symbol)
-            if not tick:
-                continue
-            if pos_type == 'BUY':
-                current = tick.get('bid')
-            else:
-                current = tick.get('ask')
-            if current is None:
-                continue
-            try:
-                current = float(current)
-            except (TypeError, ValueError):
-                continue
-            if pos_type == 'BUY':
-                tp1_reached = current >= tp1
-            else:
-                tp1_reached = current <= tp1
-            if not tp1_reached:
-                continue
-            ok, err = self.mt5.modify_position(ticket, sl=price_open, tp=tp)
-            if ok:
-                print(f"[TP1] Position {ticket} SL moved to entry (breakeven) at TP1")
-            elif getattr(config, 'MT5_VERBOSE', False):
-                print(f"[TP1] Failed to move SL for {ticket}: {err}")
 
     def show_status(self):
         if self.paper_mode:
@@ -781,8 +721,7 @@ class LiveTradingEngine:
                         time.sleep(config.LIVE_CHECK_INTERVAL)
                         continue
                 self.update_positions()
-                self._check_breakeven()
-                self._check_tp1_sl_to_entry()
+                self._check_lock_in()
                 self._last_run_errors = []
                 if getattr(config, "SHOW_BIAS_OF_DAY", False) and not self.paper_mode and self.mt5.connected:
                     sym = self._get_symbol_for_bias()

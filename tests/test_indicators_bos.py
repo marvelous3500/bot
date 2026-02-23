@@ -10,6 +10,7 @@ from bot.indicators_bos import (
     detect_break_of_structure,
     identify_order_block,
     detect_shallow_tap,
+    detect_breaker_block,
 )
 
 
@@ -72,3 +73,44 @@ def test_detect_shallow_tap_touching():
     """Price touches OB edge -> True."""
     # OB: high=100, low=95. Candle: low=95, high=96 -> touches low
     assert detect_shallow_tap(95, 96, 100, 95, 97.5) == True
+
+
+def test_detect_breaker_block_bullish_invalidated_ob():
+    """Bullish BOS + invalidated bearish OB -> returns zone."""
+    # Structure: swing high+low at idx 2; bearish OB at idx 3 (open=100 close=98, ob_low=98); idx 4 low=97 breaks ob_low; BOS bull at idx 5
+    base = pd.Timestamp("2025-01-01 00:00:00")
+    data = {
+        "open": [94, 96, 99, 100, 98, 100],
+        "high": [95, 98, 100, 99, 99, 102],
+        "low": [98, 98, 97, 98, 97.5, 99],   # idx 2 swing low; idx 4 low=97.5 < ob_low 98
+        "close": [94.5, 97, 98, 98, 97.5, 101],
+        "volume": [100] * 6,
+    }
+    index = pd.DatetimeIndex([base + pd.Timedelta(hours=i) for i in range(6)])
+    df = pd.DataFrame(data, index=index)
+    df = detect_swing_highs_lows(df, swing_length=2)
+    df = detect_break_of_structure(df)
+    bb = detect_breaker_block(df, "BULLISH", ob_lookback=10)
+    assert bb is not None
+    assert "high" in bb and "low" in bb and "midpoint" in bb
+    assert bb["direction"] == "BULLISH"
+    assert bb["low"] <= 98 and bb["high"] >= 98
+
+
+def test_detect_breaker_block_no_invalidated_ob():
+    """No invalidated OB -> returns None."""
+    # BOS bull but no bearish OB broken between OB and BOS (idx 4 low=99 >= ob_low 98)
+    base = pd.Timestamp("2025-01-01 00:00:00")
+    data = {
+        "open": [94, 96, 99, 100, 98, 100],
+        "high": [95, 98, 100, 99, 99, 102],
+        "low": [93, 95, 97, 99, 99, 99],   # no bar breaks ob_low 98
+        "close": [94.5, 97, 98, 98, 97.5, 101],
+        "volume": [100] * 6,
+    }
+    index = pd.DatetimeIndex([base + pd.Timedelta(hours=i) for i in range(6)])
+    df = pd.DataFrame(data, index=index)
+    df = detect_swing_highs_lows(df, swing_length=2)
+    df = detect_break_of_structure(df)
+    bb = detect_breaker_block(df, "BULLISH", ob_lookback=10)
+    assert bb is None

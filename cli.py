@@ -53,6 +53,11 @@ def build_parser():
         action="store_true",
         help="Print per-trade log (entry, SL, TP, outcome, bar hit) for backtest.",
     )
+    parser.add_argument(
+        "--compare-breaker-block",
+        action="store_true",
+        help="Run backtest with and without breaker block; show side-by-side comparison for each strategy.",
+    )
     return parser
 
 
@@ -117,6 +122,40 @@ def _print_summary_table(period_label, rows):
     print()
 
 
+def _print_breaker_block_comparison(strategy_name, without_bb, with_bb):
+    """Print side-by-side comparison: without vs with breaker block."""
+    print()
+    print(f"  {strategy_name.upper()} — Breaker Block Comparison")
+    print("  " + "-" * 70)
+    print("  | {:20} | {:24} | {:24} |".format("Metric", "Without Breaker Block", "With Breaker Block"))
+    print("  |" + "-" * 22 + "|" + "-" * 26 + "|" + "-" * 26 + "|")
+    for key, label in [
+        ("trades", "Trades"),
+        ("wins", "Wins"),
+        ("losses", "Losses"),
+        ("win_rate", "Win rate"),
+        ("final_balance", "Final balance"),
+        ("return_pct", "Return"),
+    ]:
+        v0 = without_bb.get(key, 0)
+        v1 = with_bb.get(key, 0)
+        if key == "win_rate":
+            v0_str = f"{v0:.2f}%"
+            v1_str = f"{v1:.2f}%"
+        elif key == "return_pct":
+            v0_str = f"{'+' if v0 >= 0 else ''}{v0:,.2f}%"
+            v1_str = f"{'+' if v1 >= 0 else ''}{v1:,.2f}%"
+        elif key == "final_balance":
+            v0_str = _fmt_money(v0)
+            v1_str = _fmt_money(v1)
+        else:
+            v0_str = str(v0)
+            v1_str = str(v1)
+        print("  | {:20} | {:>24} | {:>24} |".format(label, v0_str, v1_str))
+    print("  " + "-" * 70)
+    print()
+
+
 def run_backtest(args):
     """Run backtest for the selected strategy (or all strategies if --strategy all)."""
     from bot.backtest import run_marvellous_backtest, run_vester_backtest
@@ -126,6 +165,37 @@ def run_backtest(args):
         if args.strategy == "all"
         else [args.strategy]
     )
+
+    # Breaker block comparison: run each strategy with and without breaker block
+    if getattr(args, "compare_breaker_block", False):
+        period = args.period if args.period != "both" else "60d"
+        for name in strategies:
+            print(f"\n{'='*60}\nBacktesting {name} on {args.symbol} (breaker block comparison)\n{'='*60}")
+            kwargs = dict(csv_path=args.csv, symbol=args.symbol, period=period, return_stats=True)
+            if name == "marvellous":
+                from bot import marvellous_config as mc
+                kwargs["symbol"] = kwargs.get("symbol") or mc.MARVELLOUS_BACKTEST_SYMBOL
+                orig = getattr(mc, "REQUIRE_BREAKER_BLOCK", False)
+                mc.REQUIRE_BREAKER_BLOCK = False
+                without_bb = run_marvellous_backtest(**kwargs)
+                mc.REQUIRE_BREAKER_BLOCK = True
+                with_bb = run_marvellous_backtest(**kwargs)
+                mc.REQUIRE_BREAKER_BLOCK = orig
+            else:
+                from bot import vester_config as vc
+                kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
+                orig_req = getattr(vc, "REQUIRE_BREAKER_BLOCK", False)
+                orig_4h = getattr(vc, "BREAKER_BLOCK_4H", False)
+                vc.REQUIRE_BREAKER_BLOCK = False
+                vc.BREAKER_BLOCK_4H = False
+                without_bb = run_vester_backtest(**kwargs)
+                vc.REQUIRE_BREAKER_BLOCK = True
+                vc.BREAKER_BLOCK_4H = getattr(config, "VESTER_BREAKER_BLOCK_4H", False)
+                with_bb = run_vester_backtest(**kwargs)
+                vc.REQUIRE_BREAKER_BLOCK = orig_req
+                vc.BREAKER_BLOCK_4H = orig_4h
+            _print_breaker_block_comparison(name, without_bb, with_bb)
+        return
 
     if args.strategy == "all":
         periods = (

@@ -16,6 +16,7 @@ from ..indicators_bos import (
     detect_break_of_structure,
     identify_order_block,
     detect_shallow_tap,
+    detect_breaker_block,
 )
 from ..news_filter import is_news_safe
 
@@ -89,6 +90,9 @@ def calculate_h1_bias_with_zone_validation(
     if bias == "NEUTRAL":
         return {"bias": "NEUTRAL", "proof": None}
     if not require_zone:
+        if getattr(mc, "REQUIRE_BREAKER_BLOCK", False) and getattr(mc, "BREAKER_BLOCK_TF", "H1").upper() == "H1":
+            if detect_breaker_block(df, bias, ob_lookback=getattr(mc, "MARVELLOUS_OB_LOOKBACK", 20)) is None:
+                return {"bias": "NEUTRAL", "proof": None}
         return {"bias": bias, "proof": {"structure": "BOS", "zone_type": None, "zone_coordinates": None}}
     # Find FVG/OB in lookback
     for i in range(len(df) - 1, max(0, len(df) - 30), -1):
@@ -105,6 +109,9 @@ def calculate_h1_bias_with_zone_validation(
             if ob is not None:
                 zone_top, zone_bottom = ob["high"], ob["low"]
             if _zone_respected(df, zone_top, zone_bottom, wick_pct, body_pct, i, len(df), bias == "BULLISH"):
+                if getattr(mc, "REQUIRE_BREAKER_BLOCK", False) and getattr(mc, "BREAKER_BLOCK_TF", "H1").upper() == "H1":
+                    if detect_breaker_block(df, bias, ob_lookback=getattr(mc, "MARVELLOUS_OB_LOOKBACK", 20)) is None:
+                        return {"bias": "NEUTRAL", "proof": None}
                 return {
                     "bias": bias,
                     "proof": {
@@ -139,6 +146,9 @@ def calculate_4h_bias_with_zone_validation(
     if bias == "NEUTRAL":
         return {"bias": "NEUTRAL", "proof": None}
     if not require_zone:
+        if getattr(mc, "REQUIRE_BREAKER_BLOCK", False) and getattr(mc, "BREAKER_BLOCK_TF", "H1").upper() == "4H":
+            if detect_breaker_block(df, bias, ob_lookback=getattr(mc, "MARVELLOUS_OB_LOOKBACK", 20)) is None:
+                return {"bias": "NEUTRAL", "proof": None}
         return {"bias": bias, "proof": {"structure": "BOS"}}
     for i in range(len(df) - 1, max(0, len(df) - 20), -1):
         row = df.iloc[i]
@@ -151,6 +161,9 @@ def calculate_4h_bias_with_zone_validation(
             zone_bottom = row["high"]
         if zone_top is not None and zone_bottom is not None:
             if _zone_respected(df, zone_top, zone_bottom, wick_pct, body_pct, i, len(df), bias == "BULLISH"):
+                if getattr(mc, "REQUIRE_BREAKER_BLOCK", False) and getattr(mc, "BREAKER_BLOCK_TF", "H1").upper() == "4H":
+                    if detect_breaker_block(df, bias, ob_lookback=getattr(mc, "MARVELLOUS_OB_LOOKBACK", 20)) is None:
+                        return {"bias": "NEUTRAL", "proof": None}
                 return {"bias": bias, "proof": {"structure": "BOS", "zone_coordinates": (zone_top, zone_bottom)}}
     return {"bias": "NEUTRAL", "proof": None}
 
@@ -177,6 +190,9 @@ def calculate_daily_bias_with_ict_rules_and_zone_validation(
     if bias == "NEUTRAL":
         return {"bias": "NEUTRAL", "proof": None}
     if not require_zone:
+        if getattr(mc, "REQUIRE_BREAKER_BLOCK", False) and getattr(mc, "BREAKER_BLOCK_TF", "H1").upper() == "DAILY":
+            if detect_breaker_block(df, bias, ob_lookback=getattr(mc, "MARVELLOUS_OB_LOOKBACK", 20)) is None:
+                return {"bias": "NEUTRAL", "proof": None}
         return {"bias": bias, "proof": {"structure": "BOS"}}
     for i in range(len(df) - 1, max(0, len(df) - 15), -1):
         row = df.iloc[i]
@@ -189,6 +205,9 @@ def calculate_daily_bias_with_ict_rules_and_zone_validation(
             zone_bottom = row["high"]
         if zone_top is not None and zone_bottom is not None:
             if _zone_respected(df, zone_top, zone_bottom, wick_pct, body_pct, i, len(df), bias == "BULLISH"):
+                if getattr(mc, "REQUIRE_BREAKER_BLOCK", False) and getattr(mc, "BREAKER_BLOCK_TF", "H1").upper() == "DAILY":
+                    if detect_breaker_block(df, bias, ob_lookback=getattr(mc, "MARVELLOUS_OB_LOOKBACK", 20)) is None:
+                        return {"bias": "NEUTRAL", "proof": None}
                 return {"bias": bias, "proof": {"structure": "BOS", "zone_coordinates": (zone_top, zone_bottom)}}
     return {"bias": "NEUTRAL", "proof": None}
 

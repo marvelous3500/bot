@@ -14,6 +14,7 @@ from ..indicators_bos import (
     detect_swing_highs_lows,
     detect_break_of_structure,
     identify_order_block,
+    detect_breaker_block,
 )
 from ..news_filter import is_news_safe
 from .base import BaseStrategy
@@ -494,6 +495,11 @@ class VesterStrategy(BaseStrategy):
             if bias is None:
                 continue
 
+            if getattr(vc, "REQUIRE_BREAKER_BLOCK", False):
+                bb = detect_breaker_block(df_h1_slice, bias, ob_lookback=vc.OB_LOOKBACK)
+                if bb is None:
+                    continue
+
             if getattr(vc, "REQUIRE_4H_BIAS", False):
                 if self.df_h4 is None or self.df_h4.empty:
                     continue
@@ -508,6 +514,10 @@ class VesterStrategy(BaseStrategy):
                         continue
                 else:
                     if bias_4h is None or bias_4h != bias:
+                        continue
+                if getattr(vc, "BREAKER_BLOCK_4H", False):
+                    bb = detect_breaker_block(df_h4_slice, bias, ob_lookback=vc.OB_LOOKBACK)
+                    if bb is None:
                         continue
 
             m5_window = getattr(vc, "M5_WINDOW_HOURS", 12)
