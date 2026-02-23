@@ -82,7 +82,7 @@ python main.py --mode live --auto-approve
 
 # Specific strategy
 python main.py --mode live --strategy h1_m5_bos
-python main.py --mode live --strategy kingsely_gold    # Gold (XAUUSD) only
+python main.py --mode live --strategy kingsely_gold  --auto-approve  # Gold (XAUUSD) only
 python main.py --mode live --strategy test             # Gold, smoke test
 ```
 
