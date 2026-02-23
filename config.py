@@ -28,6 +28,7 @@ TP1_RATIO = 0.3
 
 # Risk Management
 RISK_REWARD_RATIO =5.0  # 1:5 Risk:Reward (win = 5× risk)
+MAX_SL_PIPS = 50        # Max SL distance in pips for all pairs (converted per symbol's pip size)
 
 # Backtesting
 INITIAL_BALANCE = 100

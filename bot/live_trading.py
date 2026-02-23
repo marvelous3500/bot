@@ -342,6 +342,25 @@ class LiveTradingEngine:
                                 latest_signal['sl'] = price_f + fallback_dist
                         except (TypeError, ValueError):
                             pass
+                # Cap SL at MAX_SL_PIPS (converted per symbol's pip size)
+                max_sl_pips = getattr(config, 'MAX_SL_PIPS', None)
+                if max_sl_pips is not None and max_sl_pips > 0 and self.mt5.connected:
+                    pip_size = self.mt5.get_pip_size(symbol)
+                    if pip_size is not None and pip_size > 0:
+                        max_dist = max_sl_pips * pip_size
+                        price_f = float(latest_signal['price'])
+                        sl = latest_signal.get('sl')
+                        if sl is not None:
+                            try:
+                                sl_f = float(sl)
+                                sl_dist = abs(price_f - sl_f)
+                                if sl_dist > max_dist:
+                                    if latest_signal['type'] == 'BUY':
+                                        latest_signal['sl'] = price_f - max_dist
+                                    else:
+                                        latest_signal['sl'] = price_f + max_dist
+                            except (TypeError, ValueError):
+                                pass
                 sl_dist = abs(latest_signal['price'] - latest_signal.get('sl', 0))
                 if latest_signal['type'] == 'BUY':
                     latest_signal['tp'] = latest_signal['price'] + (sl_dist * config.RISK_REWARD_RATIO)
