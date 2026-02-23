@@ -86,6 +86,10 @@ LIVE_SYMBOLS = {
 
 # Trading Loop Settings
 LIVE_CHECK_INTERVAL = 15  # Seconds between strategy checks
+# Signal freshness: only take signals where bar time is within last N minutes (avoids stale setups)
+SIGNAL_MAX_AGE_MINUTES = 5   # Default; Vester uses 5M setup, Marvellous uses M15
+VESTER_SIGNAL_MAX_AGE_MINUTES = 5    # 1 × 5M bar
+MARVELLOUS_SIGNAL_MAX_AGE_MINUTES = 15  # 1 × M15 bar
 SKIP_WHEN_MARKET_CLOSED = True   # When True, skip strategy run and execution on weekend or when symbol trade_mode is disabled
 PRINT_CHECKLIST_ON_START = True  # When True, print real-money checklist at live startup (paper mode: no)
 USE_MARGIN_CHECK = True   # Pre-trade margin check for live mode (skip if insufficient free margin)

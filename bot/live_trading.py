@@ -343,9 +343,12 @@ class LiveTradingEngine:
                         except (TypeError, ValueError):
                             pass
                 # Cap SL at MAX_SL_PIPS (converted per symbol's pip size)
+                # Use PIP_SIZE from SYMBOL_CONFIGS if set, else MT5's get_pip_size (e.g. gold 0.10)
                 max_sl_pips = getattr(config, 'MAX_SL_PIPS', None)
                 if max_sl_pips is not None and max_sl_pips > 0 and self.mt5.connected:
-                    pip_size = self.mt5.get_pip_size(symbol)
+                    pip_size = config.get_symbol_config(symbol, 'PIP_SIZE')
+                    if pip_size is None:
+                        pip_size = self.mt5.get_pip_size(symbol)
                     if pip_size is not None and pip_size > 0:
                         max_dist = max_sl_pips * pip_size
                         price_f = float(latest_signal['price'])
@@ -802,6 +805,19 @@ class LiveTradingEngine:
                     signal_time = signal.get('time', datetime.now())
                     if isinstance(signal_time, pd.Timestamp):
                         signal_time = signal_time.to_pydatetime()
+                    # Skip stale signals (setup detected hours/minutes ago)
+                    max_age_min = (
+                        getattr(config, f'{self.strategy_name.upper()}_SIGNAL_MAX_AGE_MINUTES', None)
+                        or getattr(config, 'SIGNAL_MAX_AGE_MINUTES', None)
+                    )
+                    if max_age_min is not None and signal_time:
+                        now = datetime.utcnow()
+                        st = signal_time.replace(tzinfo=None) if hasattr(signal_time, 'tzinfo') and signal_time.tzinfo else signal_time
+                        age_sec = max(0, (now - st).total_seconds())
+                        if age_sec > max_age_min * 60:
+                            self._last_run_errors.append(f"Signal too old ({age_sec/60:.0f} min)")
+                            print(f"[SKIP] Signal too old ({age_sec/60:.0f} min, max {max_age_min} min)")
+                            continue
                     if last_signal_time and abs((signal_time - last_signal_time).total_seconds()) < 300:
                         self._last_run_errors.append("5 min cooldown")
                         print(f"[SKIP] Signal within 5 min of last execution (cooldown)")
