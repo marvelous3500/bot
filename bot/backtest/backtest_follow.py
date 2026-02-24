@@ -8,7 +8,7 @@ import pandas as pd
 import config
 from ..data_loader import fetch_data_yfinance, load_data_csv
 from ..strategies import FollowStrategy
-from .common import _stats_dict, get_pip_size_for_symbol, _apply_backtest_realism, _update_per_day_session
+from .common import _stats_dict, get_pip_size_for_symbol, _apply_backtest_realism, _calc_trade_pnl, _update_per_day_session
 
 
 def _strip_tz(df):
@@ -135,7 +135,7 @@ def run_follow_backtest(
                     outcome_bar_time = idx
                     break
             if outcome == "WIN":
-                profit = (balance * risk_pct) * outcome_rr - spread_cost - commission
+                profit = _calc_trade_pnl(used_symbol, balance, risk_pct, sl_dist, "WIN", outcome_rr, spread_cost)
                 total_profit += profit
                 balance += profit
                 wins += 1
@@ -144,7 +144,7 @@ def run_follow_backtest(
                 if trade_details is not None:
                     trade_details.append((trade_time, "WIN", entry_price, stop_loss, tp_price, outcome_bar_time, trade.get("reason", "")))
             elif outcome == "LOSS":
-                loss = (balance * risk_pct) + spread_cost + commission
+                loss = _calc_trade_pnl(used_symbol, balance, risk_pct, sl_dist, "LOSS", 0, spread_cost)
                 total_loss += loss
                 balance -= loss
                 losses += 1
@@ -177,7 +177,7 @@ def run_follow_backtest(
                     outcome_bar_time = idx
                     break
             if outcome == "WIN":
-                profit = (balance * risk_pct) * outcome_rr - spread_cost - commission
+                profit = _calc_trade_pnl(used_symbol, balance, risk_pct, sl_dist, "WIN", outcome_rr, spread_cost)
                 total_profit += profit
                 balance += profit
                 wins += 1
@@ -186,7 +186,7 @@ def run_follow_backtest(
                 if trade_details is not None:
                     trade_details.append((trade_time, "WIN", entry_price, stop_loss, tp_price, outcome_bar_time, trade.get("reason", "")))
             elif outcome == "LOSS":
-                loss = (balance * risk_pct) + spread_cost + commission
+                loss = _calc_trade_pnl(used_symbol, balance, risk_pct, sl_dist, "LOSS", 0, spread_cost)
                 total_loss += loss
                 balance -= loss
                 losses += 1

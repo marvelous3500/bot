@@ -11,7 +11,7 @@ MAX_TRADES_PER_DAY = 12
 MAX_TRADES_PER_SESSION = 4 
 MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
 LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
-MAX_LOT_LIVE = None  # Cap lot size in live mode (safety). 0.02 = ~6% risk on $140 gold.
+MAX_LOT_LIVE = 0.02  # Cap lot size in live mode (safety). 0.02 = ~6% risk on $140 gold.
 MAX_RISK_PCT_LIVE = 0.10   # Never risk more than this % of balance (safety net if broker tick_value wrong)
   # Per session (London, NY); divides daily limit across sessions
 # Session hours (UTC) for per-session limit: London 7-10, NY 13-16, Asian 0-4
