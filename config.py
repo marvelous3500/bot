@@ -111,7 +111,6 @@ SHOW_BIAS_OF_DAY = True          # If True, print [BIAS OF DAY] Daily: X | H1: Y
 USE_LUXALGO_ICT = False
 LUXALGO_SWING_LENGTH = 5      # Pivot left/right (LuxAlgo default: 5)
 LUXALGO_OB_USE_BODY = True   # Use candle body for OB range (LuxAlgo default)
-
 # Replay mode: run strategy every N bars (1 = every bar, most trades; 4 = faster, may miss some)
 REPLAY_STEP_BARS = 1
 
