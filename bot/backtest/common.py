@@ -28,6 +28,43 @@ def get_pip_size_for_symbol(symbol):
     return 0.0001
 
 
+def _use_manual_lot_for_backtest(symbol):
+    """True if gold + GOLD_USE_MANUAL_LOT (same logic as live)."""
+    is_gold = config.is_gold_symbol(symbol) if hasattr(config, 'is_gold_symbol') else ("XAU" in str(symbol or "").upper() or "GOLD" in str(symbol or "").upper())
+    return is_gold and getattr(config, 'GOLD_USE_MANUAL_LOT', True)
+
+
+def _apply_gold_manual_sl_override(used_symbol, adj_entry, adj_sl, order_type):
+    """When gold + manual lot, override SL to fixed GOLD_MANUAL_SL_POINTS (50 pips = $10 risk with 0.02 lots)."""
+    if not _use_manual_lot_for_backtest(used_symbol):
+        return adj_sl
+    sl_points = getattr(config, 'GOLD_MANUAL_SL_POINTS', 5.0)
+    if order_type == 'BUY':
+        return adj_entry - sl_points
+    return adj_entry + sl_points
+
+
+def _calc_trade_pnl(used_symbol, balance, risk_pct, sl_dist, outcome, outcome_rr, spread_cost):
+    """
+    Return profit (WIN) or loss (LOSS) amount.
+    Gold + GOLD_USE_MANUAL_LOT: use MAX_POSITION_SIZE and LOSS_PER_LOT_PER_POINT.
+    Else: use risk-based (balance * risk_pct).
+    """
+    commission_per_lot = getattr(config, 'BACKTEST_COMMISSION_PER_LOT', 0.0)
+    use_manual = _use_manual_lot_for_backtest(used_symbol)
+    if use_manual:
+        lot = getattr(config, 'MAX_POSITION_SIZE', 0.01)
+        loss_per_lot = config.get_symbol_config(used_symbol, 'LOSS_PER_LOT_PER_POINT') or 100
+        commission = commission_per_lot * lot if commission_per_lot else 0.0
+        if outcome == "WIN":
+            return sl_dist * outcome_rr * lot * loss_per_lot - spread_cost - commission
+        return sl_dist * lot * loss_per_lot + spread_cost + commission
+    commission = commission_per_lot * 0.01 if commission_per_lot else 0.0
+    if outcome == "WIN":
+        return (balance * risk_pct) * outcome_rr - spread_cost - commission
+    return (balance * risk_pct) + spread_cost + commission
+
+
 def _apply_backtest_realism(entry_price, stop_loss, order_type, symbol, bar_close=None):
     """Apply spread, slippage to entry/SL. Returns (adj_entry, adj_sl, commission)."""
     spread_pips = config.get_symbol_config(symbol, 'BACKTEST_SPREAD_PIPS') or getattr(config, 'BACKTEST_SPREAD_PIPS', 0.0)

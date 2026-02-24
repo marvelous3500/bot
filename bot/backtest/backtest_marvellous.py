@@ -4,7 +4,7 @@ import config
 from .. import marvellous_config as mc
 from ..data_loader import fetch_data_yfinance, load_data_csv
 from ..strategies import MarvellousStrategy
-from .common import _stats_dict, get_pip_size_for_symbol, _apply_backtest_realism, _update_per_day_session
+from .common import _stats_dict, get_pip_size_for_symbol, _apply_backtest_realism, _apply_gold_manual_sl_override, _calc_trade_pnl, _update_per_day_session
 
 
 def _strip_tz(df):
@@ -151,6 +151,7 @@ def run_marvellous_backtest(
         adj_entry, adj_sl, commission = _apply_backtest_realism(
             entry_price, stop_loss, trade["type"], used_symbol, entry_price
         )
+        adj_sl = _apply_gold_manual_sl_override(used_symbol, adj_entry, adj_sl, trade["type"])
         spread_cost = abs(adj_entry - entry_price)
         future_prices = df_entry.loc[df_entry.index > trade_time]
         if future_prices.empty:
@@ -178,7 +179,7 @@ def run_marvellous_backtest(
                     outcome_rr = risk
                     break
             if outcome == "WIN":
-                profit = (balance * config.RISK_PER_TRADE) * outcome_rr - spread_cost - commission
+                profit = _calc_trade_pnl(used_symbol, balance, config.RISK_PER_TRADE, sl_dist, "WIN", outcome_rr, spread_cost)
                 total_profit += profit
                 balance += profit
                 wins += 1
@@ -187,7 +188,7 @@ def run_marvellous_backtest(
                 if trade_details is not None:
                     trade_details.append((trade_time, "WIN"))
             elif outcome == "LOSS":
-                loss = (balance * config.RISK_PER_TRADE) + spread_cost + commission
+                loss = _calc_trade_pnl(used_symbol, balance, config.RISK_PER_TRADE, sl_dist, "LOSS", 0, spread_cost)
                 total_loss += loss
                 balance -= loss
                 losses += 1
@@ -218,7 +219,7 @@ def run_marvellous_backtest(
                     outcome_rr = risk
                     break
             if outcome == "WIN":
-                profit = (balance * config.RISK_PER_TRADE) * outcome_rr - spread_cost - commission
+                profit = _calc_trade_pnl(used_symbol, balance, config.RISK_PER_TRADE, sl_dist, "WIN", outcome_rr, spread_cost)
                 total_profit += profit
                 balance += profit
                 wins += 1
@@ -227,7 +228,7 @@ def run_marvellous_backtest(
                 if trade_details is not None:
                     trade_details.append((trade_time, "WIN"))
             elif outcome == "LOSS":
-                loss = (balance * config.RISK_PER_TRADE) + spread_cost + commission
+                loss = _calc_trade_pnl(used_symbol, balance, config.RISK_PER_TRADE, sl_dist, "LOSS", 0, spread_cost)
                 total_loss += loss
                 balance -= loss
                 losses += 1

@@ -7,11 +7,11 @@ SYMBOLS = [ 'GC=F', 'GBPUSD=X', 'BTC-USD', '^NDX']
 
 LIVE_MODE = True   # True = real money, False = paper trading
 MAX_TRADES_PER_DAY_PER_PAIR = False   # True = limits apply per symbol; False = global (legacy)
-MAX_TRADES_PER_DAY = 12
-MAX_TRADES_PER_SESSION = 4 
+MAX_TRADES_PER_DAY = 18
+MAX_TRADES_PER_SESSION = 6 
 MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
 LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
-MAX_LOT_LIVE = None  # Cap lot size in live mode (safety). 0.02 = ~6% risk on $140 gold.
+MAX_LOT_LIVE = 0.02  # Cap lot size in live mode (safety). 0.02 = ~6% risk on $140 gold.
 MAX_RISK_PCT_LIVE = 0.10   # Never risk more than this % of balance (safety net if broker tick_value wrong)
   # Per session (London, NY); divides daily limit across sessions
 # Session hours (UTC) for per-session limit: London 7-10, NY 13-16, Asian 0-4
@@ -20,8 +20,11 @@ TRADE_SESSION_HOURS = {
     13: 'ny', 14: 'ny', 15: 'ny', 16: 'ny',
     0: 'asian', 1: 'asian', 2: 'asian', 3: 'asian', 4: 'asian',
 }
-MAX_POSITION_SIZE = 0.04  # Fallback lot size when dynamic calc fails
-USE_DYNAMIC_POSITION_SIZING = True  # Risk % of current balance per trade (matches backtest)
+MAX_POSITION_SIZE = 0.02  # Fixed lot when gold uses manual; fallback when calc fails
+USE_DYNAMIC_POSITION_SIZING = True   # True = risk-based for non-gold; gold uses manual when GOLD_USE_MANUAL_LOT=True
+GOLD_USE_MANUAL_LOT = True   # Gold (XAUUSDm etc): use MAX_POSITION_SIZE; other pairs: risk-based sizing
+# Gold manual: fixed SL distance (points). 5.0 points = 50 pips = $10 risk with 0.02 lots
+GOLD_MANUAL_SL_POINTS = 5.0
 PAPER_TRADING_LOG = 'paper_trades.json'
 LIVE_TRADE_LOG = True   # Append trades to logs/trades_YYYYMMDD.json
 # Risk Management
@@ -121,13 +124,12 @@ AI_EXPLAIN_TRADES = False
 VOICE_ALERTS = False
 VOICE_ALERT_ON_SIGNAL = True   # speak when trade found / about to take
 VOICE_ALERT_ON_REJECT = True   # speak when trade rejected and why
-
 # Marvellous Strategy (XAUUSD gold, ICT-style with bias + zone validation)
 # NOTE: REQUIRE_*_ZONE_CONFIRMATION only applies when that timeframe's REQUIRE_*_BIAS is True.
 #       E.g. REQUIRE_4H_ZONE_CONFIRMATION has no effect when REQUIRE_4H_BIAS=False.
 MARVELLOUS_INSTRUMENT = 'XAUUSD'
 MARVELLOUS_ONE_SIGNAL_PER_SETUP = False  # Deprecated: use MARVELLOUS_MAX_TRADES_PER_SETUP
-MARVELLOUS_MAX_TRADES_PER_SETUP = 2     # Max entries per M15 setup (1 = one per setup, 3 = up to 3, None = unlimited)
+MARVELLOUS_MAX_TRADES_PER_SETUP = 3     # Max entries per M15 setup (1 = one per setup, 3 = up to 3, None = unlimited)
 MARVELLOUS_REQUIRE_H1_BIAS = True
 MARVELLOUS_REQUIRE_4H_BIAS = False
 MARVELLOUS_REQUIRE_DAILY_BIAS = False
@@ -191,7 +193,7 @@ MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 
 
 # VesterStrategy: multi-timeframe smart-money (1H bias -> 5M setup -> 1M entry)
 VESTER_ONE_SIGNAL_PER_SETUP = False  # Deprecated: use VESTER_MAX_TRADES_PER_SETUP
-VESTER_MAX_TRADES_PER_SETUP = 2     # Max entries per 5M setup (1 = one per setup, 3 = up to 3, None = unlimited)
+VESTER_MAX_TRADES_PER_SETUP = 4     # Max entries per 5M setup (1 = one per setup, 3 = up to 3, None = unlimited)
 VESTER_BACKTEST_SYMBOL = 'GC=F'
 VESTER_LIVE_SYMBOL = 'XAUUSDm'
 VESTER_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}
@@ -274,6 +276,14 @@ def cli_symbol_to_mt5(cli_symbol):
         if key.upper().replace("M", "") == normalized or key.upper() == normalized:
             return mt5_val
     return None
+
+
+def is_gold_symbol(symbol):
+    """Return True if symbol is gold (XAUUSD, XAUUSDm, GC=F, etc.)."""
+    if not symbol:
+        return False
+    s = str(symbol).upper()
+    return "XAU" in s or "GC" in s or "GOLD" in s
 
 
 def _normalize_symbol_for_config(symbol):
