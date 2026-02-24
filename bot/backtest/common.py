@@ -31,12 +31,19 @@ def get_pip_size_for_symbol(symbol):
 def _use_manual_lot_for_backtest(symbol):
     """True if gold + GOLD_USE_MANUAL_LOT (same logic as live)."""
     is_gold = config.is_gold_symbol(symbol) if hasattr(config, 'is_gold_symbol') else ("XAU" in str(symbol or "").upper() or "GOLD" in str(symbol or "").upper())
-    return is_gold and getattr(config, 'GOLD_USE_MANUAL_LOT', True)
+    return is_gold and getattr(config, 'GOLD_USE_MANUAL_LOT', False)
+
+
+def _use_gold_fixed_sl(symbol):
+    """True if gold and GOLD_MANUAL_SL_POINTS > 0 (apply fixed SL override)."""
+    is_gold = config.is_gold_symbol(symbol) if hasattr(config, 'is_gold_symbol') else ("XAU" in str(symbol or "").upper() or "GOLD" in str(symbol or "").upper())
+    sl_pts = getattr(config, 'GOLD_MANUAL_SL_POINTS', 0)
+    return is_gold and sl_pts > 0
 
 
 def _apply_gold_manual_sl_override(used_symbol, adj_entry, adj_sl, order_type):
-    """When gold + manual lot, override SL to fixed GOLD_MANUAL_SL_POINTS (50 pips = $10 risk with 0.02 lots)."""
-    if not _use_manual_lot_for_backtest(used_symbol):
+    """When gold and GOLD_MANUAL_SL_POINTS set, override SL to fixed distance (50 pips = 5 points)."""
+    if not _use_gold_fixed_sl(used_symbol):
         return adj_sl
     sl_points = getattr(config, 'GOLD_MANUAL_SL_POINTS', 5.0)
     if order_type == 'BUY':

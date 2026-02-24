@@ -388,22 +388,21 @@ class LiveTradingEngine:
                                         latest_signal['sl'] = price_f + max_dist
                             except (TypeError, ValueError):
                                 pass
-                # Gold manual: override SL to fixed distance (50 pips = 5 points = $10 risk with 0.02 lots)
+                # Gold: override SL to fixed distance when GOLD_MANUAL_SL_POINTS set (50 pips = 5 points)
                 _is_gold = config.is_gold_symbol(symbol) if hasattr(config, 'is_gold_symbol') else ("XAU" in str(symbol or "").upper() or "GOLD" in str(symbol or "").upper())
-                _use_manual = getattr(config, 'GOLD_USE_MANUAL_LOT', True)
-                if _is_gold and _use_manual:
-                    sl_points = getattr(config, 'GOLD_MANUAL_SL_POINTS', 5.0)
+                _sl_points = getattr(config, 'GOLD_MANUAL_SL_POINTS', 0)
+                if _is_gold and _sl_points > 0:
                     price_f = float(latest_signal['price'])
                     if latest_signal['type'] == 'BUY':
-                        latest_signal['sl'] = price_f - sl_points
+                        latest_signal['sl'] = price_f - _sl_points
                     else:
-                        latest_signal['sl'] = price_f + sl_points
+                        latest_signal['sl'] = price_f + _sl_points
                 sl_dist = abs(latest_signal['price'] - latest_signal.get('sl', 0))
                 if latest_signal['type'] == 'BUY':
                     latest_signal['tp'] = latest_signal['price'] + (sl_dist * config.RISK_REWARD_RATIO)
                 else:
                     latest_signal['tp'] = latest_signal['price'] - (sl_dist * config.RISK_REWARD_RATIO)
-                # Lot size: manual for gold, dynamic for other pairs (when GOLD_USE_MANUAL_LOT=True)
+                # Lot size: dynamic (balance × risk %) when GOLD_USE_MANUAL_LOT=False; fixed when True
                 use_manual_for_gold = getattr(config, 'GOLD_USE_MANUAL_LOT', True)
                 is_gold = config.is_gold_symbol(symbol) if hasattr(config, 'is_gold_symbol') else ("XAU" in str(symbol or "").upper() or "GOLD" in str(symbol or "").upper())
                 use_dynamic = (
