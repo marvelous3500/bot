@@ -11,7 +11,7 @@ MAX_TRADES_PER_DAY = 9
 MAX_TRADES_PER_SESSION = 3 
 MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
 LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
-MAX_LOT_LIVE = 0.02  # Cap lot size in live mode (safety). 0.02 = ~6% risk on $140 gold.
+MAX_LOT_LIVE = None  # Cap lot size in live mode (safety). 0.02 = ~6% risk on $140 gold.
 MAX_RISK_PCT_LIVE = 0.10   # Never risk more than this % of balance (safety net if broker tick_value wrong)
   # Per session (London, NY); divides daily limit across sessions
 # Session hours (UTC) for per-session limit: London 7-10, NY 13-16, Asian 0-4
@@ -29,19 +29,23 @@ PAPER_TRADING_LOG = 'paper_trades.json'
 LIVE_TRADE_LOG = True   # Append trades to logs/trades_YYYYMMDD.json
 # Risk Management
 RISK_REWARD_RATIO = 5.0  # 1:5 Risk:Reward (TP = 5× risk)
+# Breakeven: move SL to entry when price reaches BREAKEVEN_TRIGGER_RR (e.g. 1R)
+BREAKEVEN_ENABLED = True
+BREAKEVEN_TRIGGER_RR = 1.0   # Move SL to entry when price reaches this (1R = 1× SL dist in profit)
 # Lock-in: when price reaches LOCK_IN_TRIGGER_RR, move SL to LOCK_IN_AT_RR (e.g. 3.3R trigger → SL to 3R)
 LOCK_IN_ENABLED = True
 LOCK_IN_TRIGGER_RR = 3.3   # When price reaches this (e.g. 3.3× SL dist), activate lock-in
 LOCK_IN_AT_RR = 3.0       # Move SL to this level (e.g. 3R = lock in 3× profit)
 MAX_SL_PIPS = 50        # Max SL distance in pips for all pairs (converted per symbol's pip size)
+DAILY_LOSS_LIMIT_PCT = 5.0   # Stop new trades when today's closed P&L loss >= balance × this %
 
 # Backtesting
 INITIAL_BALANCE = 100
 RISK_PER_TRADE = 0.10  # 10% risk per trade
 BACKTEST_MAX_TRADES = None  # Stop after N trades (None = no limit)
-BACKTEST_APPLY_TRADE_LIMITS = False  # When True, apply trade limits in backtest (both strategies)
-BACKTEST_MAX_TRADES_PER_DAY = 6   # Backtest daily limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
-BACKTEST_MAX_TRADES_PER_SESSION = 2  # Backtest session limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
+BACKTEST_APPLY_TRADE_LIMITS = True  # When True, apply trade limits in backtest (both strategies)
+BACKTEST_MAX_TRADES_PER_DAY = 9  # Backtest daily limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
+BACKTEST_MAX_TRADES_PER_SESSION = 3  # Backtest session limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
 BACKTEST_PERIOD = '60d'  # Data period: 12d, 60d, 6mo (set before run)
 BACKTEST_SPREAD_PIPS = 2.0       # e.g. 2.0 for gold, 1.0 for forex
 BACKTEST_COMMISSION_PER_LOT = 7.0  # round-trip per lot (e.g. 7.0)
@@ -230,13 +234,13 @@ VESTER_EQUILIBRIUM_TF = 'H1'       # H1 or 4H (Vester has no daily data)
 # Filters
 VESTER_MAX_SPREAD_POINTS = 50.0
 VESTER_MAX_CANDLE_VOLATILITY_ATR_MULT = 4.0
-VESTER_USE_NEWS_FILTER = False
+VESTER_USE_NEWS_FILTER = True
 VESTER_NEWS_BUFFER_MINUTES = 15
 # Risk management
 VESTER_RISK_PER_TRADE = 0.10
-VESTER_MAX_TRADES_PER_SESSION = 2
+VESTER_MAX_TRADES_PER_SESSION = 3
 VESTER_DAILY_LOSS_LIMIT_PCT = 5.0
-VESTER_USE_TRAILING_STOP = False
+VESTER_USE_TRAILING_STOP = True
 VESTER_MIN_RR = 3.0
 # Displacement candle threshold (body vs range ratio)
 VESTER_DISPLACEMENT_RATIO = 0.5

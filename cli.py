@@ -21,9 +21,9 @@ def build_parser():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["marvellous", "vester", "follow", "all"],
+        choices=["marvellous", "vester", "follow", "test-sl", "all"],
         default="marvellous",
-        help="Strategy to use ('all' = run marvellous+vester; 'follow' = test strategy for lot size)",
+        help="Strategy to use ('all' = run marvellous+vester; 'follow' = test strategy; 'test-sl' = one trade then stop)",
     )
     parser.add_argument(
         "--csv",
@@ -198,6 +198,10 @@ def _print_premium_discount_comparison(strategy_name, without_pd, with_pd):
 def run_backtest(args):
     """Run backtest for the selected strategy (or all strategies if --strategy all)."""
     from bot.backtest import run_marvellous_backtest, run_vester_backtest, run_follow_backtest
+
+    if args.strategy == "test-sl":
+        print("test-sl has no backtest. Use --mode live (or paper) for lot-size testing.")
+        return
 
     strategies = (
         ["marvellous", "vester"]
