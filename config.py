@@ -124,7 +124,6 @@ AI_EXPLAIN_TRADES = False
 VOICE_ALERTS = False
 VOICE_ALERT_ON_SIGNAL = True   # speak when trade found / about to take
 VOICE_ALERT_ON_REJECT = True   # speak when trade rejected and why
-
 # Marvellous Strategy (XAUUSD gold, ICT-style with bias + zone validation)
 # NOTE: REQUIRE_*_ZONE_CONFIRMATION only applies when that timeframe's REQUIRE_*_BIAS is True.
 #       E.g. REQUIRE_4H_ZONE_CONFIRMATION has no effect when REQUIRE_4H_BIAS=False.
