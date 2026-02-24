@@ -393,8 +393,15 @@ class LiveTradingEngine:
                     latest_signal['tp'] = latest_signal['price'] + (sl_dist * config.RISK_REWARD_RATIO)
                 else:
                     latest_signal['tp'] = latest_signal['price'] - (sl_dist * config.RISK_REWARD_RATIO)
-                # Dynamic lot size: risk % of current balance (matches backtest)
-                if getattr(config, 'USE_DYNAMIC_POSITION_SIZING', True) and self.mt5.connected:
+                # Lot size: manual for gold, dynamic for other pairs (when GOLD_USE_MANUAL_LOT=True)
+                use_manual_for_gold = getattr(config, 'GOLD_USE_MANUAL_LOT', True)
+                is_gold = config.is_gold_symbol(symbol) if hasattr(config, 'is_gold_symbol') else ("XAU" in str(symbol or "").upper() or "GOLD" in str(symbol or "").upper())
+                use_dynamic = (
+                    getattr(config, 'USE_DYNAMIC_POSITION_SIZING', True)
+                    and (not is_gold or not use_manual_for_gold)
+                    and self.mt5.connected
+                )
+                if use_dynamic:
                     account = self.paper.get_account_info() if self.paper_mode else self.mt5.get_account_info()
                     balance = account['balance'] if account else 0
                     sl = latest_signal.get('sl')

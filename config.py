@@ -20,8 +20,9 @@ TRADE_SESSION_HOURS = {
     13: 'ny', 14: 'ny', 15: 'ny', 16: 'ny',
     0: 'asian', 1: 'asian', 2: 'asian', 3: 'asian', 4: 'asian',
 }
-MAX_POSITION_SIZE = 0.04  # Fallback lot size when dynamic calc fails
-USE_DYNAMIC_POSITION_SIZING = True  # Risk % of current balance per trade (matches backtest)
+MAX_POSITION_SIZE = 0.02  # Fixed lot when gold uses manual; fallback when calc fails
+USE_DYNAMIC_POSITION_SIZING = True   # True = risk-based for non-gold; gold uses manual when GOLD_USE_MANUAL_LOT=True
+GOLD_USE_MANUAL_LOT = True   # Gold (XAUUSDm etc): use MAX_POSITION_SIZE; other pairs: risk-based sizing
 PAPER_TRADING_LOG = 'paper_trades.json'
 LIVE_TRADE_LOG = True   # Append trades to logs/trades_YYYYMMDD.json
 # Risk Management
@@ -274,6 +275,14 @@ def cli_symbol_to_mt5(cli_symbol):
         if key.upper().replace("M", "") == normalized or key.upper() == normalized:
             return mt5_val
     return None
+
+
+def is_gold_symbol(symbol):
+    """Return True if symbol is gold (XAUUSD, XAUUSDm, GC=F, etc.)."""
+    if not symbol:
+        return False
+    s = str(symbol).upper()
+    return "XAU" in s or "GC" in s or "GOLD" in s
 
 
 def _normalize_symbol_for_config(symbol):
