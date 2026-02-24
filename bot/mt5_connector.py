@@ -512,6 +512,19 @@ class MT5Connector:
         err_msg = err[1] if err and len(err) > 1 else str(result.retcode if result is not None else "?")
         return False, err_msg
 
+    def get_today_deals_pnl(self):
+        """Return today's total P&L from closed deals (profit + commission + swap). UTC date. Returns 0.0 if not connected or error."""
+        if not self.connected:
+            return 0.0
+        now = datetime.utcnow()
+        from_date = datetime(now.year, now.month, now.day)
+        to_date = now
+        deals = mt5.history_deals_get(from_date, to_date)
+        if deals is None:
+            return 0.0
+        total = sum(getattr(d, 'profit', 0) + getattr(d, 'commission', 0) + getattr(d, 'swap', 0) for d in deals)
+        return float(total)
+
     def get_positions(self):
         positions = mt5.positions_get()
         if positions is None:
