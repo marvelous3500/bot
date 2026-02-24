@@ -118,7 +118,6 @@ REPLAY_STEP_BARS = 1
 AI_ENABLED = False
 AI_CONFIDENCE_THRESHOLD = 2.0  # 1-5 scale; skip trade if confidence below this
 AI_EXPLAIN_TRADES = False
-
 # Voice alerts (pyttsx3)
 VOICE_ALERTS = False
 VOICE_ALERT_ON_SIGNAL = True   # speak when trade found / about to take
