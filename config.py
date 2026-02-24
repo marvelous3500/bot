@@ -7,8 +7,8 @@ SYMBOLS = [ 'GC=F', 'GBPUSD=X', 'BTC-USD', '^NDX']
 
 LIVE_MODE = True   # True = real money, False = paper trading
 MAX_TRADES_PER_DAY_PER_PAIR = False   # True = limits apply per symbol; False = global (legacy)
-MAX_TRADES_PER_DAY = 12
-MAX_TRADES_PER_SESSION = 4 
+MAX_TRADES_PER_DAY = 18
+MAX_TRADES_PER_SESSION = 6 
 MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
 LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
 MAX_LOT_LIVE = 0.02  # Cap lot size in live mode (safety). 0.02 = ~6% risk on $140 gold.
@@ -23,6 +23,8 @@ TRADE_SESSION_HOURS = {
 MAX_POSITION_SIZE = 0.02  # Fixed lot when gold uses manual; fallback when calc fails
 USE_DYNAMIC_POSITION_SIZING = True   # True = risk-based for non-gold; gold uses manual when GOLD_USE_MANUAL_LOT=True
 GOLD_USE_MANUAL_LOT = True   # Gold (XAUUSDm etc): use MAX_POSITION_SIZE; other pairs: risk-based sizing
+# Gold manual: fixed SL distance (points). 5.0 points = 50 pips = $10 risk with 0.02 lots
+GOLD_MANUAL_SL_POINTS = 5.0
 PAPER_TRADING_LOG = 'paper_trades.json'
 LIVE_TRADE_LOG = True   # Append trades to logs/trades_YYYYMMDD.json
 # Risk Management
@@ -128,7 +130,7 @@ VOICE_ALERT_ON_REJECT = True   # speak when trade rejected and why
 #       E.g. REQUIRE_4H_ZONE_CONFIRMATION has no effect when REQUIRE_4H_BIAS=False.
 MARVELLOUS_INSTRUMENT = 'XAUUSD'
 MARVELLOUS_ONE_SIGNAL_PER_SETUP = False  # Deprecated: use MARVELLOUS_MAX_TRADES_PER_SETUP
-MARVELLOUS_MAX_TRADES_PER_SETUP = 2     # Max entries per M15 setup (1 = one per setup, 3 = up to 3, None = unlimited)
+MARVELLOUS_MAX_TRADES_PER_SETUP = 3     # Max entries per M15 setup (1 = one per setup, 3 = up to 3, None = unlimited)
 MARVELLOUS_REQUIRE_H1_BIAS = True
 MARVELLOUS_REQUIRE_4H_BIAS = False
 MARVELLOUS_REQUIRE_DAILY_BIAS = False
@@ -192,7 +194,7 @@ MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 
 
 # VesterStrategy: multi-timeframe smart-money (1H bias -> 5M setup -> 1M entry)
 VESTER_ONE_SIGNAL_PER_SETUP = False  # Deprecated: use VESTER_MAX_TRADES_PER_SETUP
-VESTER_MAX_TRADES_PER_SETUP = 2     # Max entries per 5M setup (1 = one per setup, 3 = up to 3, None = unlimited)
+VESTER_MAX_TRADES_PER_SETUP = 4     # Max entries per 5M setup (1 = one per setup, 3 = up to 3, None = unlimited)
 VESTER_BACKTEST_SYMBOL = 'GC=F'
 VESTER_LIVE_SYMBOL = 'XAUUSDm'
 VESTER_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}
