@@ -7,11 +7,12 @@ SYMBOLS = [ 'GC=F', 'GBPUSD=X', 'BTC-USD', '^NDX']
 
 LIVE_MODE = True   # True = real money, False = paper trading
 MAX_TRADES_PER_DAY_PER_PAIR = False   # True = limits apply per symbol; False = global (legacy)
-MAX_TRADES_PER_DAY = 12
-MAX_TRADES_PER_SESSION = 4 
+MAX_TRADES_PER_DAY = 15
+MAX_TRADES_PER_SESSION = 5 
 MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
 LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
-MAX_LOT_LIVE = None   # Cap lot size in live mode (safety)
+MAX_LOT_LIVE = None  # Cap lot size in live mode (safety). 0.02 = ~6% risk on $140 gold.
+MAX_RISK_PCT_LIVE = 0.10   # Never risk more than this % of balance (safety net if broker tick_value wrong)
   # Per session (London, NY); divides daily limit across sessions
 # Session hours (UTC) for per-session limit: London 7-10, NY 13-16, Asian 0-4
 TRADE_SESSION_HOURS = {
@@ -36,8 +37,8 @@ INITIAL_BALANCE = 100
 RISK_PER_TRADE = 0.10  # 10% risk per trade
 BACKTEST_MAX_TRADES = None  # Stop after N trades (None = no limit)
 BACKTEST_APPLY_TRADE_LIMITS = False  # When True, apply trade limits in backtest (both strategies)
-BACKTEST_MAX_TRADES_PER_DAY = 6   # Backtest daily limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
-BACKTEST_MAX_TRADES_PER_SESSION = 2  # Backtest session limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
+BACKTEST_MAX_TRADES_PER_DAY = 15   # Backtest daily limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
+BACKTEST_MAX_TRADES_PER_SESSION = 5  # Backtest session limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
 BACKTEST_PERIOD = '60d'  # Data period: 12d, 60d, 6mo (set before run)
 BACKTEST_SPREAD_PIPS = 2.0       # e.g. 2.0 for gold, 1.0 for forex
 BACKTEST_COMMISSION_PER_LOT = 7.0  # round-trip per lot (e.g. 7.0)
@@ -190,7 +191,7 @@ MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 
 
 # VesterStrategy: multi-timeframe smart-money (1H bias -> 5M setup -> 1M entry)
 VESTER_ONE_SIGNAL_PER_SETUP = False  # Deprecated: use VESTER_MAX_TRADES_PER_SETUP
-VESTER_MAX_TRADES_PER_SETUP = 2     # Max entries per 5M setup (1 = one per setup, 3 = up to 3, None = unlimited)
+VESTER_MAX_TRADES_PER_SETUP = 5     # Max entries per 5M setup (1 = one per setup, 3 = up to 3, None = unlimited)
 VESTER_BACKTEST_SYMBOL = 'GC=F'
 VESTER_LIVE_SYMBOL = 'XAUUSDm'
 VESTER_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}
@@ -201,11 +202,11 @@ VESTER_FVG_LOOKBACK = 30
 VESTER_LIQUIDITY_LOOKBACK = 5
 # HTF bias (1H)
 VESTER_HTF_LOOKBACK_HOURS = 48
-VESTER_REQUIRE_HTF_ZONE_CONFIRMATION = True  # False = BOS-only bias (more trades)
+VESTER_REQUIRE_HTF_ZONE_CONFIRMATION = False  # False = BOS-only bias (more trades)
 # 4H confirmation: when True, use 4H. AS_FILTER=True = only block when 4H opposes 1H (allow neutral).
 # AS_FILTER=False = gate: require 4H to match 1H (skip when 4H neutral or opposite)
-VESTER_REQUIRE_4H_BIAS = True
-VESTER_4H_AS_FILTER = True  # True = block only when 4H opposite; False = require 4H to match
+VESTER_REQUIRE_4H_BIAS = False
+VESTER_4H_AS_FILTER = False  # True = block only when 4H opposite; False = require 4H to match
 VESTER_REQUIRE_4H_ZONE_CONFIRMATION = False
 VESTER_4H_LOOKBACK_BARS = 24  # 4H bars to look back (~4 days)
 # Breaker block: failed OB that aligns with bias; used as HTF filter, not entry
@@ -229,11 +230,11 @@ VESTER_EQUILIBRIUM_TF = 'H1'       # H1 or 4H (Vester has no daily data)
 # Filters
 VESTER_MAX_SPREAD_POINTS = 50.0
 VESTER_MAX_CANDLE_VOLATILITY_ATR_MULT = 4.0
-VESTER_USE_NEWS_FILTER = False
+VESTER_USE_NEWS_FILTER = True
 VESTER_NEWS_BUFFER_MINUTES = 15
 # Risk management
 VESTER_RISK_PER_TRADE = 0.10
-VESTER_MAX_TRADES_PER_SESSION = 2
+VESTER_MAX_TRADES_PER_SESSION = 5
 VESTER_DAILY_LOSS_LIMIT_PCT = 5.0
 VESTER_USE_TRAILING_STOP = False
 VESTER_MIN_RR = 3.0
@@ -255,6 +256,9 @@ SYMBOL_CONFIGS = {
         "PIP_SIZE": 1.0,                     # Index points
         "MARVELLOUS_MIN_ATR_THRESHOLD": 40,
     },
+    # Gold: 1 lot = 100 oz, $1 move = $100 per 1 lot. Override when broker tick_value is wrong.
+    "XAUUSDm": {"LOSS_PER_LOT_PER_POINT": 100},
+    "XAUUSD": {"LOSS_PER_LOT_PER_POINT": 100},
 }
 
 

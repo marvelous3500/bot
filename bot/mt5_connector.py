@@ -262,6 +262,7 @@ class MT5Connector:
     def calc_lot_size_from_risk(self, symbol, balance, entry_price, sl_price, risk_pct):
         """
         Calculate lot size so that risk = balance * risk_pct (matches backtest).
+        Uses SYMBOL_CONFIGS LOSS_PER_LOT_PER_POINT for gold when broker tick_value is wrong.
         Returns volume or None if calc fails (fallback to config.MAX_POSITION_SIZE).
         """
         if not self.connected or balance <= 0 or risk_pct <= 0:
@@ -269,20 +270,26 @@ class MT5Connector:
         info = mt5.symbol_info(symbol)
         if info is None:
             return None
-        tick_size = getattr(info, 'trade_tick_size', info.point) or info.point
-        tick_value = getattr(info, 'trade_tick_value', 0)
-        if tick_size <= 0 or tick_value <= 0:
+        sl_distance = abs(float(entry_price) - float(sl_price))
+        if sl_distance <= 0:
             return None
         risk_amount = balance * risk_pct
-        sl_distance = abs(float(entry_price) - float(sl_price))
-        risk_ticks = sl_distance / tick_size
-        if risk_ticks <= 0:
-            return None
-        loss_per_lot = risk_ticks * tick_value
+        # Gold override: 1 lot = 100 oz, $1 move = $100. Use when broker tick_value wrong.
+        loss_per_lot_per_pt = config.get_symbol_config(symbol, "LOSS_PER_LOT_PER_POINT") if config else None
+        if loss_per_lot_per_pt is not None and loss_per_lot_per_pt > 0:
+            loss_per_lot = sl_distance * loss_per_lot_per_pt
+        else:
+            tick_size = getattr(info, 'trade_tick_size', info.point) or info.point
+            tick_value = getattr(info, 'trade_tick_value', 0)
+            if tick_size <= 0 or tick_value <= 0:
+                return None
+            risk_ticks = sl_distance / tick_size
+            if risk_ticks <= 0:
+                return None
+            loss_per_lot = risk_ticks * tick_value
         if loss_per_lot <= 0:
             return None
         lot_size = risk_amount / loss_per_lot
-        # Round to volume_step
         step = info.volume_step
         lot_size = max(info.volume_min, min(info.volume_max, lot_size))
         lot_size = round(lot_size / step) * step
@@ -296,15 +303,21 @@ class MT5Connector:
         info = mt5.symbol_info(symbol)
         if info is None:
             return None
-        tick_size = getattr(info, 'trade_tick_size', info.point) or info.point
-        tick_value = getattr(info, 'trade_tick_value', 0)
-        if tick_size <= 0 or tick_value <= 0:
-            return None
         sl_distance = abs(float(entry_price) - float(sl_price))
-        risk_ticks = sl_distance / tick_size
-        if risk_ticks <= 0:
+        if sl_distance <= 0:
             return None
-        loss_per_lot = risk_ticks * tick_value
+        loss_per_lot_per_pt = config.get_symbol_config(symbol, "LOSS_PER_LOT_PER_POINT") if config else None
+        if loss_per_lot_per_pt is not None and loss_per_lot_per_pt > 0:
+            loss_per_lot = sl_distance * loss_per_lot_per_pt
+        else:
+            tick_size = getattr(info, 'trade_tick_size', info.point) or info.point
+            tick_value = getattr(info, 'trade_tick_value', 0)
+            if tick_size <= 0 or tick_value <= 0:
+                return None
+            risk_ticks = sl_distance / tick_size
+            if risk_ticks <= 0:
+                return None
+            loss_per_lot = risk_ticks * tick_value
         if loss_per_lot <= 0:
             return None
         return round(loss_per_lot * float(volume), 2)
