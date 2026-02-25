@@ -16,7 +16,7 @@ import config
 from .. import vester_config as vc
 from ..data_loader import fetch_data_yfinance, load_data_csv
 from ..strategies import VesterStrategy
-from .common import _stats_dict, get_pip_size_for_symbol, _apply_backtest_realism, _calc_trade_pnl, _update_per_day_session
+from .common import _stats_dict, get_pip_size_for_symbol, _apply_backtest_realism, _apply_gold_manual_sl_override, _calc_trade_pnl, _update_per_day_session
 
 
 def _strip_tz(df):
@@ -144,6 +144,7 @@ def run_vester_backtest(
         adj_entry, adj_sl, commission = _apply_backtest_realism(
             entry_price, stop_loss, trade["type"], used_symbol, entry_price
         )
+        adj_sl = _apply_gold_manual_sl_override(used_symbol, adj_entry, adj_sl, trade["type"])
         spread_cost = abs(adj_entry - entry_price)
         future_prices = df_m1.loc[df_m1.index > trade_time]
         if future_prices.empty:
