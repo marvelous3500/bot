@@ -1,3 +1,4 @@
+import math
 import MetaTrader5 as mt5
 import pandas as pd
 from datetime import datetime
@@ -292,7 +293,8 @@ class MT5Connector:
         lot_size = risk_amount / loss_per_lot
         step = info.volume_step
         lot_size = max(info.volume_min, min(info.volume_max, lot_size))
-        lot_size = round(lot_size / step) * step
+        # Round half up so we get closer to target risk (e.g. 0.0445 → 0.05 not 0.04)
+        lot_size = math.floor(lot_size / step + 0.5) * step
         lot_size = max(info.volume_min, min(info.volume_max, lot_size))
         return round(lot_size, 2)
 

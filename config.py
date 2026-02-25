@@ -20,6 +20,26 @@ TRADE_SESSION_HOURS = {
     13: 'ny', 14: 'ny', 15: 'ny', 16: 'ny',
     0: 'asian', 1: 'asian', 2: 'asian', 3: 'asian', 4: 'asian',
 }
+# LQ strategy: session windows (start_hour, end_hour) UTC for session high/low
+LQ_SESSION_HOURS_UTC = {
+    'asian': (0, 5),    # 00:00–04:59 UTC
+    'london': (7, 11),  # 07:00–10:59 UTC
+    'ny': (13, 17),     # 13:00–16:59 UTC
+}
+LQ_MIN_RR = 2.0
+LQ_ONE_TRADE_PER_LEVEL = True
+LQ_SWING_LOOKBACK = 10
+LQ_SL_BUFFER_PCT = 0.02
+LQ_SL_BUFFER_MIN = 0.5
+# Flexibility: filter by session and sweep quality
+LQ_ALLOW_SESSIONS = []                # [] = all sessions; ['london','ny'] = only London/NY
+LQ_ALLOW_PDH_PDL = True               # Trade PDH/PDL sweeps (higher-quality levels)
+LQ_ALLOW_SESSION_SWEEPS = True        # Trade session high/low sweeps (False = PDH/PDL only)
+LQ_REJECTION_WICK_RATIO = 0.55        # Min wick/range for rejection candle (0.5–0.7 typical)
+LQ_REQUIRE_BOS = False                # True = require BOS confirmation (stricter; fewer trades)
+LQ_CONFIRM_BARS = 2                   # Bars to wait for confirmation (1–3)
+LQ_USE_VESTER_ENTRY = True            # Use Vester 1M entry trigger (BOS in zone / sweep+displacement)
+LQ_VESTER_ENTRY_BARS = 15             # Max M1 bars to wait for Vester trigger (15 min)
 MAX_POSITION_SIZE = 0.02  # Fallback when lot calc fails
 USE_DYNAMIC_POSITION_SIZING = True   # Balance × risk % determines lot size
 GOLD_USE_MANUAL_LOT = False  # False = dynamic lot from balance (10%); True = fixed MAX_POSITION_SIZE

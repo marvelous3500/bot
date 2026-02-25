@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from .connector_interface import get_connector, TIMEFRAME_M1, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
 from .paper_trading import PaperTrading
 from .trade_approver import TradeApprover
-from .strategies import MarvellousStrategy, VesterStrategy, FollowStrategy
+from .strategies import MarvellousStrategy, VesterStrategy, FollowStrategy, LQStrategy
 from .indicators_bos import detect_swing_highs_lows, detect_break_of_structure
 from ai import get_signal_confidence, explain_trade, speak
 from .telegram_notifier import send_setup_notification
@@ -73,6 +73,13 @@ class LiveTradingEngine:
                 if t is not None:
                     ts = t if hasattr(t, 'floor') else pd.Timestamp(t)
                     setup_ts = ts.floor('5min')
+        elif self.strategy_name == 'lq':
+            setup_ts = signal.get('setup_m15')
+            if setup_ts is None:
+                t = signal.get('time')
+                if t is not None:
+                    ts = t if hasattr(t, 'floor') else pd.Timestamp(t)
+                    setup_ts = ts.floor('15min')
         elif self.strategy_name == 'marvellous':
             setup_ts = signal.get('setup_m15')
             if setup_ts is None:
@@ -100,6 +107,8 @@ class LiveTradingEngine:
             max_per_setup = getattr(config, 'FOLLOW_MAX_TRADES_PER_SETUP', None)  # None = no limit for testing
         elif self.strategy_name == 'test-sl':
             max_per_setup = None  # One-shot: no setup limit
+        elif self.strategy_name == 'lq':
+            max_per_setup = 1  # One trade per setup (LQ has its own per-level tracking)
         if max_per_setup is None:
             return True, None
         key = self._get_setup_key(signal)
@@ -204,6 +213,11 @@ class LiveTradingEngine:
             else:
                 symbol = getattr(config, 'VESTER_LIVE_SYMBOL', vc.VESTER_LIVE_SYMBOL)
         elif self.strategy_name == 'test-sl':
+            if self.cli_symbol:
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
+            else:
+                symbol = config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
+        elif self.strategy_name == 'lq':
             if self.cli_symbol:
                 symbol = config.cli_symbol_to_mt5(self.cli_symbol) or config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
             else:
@@ -341,6 +355,37 @@ class LiveTradingEngine:
             signals_df = strat.run_backtest()
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] follow: 0 signals")
+        elif self.strategy_name == 'lq':
+            cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
+            lq_symbols = list(dict.fromkeys([
+                s for s in [cli_mt5, symbol, 'XAUUSD', 'XAUUSDm'] if s
+            ]))
+            df_daily = df_m15 = df_m1 = None
+            use_vester_entry = getattr(config, 'LQ_USE_VESTER_ENTRY', False)
+            for sym in lq_symbols:
+                df_daily = self.mt5.get_bars(sym, TIMEFRAME_D1, count=50)
+                df_m15 = self.mt5.get_bars(sym, TIMEFRAME_M15, count=1000)
+                if use_vester_entry:
+                    df_m1 = self.mt5.get_bars(sym, TIMEFRAME_M1, count=2000)
+                if df_daily is not None and not df_daily.empty and df_m15 is not None and not df_m15.empty:
+                    if not use_vester_entry or (df_m1 is not None and not df_m1.empty):
+                        symbol = sym
+                        break
+            if df_daily is None or df_daily.empty or df_m15 is None or df_m15.empty:
+                if getattr(config, 'LIVE_DEBUG', False):
+                    print(f"[LIVE_DEBUG] lq: D1/M15 data missing (tried: {lq_symbols})")
+                return []
+            if use_vester_entry and (df_m1 is None or df_m1.empty):
+                if getattr(config, 'LIVE_DEBUG', False):
+                    print(f"[LIVE_DEBUG] lq: M1 data missing for Vester entry")
+                return []
+            if getattr(config, 'LIVE_DEBUG', False):
+                print(f"[LIVE_DEBUG] {symbol} lq: D1 + M15" + (" + M1" if use_vester_entry else "") + " loaded")
+            strat = LQStrategy(df_daily=df_daily, df_m15=df_m15, df_m1=df_m1, symbol=symbol, verbose=False)
+            strat.prepare_data()
+            signals_df = strat.run_backtest()
+            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
+                print(f"[LIVE_DEBUG] lq: 0 signals")
         elif self.strategy_name == 'test-sl':
             cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
             test_symbols = list(dict.fromkeys([
@@ -474,6 +519,13 @@ class LiveTradingEngine:
                         )
                         if lot is not None:
                             latest_signal['volume'] = lot
+                            # Log how 10% risk translated to lot (rounding to lot step can make actual < 10%)
+                            target_risk = balance * risk_pct
+                            actual_risk = self.mt5.calc_dollar_risk(
+                                symbol, latest_signal['price'], sl, lot
+                            )
+                            if actual_risk is not None:
+                                print(f"[RISK] Balance ${balance:.2f} | {risk_pct*100:.0f}% target ${target_risk:.2f} | lot {lot} → risk ${actual_risk:.2f}")
                             # Safety cap: never risk more than MAX_RISK_PCT_LIVE
                             max_risk_pct = getattr(config, 'MAX_RISK_PCT_LIVE', None)
                             if max_risk_pct is not None and max_risk_pct > 0:
