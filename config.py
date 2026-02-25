@@ -66,8 +66,7 @@ LOCK_IN_ENABLED = True
 LOCK_IN_TRIGGER_RR = 3.3   # When price reaches this (e.g. 3.3× SL dist), activate lock-in
 LOCK_IN_AT_RR = 3.0       # Move SL to this level (e.g. 3R = lock in 3× profit)
 MAX_SL_PIPS = 50        # Max SL distance in pips for all pairs (converted per symbol's pip size)
-DAILY_LOSS_LIMIT_PCT = 1.0   # Stop new trades when today's closed P&L loss >= balance × this %
-
+DAILY_LOSS_LIMIT_PCT = 1.0 # Stop new trades when today's closed P&L loss >= balance × this %
 # Backtesting
 BACKTEST_EXCLUDE_WEEKENDS = True
 INITIAL_BALANCE = 100
