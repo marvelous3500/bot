@@ -7,8 +7,10 @@ SYMBOLS = [ 'GC=F', 'GBPUSD=X', 'BTC-USD', '^NDX']
 
 LIVE_MODE = True   # True = real money, False = paper trading
 MAX_TRADES_PER_DAY_PER_PAIR = False   # True = limits apply per symbol; False = global (legacy)
+
 MAX_TRADES_PER_DAY = 9
 MAX_TRADES_PER_SESSION = 3 
+
 MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
 LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
 MAX_LOT_LIVE = None  # Cap lot size in live mode (safety). 0.02 = ~6% risk on $140 gold.
@@ -20,6 +22,12 @@ TRADE_SESSION_HOURS = {
     13: 'ny', 14: 'ny', 15: 'ny', 16: 'ny',
     0: 'asian', 1: 'asian', 2: 'asian', 3: 'asian', 4: 'asian',
 }
+
+MAX_POSITION_SIZE = 0.02  # Fixed lot when gold uses manual; fallback when calc fails
+USE_DYNAMIC_POSITION_SIZING = True   # True = risk-based for non-gold; gold uses manual when GOLD_USE_MANUAL_LOT=True
+GOLD_USE_MANUAL_LOT = True   # Gold (XAUUSDm etc): use MAX_POSITION_SIZE; other pairs: risk-based sizing
+# Gold manual: fixed SL distance (points). 5.0 points = 50 pips = $10 risk with 0.02 lots
+
 # LQ strategy: session windows (start_hour, end_hour) UTC for session high/low
 LQ_SESSION_HOURS_UTC = {
     'asian': (0, 5),    # 00:00–04:59 UTC
@@ -44,6 +52,7 @@ MAX_POSITION_SIZE = 0.02  # Fallback when lot calc fails
 USE_DYNAMIC_POSITION_SIZING = True   # Balance × risk % determines lot size
 GOLD_USE_MANUAL_LOT = False  # False = dynamic lot from balance (10%); True = fixed MAX_POSITION_SIZE
 # Gold: fixed SL distance (points). 5.0 = 50 pips. Lot = (balance × risk%) / (5.0 × 100)
+
 GOLD_MANUAL_SL_POINTS = 5.0
 PAPER_TRADING_LOG = 'paper_trades.json'
 LIVE_TRADE_LOG = True   # Append trades to logs/trades_YYYYMMDD.json
@@ -224,6 +233,7 @@ MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 
 # VesterStrategy: multi-timeframe smart-money (1H bias -> 5M setup -> 1M entry)
 VESTER_ONE_SIGNAL_PER_SETUP = False  # Deprecated: use VESTER_MAX_TRADES_PER_SETUP
 VESTER_MAX_TRADES_PER_SETUP = 3     # Max entries per 5M setup (1 = one per setup, 3 = up to 3, None = unlimited)
+
 VESTER_BACKTEST_SYMBOL = 'GC=F'
 VESTER_LIVE_SYMBOL = 'XAUUSDm'
 VESTER_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}
