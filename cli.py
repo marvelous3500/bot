@@ -21,9 +21,9 @@ def build_parser():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["marvellous", "vester", "follow", "test-sl", "all"],
+        choices=["marvellous", "vester", "follow", "test-sl", "lq", "all"],
         default="marvellous",
-        help="Strategy to use ('all' = run marvellous+vester; 'follow' = test strategy; 'test-sl' = one trade then stop)",
+        help="Strategy to use ('all' = run marvellous+vester; 'lq' = liquidity sweep 15M)",
     )
     parser.add_argument(
         "--csv",
@@ -197,7 +197,7 @@ def _print_premium_discount_comparison(strategy_name, without_pd, with_pd):
 
 def run_backtest(args):
     """Run backtest for the selected strategy (or all strategies if --strategy all)."""
-    from bot.backtest import run_marvellous_backtest, run_vester_backtest, run_follow_backtest
+    from bot.backtest import run_marvellous_backtest, run_vester_backtest, run_follow_backtest, run_lq_backtest
 
     if args.strategy == "test-sl":
         print("test-sl has no backtest. Use --mode live (or paper) for lot-size testing.")
@@ -306,6 +306,9 @@ def run_backtest(args):
         elif name == "follow":
             kwargs["symbol"] = kwargs.get("symbol") or getattr(config, "VESTER_BACKTEST_SYMBOL", "GC=F")
             run_follow_backtest(**kwargs)
+        elif name == "lq":
+            kwargs["symbol"] = kwargs.get("symbol") or getattr(config, "VESTER_BACKTEST_SYMBOL", "GC=F")
+            run_lq_backtest(**kwargs)
 
 
 def run_replay_cmd(args):

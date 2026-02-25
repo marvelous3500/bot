@@ -1,3 +1,4 @@
+import math
 import MetaTrader5 as mt5
 import pandas as pd
 from datetime import datetime
@@ -292,7 +293,8 @@ class MT5Connector:
         lot_size = risk_amount / loss_per_lot
         step = info.volume_step
         lot_size = max(info.volume_min, min(info.volume_max, lot_size))
-        lot_size = round(lot_size / step) * step
+        # Round half up so we get closer to target risk (e.g. 0.0445 → 0.05 not 0.04)
+        lot_size = math.floor(lot_size / step + 0.5) * step
         lot_size = max(info.volume_min, min(info.volume_max, lot_size))
         return round(lot_size, 2)
 
@@ -421,13 +423,8 @@ class MT5Connector:
         last_err = None
         for fill_name, type_filling in filling_modes:
             request = {
-                "action": mt5.TRADE_ACTION_DEAL,
-                "symbol": symbol,
-                "volume": volume,
-                "type": trade_type,
-                "price": execution_price,
                 "deviation": 20,
-                "magic": 234000,
+                "magic": getattr(config, 'MT5_MAGIC_NUMBER', 234000),
                 "comment": safe_comment,
                 "type_time": mt5.ORDER_TIME_GTC,
                 "type_filling": type_filling,
@@ -560,7 +557,7 @@ class MT5Connector:
             "position": ticket,
             "price": price,
             "deviation": 20,
-            "magic": 234000,
+            "magic": getattr(config, 'MT5_MAGIC_NUMBER', 234000),
             "comment": "Close position",
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC,
