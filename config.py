@@ -94,6 +94,7 @@ MT5_AUTO_START = os.getenv('MT5_AUTO_START', 'true').lower() in ('true', '1', 'y
 MT5_CONNECT_RETRIES = 5       # Max attempts for initialize + login
 MT5_CONNECT_DELAY = 5         # Seconds between retries
 MT5_VERBOSE = True            # Log connection steps, data fetches, etc.
+MT5_MAGIC_NUMBER = 234000     # Unique ID for orders; essential for copy trading identifiers
 # Optional: fixed order comment (max 31 chars, alphanumeric + space hyphen underscore).
 # None = use strategy reason; '' (set MT5_ORDER_COMMENT= in .env) = send empty; 'ICT' = fixed comment.
 MT5_ORDER_COMMENT = os.getenv('MT5_ORDER_COMMENT')  # None if key missing, '' if empty, else value

@@ -423,13 +423,8 @@ class MT5Connector:
         last_err = None
         for fill_name, type_filling in filling_modes:
             request = {
-                "action": mt5.TRADE_ACTION_DEAL,
-                "symbol": symbol,
-                "volume": volume,
-                "type": trade_type,
-                "price": execution_price,
                 "deviation": 20,
-                "magic": 234000,
+                "magic": getattr(config, 'MT5_MAGIC_NUMBER', 234000),
                 "comment": safe_comment,
                 "type_time": mt5.ORDER_TIME_GTC,
                 "type_filling": type_filling,
@@ -562,7 +557,7 @@ class MT5Connector:
             "position": ticket,
             "price": price,
             "deviation": 20,
-            "magic": 234000,
+            "magic": getattr(config, 'MT5_MAGIC_NUMBER', 234000),
             "comment": "Close position",
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC,

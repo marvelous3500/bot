@@ -98,4 +98,18 @@ All behavior is toggled via `config.py`.
 
 ---
 
+---
+
+## 6. Copy Trading Setup (Multi-Account)
+
+If you wish to copy trades from this bot to multiple other MT5 accounts, the most reliable method is the **Master/Slave Copier** model.
+
+### Strategy: One Bot -> Many Terminals
+1. **Master Instance**: Run the bot on your primary account. Ensure `MT5_MAGIC_NUMBER` in `config.py` is set (default: `234000`).
+2. **Slave Terminals**: Open your other MT5 accounts in separate terminal instances on the same machine/VPS.
+3. **Copier EA**: Install a standard "Trade Copier" Expert Advisor on the Master and all Slave terminals.
+4. **Filtering by Magic Number**: Configure the Copier EA to only copy trades with Magic Number `234000`. This ensures it only copies trades placed by this bot and ignores manual trades.
+
+---
+
 See [ONBOARDING.md](../ONBOARDING.md) for a high-level overview.
