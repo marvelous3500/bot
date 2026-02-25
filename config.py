@@ -25,7 +25,7 @@ TRADE_SESSION_HOURS = {
 
 MAX_POSITION_SIZE = 0.02  # Fixed lot when gold uses manual; fallback when calc fails
 USE_DYNAMIC_POSITION_SIZING = True   # True = risk-based for non-gold; gold uses manual when GOLD_USE_MANUAL_LOT=True
-GOLD_USE_MANUAL_LOT = True   # Gold (XAUUSDm etc): use MAX_POSITION_SIZE; other pairs: risk-based sizing
+GOLD_USE_MANUAL_LOT = False   # Gold (XAUUSDm etc): use MAX_POSITION_SIZE; other pairs: risk-based sizing
 # Gold manual: fixed SL distance (points). 5.0 points = 50 pips = $10 risk with 0.02 lots
 
 # LQ strategy: session windows (start_hour, end_hour) UTC for session high/low
