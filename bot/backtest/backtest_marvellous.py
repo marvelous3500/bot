@@ -56,8 +56,12 @@ def run_marvellous_backtest(
         use_60d = period in ("6mo", "180d") or (
             isinstance(period, str) and ("mo" in period.lower() or "y" in period.lower())
         )
-        fetch_period = "7d" if entry_tf == "1m" else ("60d" if use_60d else period)
-        period_note = f" (Yahoo 1m limit; {period} requested)" if entry_tf == "1m" and period != "7d" else ""
+        if period == "1d":
+            fetch_period = "1d"
+        else:
+            fetch_period = "7d" if entry_tf == "1m" else ("60d" if use_60d else period)
+        
+        period_note = f" (Yahoo 1m limit; {period} requested)" if entry_tf == "1m" and period not in ["1d", "7d"] else ""
         if use_60d and entry_tf != "1m":
             period_note = f" (Yahoo 15m limit; {period} requested)" if period != "60d" else ""
         display_period = fetch_period
