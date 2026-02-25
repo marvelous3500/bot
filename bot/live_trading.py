@@ -139,7 +139,7 @@ class LiveTradingEngine:
         self._limit_reason = None
 
         # Daily loss limit: stop new trades when today's closed P&L loss exceeds limit (live only)
-        if not self.paper_mode and self.mt5.connected:
+        if not self.paper_mode and self.mt5.connected and getattr(config, 'ENABLE_DAILY_LOSS_LIMIT', True):
             limit_pct = getattr(config, f'{self.strategy_name.upper()}_DAILY_LOSS_LIMIT_PCT', None) or getattr(config, 'DAILY_LOSS_LIMIT_PCT', 5.0)
             today_pnl = self.mt5.get_today_deals_pnl()
             account = self.mt5.get_account_info()
