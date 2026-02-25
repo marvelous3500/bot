@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from .connector_interface import get_connector, TIMEFRAME_M1, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
 from .paper_trading import PaperTrading
 from .trade_approver import TradeApprover
-from .strategies import MarvellousStrategy, VesterStrategy, FollowStrategy, LQStrategy
+from .strategies import MarvellousStrategy, VesterStrategy, KingselyStrategy, FollowStrategy, LQStrategy
 from .indicators_bos import detect_swing_highs_lows, detect_break_of_structure
 from ai import get_signal_confidence, explain_trade, speak
 from .telegram_notifier import send_setup_notification
@@ -41,10 +41,21 @@ class LiveTradingEngine:
         self.strategy_name = strategy_name
         self.paper_mode = paper_mode
         self.cli_symbol = symbol  # --symbol from CLI (e.g. 'BTC-USD'); overrides config for live/paper
+        
+        login = config.MT5_LOGIN
+        password = config.MT5_PASSWORD
+        server = config.MT5_SERVER
+        
+        if strategy_name == 'kingsely':
+            from . import kingsely_config as kc
+            if kc.MT5_LOGIN: login = kc.MT5_LOGIN
+            if kc.MT5_PASSWORD: password = kc.MT5_PASSWORD
+            if kc.MT5_SERVER: server = kc.MT5_SERVER
+
         self.mt5 = get_connector(
-            login=config.MT5_LOGIN,
-            password=config.MT5_PASSWORD,
-            server=config.MT5_SERVER,
+            login=login,
+            password=password,
+            server=server,
             path=getattr(config, 'MT5_PATH', None),
             auto_start=getattr(config, 'MT5_AUTO_START', True)
         )
@@ -66,7 +77,7 @@ class LiveTradingEngine:
         if not symbol or not order_type:
             return None
         setup_ts = None
-        if self.strategy_name in ('vester', 'follow', 'test-sl'):
+        if self.strategy_name in ('vester', 'kingsely', 'follow', 'test-sl'):
             setup_ts = signal.get('setup_5m')
             if setup_ts is None:
                 t = signal.get('time')
@@ -99,6 +110,10 @@ class LiveTradingEngine:
             max_per_setup = getattr(config, 'VESTER_MAX_TRADES_PER_SETUP', None)
             if max_per_setup is None:
                 max_per_setup = 1 if getattr(config, 'VESTER_ONE_SIGNAL_PER_SETUP', True) else None
+        elif self.strategy_name == 'kingsely':
+            max_per_setup = getattr(config, 'KINGSELY_MAX_TRADES_PER_SETUP', None)
+            if max_per_setup is None:
+                max_per_setup = 1 if getattr(config, 'KINGSELY_ONE_SIGNAL_PER_SETUP', True) else None
         elif self.strategy_name == 'marvellous':
             max_per_setup = getattr(config, 'MARVELLOUS_MAX_TRADES_PER_SETUP', None)
             if max_per_setup is None:
@@ -212,6 +227,12 @@ class LiveTradingEngine:
                 symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'VESTER_LIVE_SYMBOL', vc.VESTER_LIVE_SYMBOL)
             else:
                 symbol = getattr(config, 'VESTER_LIVE_SYMBOL', vc.VESTER_LIVE_SYMBOL)
+        elif self.strategy_name == 'kingsely':
+            from . import kingsely_config as kc
+            if self.cli_symbol:
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'KINGSELY_LIVE_SYMBOL', kc.KINGSELY_LIVE_SYMBOL)
+            else:
+                symbol = getattr(config, 'KINGSELY_LIVE_SYMBOL', kc.KINGSELY_LIVE_SYMBOL)
         elif self.strategy_name == 'test-sl':
             if self.cli_symbol:
                 symbol = config.cli_symbol_to_mt5(self.cli_symbol) or config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
@@ -333,6 +354,41 @@ class LiveTradingEngine:
             signals_df = strat.run_backtest()
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] vester: 0 signals")
+        elif self.strategy_name == 'kingsely':
+            from . import kingsely_config as kc
+            cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
+            kingsely_live = getattr(config, 'KINGSELY_LIVE_SYMBOL', kc.KINGSELY_LIVE_SYMBOL)
+            kingsely_symbols = list(dict.fromkeys([
+                s for s in [cli_mt5, kingsely_live, symbol, 'XAUUSD', 'XAUUSDm'] if s
+            ]))
+            df_h1 = df_m5 = df_m1 = df_h4 = None
+            agg = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+            for sym in kingsely_symbols:
+                df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
+                df_m5 = self.mt5.get_bars(sym, TIMEFRAME_M5, count=1000)
+                df_m1 = self.mt5.get_bars(sym, TIMEFRAME_M1, count=1000)
+                if all(x is not None for x in (df_h1, df_m5, df_m1)):
+                    symbol = sym
+                    df_h4 = df_h1.resample("4h").agg(agg).dropna()
+                    break
+            if df_h1 is None or df_m5 is None or df_m1 is None:
+                if getattr(config, 'LIVE_DEBUG', False):
+                    print(f"[LIVE_DEBUG] kingsely: Bar data missing (tried: {kingsely_symbols})")
+                return []
+            if getattr(config, 'LIVE_DEBUG', False):
+                print(f"[LIVE_DEBUG] {symbol} kingsely: H1/M5/M1" + ("/4H" if df_h4 is not None else "") + " loaded")
+            strat = KingselyStrategy(
+                df_h1=df_h1,
+                df_m5=df_m5,
+                df_m1=df_m1,
+                df_h4=df_h4,
+                symbol=symbol,
+                verbose=False,
+            )
+            strat.prepare_data()
+            signals_df = strat.run_backtest()
+            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
+                print(f"[LIVE_DEBUG] kingsely: 0 signals")
         elif self.strategy_name == 'follow':
             cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
             follow_symbols = list(dict.fromkeys([
@@ -439,7 +495,11 @@ class LiveTradingEngine:
                 if self.strategy_name in ('marvellous', 'vester'):
                     sl = latest_signal.get('sl')
                     if sl is not None:
-                        buf_key = 'MARVELLOUS_SL_BUFFER' if self.strategy_name == 'marvellous' else 'VESTER_SL_BUFFER'
+                        buf_key = (
+                            'MARVELLOUS_SL_BUFFER' if self.strategy_name == 'marvellous' else
+                            'KINGSELY_SL_BUFFER' if self.strategy_name == 'kingsely' else
+                            'VESTER_SL_BUFFER'
+                        )
                         buf = config.get_symbol_config(symbol, buf_key) or getattr(config, buf_key, 1.0)
                         try:
                             sl_f = float(sl)

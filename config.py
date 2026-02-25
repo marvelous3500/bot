@@ -1,4 +1,5 @@
-# Trading Pairs (Yahoo Finance Tickers) — first is default for backtest/CLI
+#VESTER_REQUIRE_HTF_ZONE_CONFIRMATION = False  # False = BOS-only bias (more trades) (key)
+#Trading Pairs (Yahoo Finance Tickers) — first is default for backtest/CLI
 # GBPUSD=X : GBP/USD (default)
 # GC=F : Gold Futures
 # BTC-USD : Bitcoin
@@ -287,6 +288,9 @@ VESTER_SL_BUFFER = 1.0
 VESTER_SL_METHOD = 'OB'
 VESTER_SL_ATR_MULT = 1.0  # Buffer = ATR × this (HYBRID only)
 VESTER_SL_MICRO_TF = '1m'  # Micro-structure timeframe: '1m' or '5m' (HYBRID only)
+
+
+
 
 
 # Symbol-specific config overrides. When the bot trades this pair, it uses these values instead of defaults.

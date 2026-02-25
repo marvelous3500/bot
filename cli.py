@@ -21,7 +21,7 @@ def build_parser():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["marvellous", "vester", "follow", "test-sl", "lq", "all"],
+        choices=["marvellous", "vester", "kingsely", "follow", "test-sl", "lq", "all"],
         default="marvellous",
         help="Strategy to use ('all' = run marvellous+vester; 'lq' = liquidity sweep 15M)",
     )
@@ -39,9 +39,9 @@ def build_parser():
     parser.add_argument(
         "--period",
         type=str,
-        choices=["12d", "60d", "both"],
+        choices=["1d", "12d", "60d", "both"],
         default="both",
-        help="Backtest period when --strategy all: 12d, 60d, or both (default)",
+        help="Backtest period: 1d, 12d, 60d, or both (default)",
     )
     parser.add_argument(
         "--auto-approve",
@@ -197,7 +197,7 @@ def _print_premium_discount_comparison(strategy_name, without_pd, with_pd):
 
 def run_backtest(args):
     """Run backtest for the selected strategy (or all strategies if --strategy all)."""
-    from bot.backtest import run_marvellous_backtest, run_vester_backtest, run_follow_backtest, run_lq_backtest
+    from bot.backtest import run_marvellous_backtest, run_vester_backtest, run_kingsely_backtest, run_follow_backtest, run_lq_backtest
 
     if args.strategy == "test-sl":
         print("test-sl has no backtest. Use --mode live (or paper) for lot-size testing.")
@@ -224,6 +224,15 @@ def run_backtest(args):
                 mc.USE_PREMIUM_DISCOUNT = True
                 with_pd = run_marvellous_backtest(**kwargs)
                 mc.USE_PREMIUM_DISCOUNT = orig
+            elif name == "kingsely":
+                from bot import kingsely_config as kc
+                kwargs["symbol"] = kwargs.get("symbol") or kc.KINGSELY_BACKTEST_SYMBOL
+                orig = getattr(kc, "USE_PREMIUM_DISCOUNT", False)
+                kc.USE_PREMIUM_DISCOUNT = False
+                without_pd = run_kingsely_backtest(**kwargs)
+                kc.USE_PREMIUM_DISCOUNT = True
+                with_pd = run_kingsely_backtest(**kwargs)
+                kc.USE_PREMIUM_DISCOUNT = orig
             else:
                 from bot import vester_config as vc
                 kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
@@ -251,6 +260,19 @@ def run_backtest(args):
                 mc.REQUIRE_BREAKER_BLOCK = True
                 with_bb = run_marvellous_backtest(**kwargs)
                 mc.REQUIRE_BREAKER_BLOCK = orig
+            elif name == "kingsely":
+                from bot import kingsely_config as kc
+                kwargs["symbol"] = kwargs.get("symbol") or kc.KINGSELY_BACKTEST_SYMBOL
+                orig_req = getattr(kc, "REQUIRE_BREAKER_BLOCK", False)
+                orig_4h = getattr(kc, "BREAKER_BLOCK_4H", False)
+                kc.REQUIRE_BREAKER_BLOCK = False
+                kc.BREAKER_BLOCK_4H = False
+                without_bb = run_kingsely_backtest(**kwargs)
+                kc.REQUIRE_BREAKER_BLOCK = True
+                kc.BREAKER_BLOCK_4H = getattr(config, "KINGSELY_BREAKER_BLOCK_4H", False)
+                with_bb = run_kingsely_backtest(**kwargs)
+                kc.REQUIRE_BREAKER_BLOCK = orig_req
+                kc.BREAKER_BLOCK_4H = orig_4h
             else:
                 from bot import vester_config as vc
                 kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
@@ -281,6 +303,10 @@ def run_backtest(args):
                     from bot import marvellous_config as mc
                     kwargs["symbol"] = mc.MARVELLOUS_BACKTEST_SYMBOL
                     s = run_marvellous_backtest(**kwargs)
+                elif name == "kingsely":
+                    from bot import kingsely_config as kc
+                    kwargs["symbol"] = kwargs.get("symbol") or kc.KINGSELY_BACKTEST_SYMBOL
+                    s = run_kingsely_backtest(**kwargs)
                 elif name == "vester":
                     from bot import vester_config as vc
                     kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
@@ -299,6 +325,10 @@ def run_backtest(args):
             from bot import marvellous_config as mc
             kwargs["symbol"] = kwargs.get("symbol") or mc.MARVELLOUS_BACKTEST_SYMBOL
             run_marvellous_backtest(**kwargs)
+        elif name == "kingsely":
+            from bot import kingsely_config as kc
+            kwargs["symbol"] = kwargs.get("symbol") or kc.KINGSELY_BACKTEST_SYMBOL
+            run_kingsely_backtest(**kwargs)
         elif name == "vester":
             from bot import vester_config as vc
             kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL

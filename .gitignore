@@ -6,3 +6,5 @@ paper_trades.json
 __pycache__/
 *.pyc
 .DS_Store
+.env
+kingsely_config.py

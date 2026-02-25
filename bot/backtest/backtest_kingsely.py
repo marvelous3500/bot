@@ -1,21 +1,12 @@
 """
-Backtest runner for VesterStrategy (1H bias -> 5M setup -> 1M entry).
+Backtest runner for KingselyStrategy (1H bias -> 5M setup -> 1M entry).
 Multi-timeframe smart-money: market structure, liquidity sweeps, FVG, order blocks.
-
-Example config:
-  Symbol: GC=F (gold) or GBPUSD=X
-  Period: 60d (or 7d if 1m data needed - Yahoo 1m limit)
-  VESTER_SWING_LENGTH=3, VESTER_OB_LOOKBACK=20, VESTER_HTF_LOOKBACK_HOURS=48
-  VESTER_MIN_RR=3, VESTER_RISK_PER_TRADE=0.10, VESTER_MAX_TRADES_PER_SESSION=2
-  VESTER_DAILY_LOSS_LIMIT_PCT=5.0, VESTER_USE_TRAILING_STOP=False
-
-Example CLI: python main.py --mode backtest --strategy vester --symbol GC=F --period 60d
 """
 import pandas as pd
 import config
-from .. import vester_config as vc
+from .. import kingsely_config as kc
 from ..data_loader import fetch_data_yfinance, load_data_csv
-from ..strategies import VesterStrategy
+from ..strategies import KingselyStrategy
 from .common import _stats_dict, get_pip_size_for_symbol, _apply_backtest_realism, _apply_gold_manual_sl_override, _calc_trade_pnl, _update_per_day_session
 
 
@@ -28,7 +19,7 @@ def _strip_tz(df):
     return df
 
 
-def run_vester_backtest(
+def run_kingsely_backtest(
     csv_path=None,
     symbol=None,
     period=None,
@@ -39,7 +30,7 @@ def run_vester_backtest(
     df_m1=None,
     df_h4=None,
 ):
-    """Run Vester backtest. Uses 1H, 5M, 1M timeframes. Optional 4H when VESTER_REQUIRE_4H_BIAS=True."""
+    """Run Kingsely backtest. Uses 1H, 5M, 1M timeframes. Optional 4H when KINGSELY_REQUIRE_4H_BIAS=True."""
     agg = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
     display_period = period or getattr(config, "BACKTEST_PERIOD", "60d")
     period_note = ""
@@ -52,7 +43,8 @@ def run_vester_backtest(
         df_m5 = df.resample("5min").agg(agg).dropna()
         df_m1 = df.resample("1min").agg(agg).dropna()
     else:
-        symbol = symbol or getattr(config, "VESTER_BACKTEST_SYMBOL", vc.VESTER_BACKTEST_SYMBOL)
+        symbol = symbol or getattr(config, "KINGSELY_BACKTEST_SYMBOL", kc.KINGSELY_BACKTEST_SYMBOL)
+        period = period or getattr(config, "BACKTEST_PERIOD", "60d")
         if period == "1d":
             fetch_period = "1d"
         else:
@@ -70,8 +62,8 @@ def run_vester_backtest(
         if d is not None:
             _strip_tz(d)
 
-    used_symbol = symbol or getattr(config, "VESTER_BACKTEST_SYMBOL", vc.VESTER_BACKTEST_SYMBOL)
-    strat = VesterStrategy(
+    used_symbol = symbol or getattr(config, "KINGSELY_BACKTEST_SYMBOL", kc.KINGSELY_BACKTEST_SYMBOL)
+    strat = KingselyStrategy(
         df_h1=df_h1,
         df_m5=df_m5,
         df_m1=df_m1,
@@ -103,28 +95,28 @@ def run_vester_backtest(
     lock_in_enabled = getattr(config, "LOCK_IN_ENABLED", True)
     lock_in_trigger = getattr(config, "LOCK_IN_TRIGGER_RR", 3.3)
     lock_in_at = getattr(config, "LOCK_IN_AT_RR", 3.0)
-    risk_pct = getattr(config, "VESTER_RISK_PER_TRADE", vc.RISK_PER_TRADE)
+    risk_pct = getattr(config, "KINGSELY_RISK_PER_TRADE", kc.RISK_PER_TRADE)
 
     if signals.empty:
         if return_stats:
-            d = _stats_dict("vester", 0, 0, 0, 0.0, 0.0, config.INITIAL_BALANCE)
+            d = _stats_dict("kingsely", 0, 0, 0, 0.0, 0.0, config.INITIAL_BALANCE)
             d["buys"] = 0
             d["sells"] = 0
             if include_trade_details:
                 d["trade_details"] = []
             return d
         print()
-        print("Backtest Parameters (VesterStrategy):")
+        print("Backtest Parameters (KingselyStrategy):")
         print(f"  Asset: {used_symbol}")
         print(f"  Risk per trade: {risk_pct * 100:.0f}%")
         print(f"  Risk:Reward: 1:{risk}")
-        htf_label = "1H+4H" if getattr(config, "VESTER_REQUIRE_4H_BIAS", False) else "1H"
+        htf_label = "1H+4H" if getattr(config, "KINGSELY_REQUIRE_4H_BIAS", False) else "1H"
         print(f"  Timeframes: {htf_label} bias, 5M setup, 1M entry")
         print(f"  Duration: {display_period}{period_note}")
         print()
         print("| Strategy | Trades | Wins | Losses | Win rate  | Final balance | Return      |")
         print("| :------- | :----- | :--- | :----- | :-------- | :------------ | :---------- |")
-        print("| vester   |      0 |    0 |      0 |     0.00% | $      100.00 |      0.00% |")
+        print("| kingsely |      0 |    0 |      0 |     0.00% | $      100.00 |      0.00% |")
         print()
         return
 
@@ -244,7 +236,7 @@ def run_vester_backtest(
 
     if return_stats:
         d = _stats_dict(
-            "vester", wins + losses, wins, losses, total_profit, total_loss, balance
+            "kingsely", wins + losses, wins, losses, total_profit, total_loss, balance
         )
         d["buys"] = buys
         d["sells"] = sells
@@ -261,11 +253,11 @@ def run_vester_backtest(
     return_pct = ((balance - config.INITIAL_BALANCE) / config.INITIAL_BALANCE) * 100
     win_rate = (wins / (wins + losses) * 100) if (wins + losses) > 0 else 0
     print()
-    print("Backtest Parameters (VesterStrategy):")
+    print("Backtest Parameters (KingselyStrategy):")
     print(f"  Asset: {used_symbol}")
     print(f"  Risk per trade: {risk_pct * 100:.0f}%")
     print(f"  Risk:Reward: 1:{risk}")
-    htf_label = "1H+4H" if getattr(config, "VESTER_REQUIRE_4H_BIAS", False) else "1H"
+    htf_label = "1H+4H" if getattr(config, "KINGSELY_REQUIRE_4H_BIAS", False) else "1H"
     print(f"  Timeframes: {htf_label} bias, 5M setup, 1M entry")
     print(f"  Trade Limit: {trade_limit_str}")
     print(f"  Daily/Session limits: {limits_str}")
@@ -274,7 +266,7 @@ def run_vester_backtest(
     print("| Strategy | Trades | Wins | Losses | Win rate  | Final balance | Return      |")
     print("| :------- | :----- | :--- | :----- | :-------- | :------------ | :---------- |")
     ret_str = f"{'+' if return_pct >= 0 else ''}{return_pct:,.2f}%"
-    print(f"| vester   | {wins + losses:>5} | {wins:>4} | {losses:>6} | {win_rate:>8.2f}% | ${balance:>11,.2f} | {ret_str:>10} |")
+    print(f"| kingsely | {wins + losses:>5} | {wins:>4} | {losses:>6} | {win_rate:>8.2f}% | ${balance:>11,.2f} | {ret_str:>10} |")
     print()
     print(f"  BUY: {buys} | SELL: {sells}")
     if per_day or per_session:
@@ -326,4 +318,4 @@ def run_vester_backtest(
 
 
 if __name__ == "__main__":
-    run_vester_backtest()
+    run_kingsely_backtest()
