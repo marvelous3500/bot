@@ -90,11 +90,10 @@ MT5_SERVER = os.getenv('MT5_SERVER', 'Exness-MT5Trial')  # Your Exness MT5 serve
 MT5_PATH = os.getenv('MT5_PATH')  # None = auto-detect
 # When True and MT5_PATH is set, the bot starts Exness MT5 automatically when you run paper/live.
 MT5_AUTO_START = os.getenv('MT5_AUTO_START', 'true').lower() in ('true', '1', 'yes')
+MT5_MAGIC_NUMBER = int(os.getenv('MT5_MAGIC_NUMBER', '234000'))  # Unique ID for orders; essential for copy trading identifiers
 # Connection retries and logging
 MT5_CONNECT_RETRIES = 5       # Max attempts for initialize + login
-MT5_CONNECT_DELAY = 5         # Seconds between retries
 MT5_VERBOSE = True            # Log connection steps, data fetches, etc.
-MT5_MAGIC_NUMBER = 234000     # Unique ID for orders; essential for copy trading identifiers
 # Optional: fixed order comment (max 31 chars, alphanumeric + space hyphen underscore).
 # None = use strategy reason; '' (set MT5_ORDER_COMMENT= in .env) = send empty; 'ICT' = fixed comment.
 MT5_ORDER_COMMENT = os.getenv('MT5_ORDER_COMMENT')  # None if key missing, '' if empty, else value
