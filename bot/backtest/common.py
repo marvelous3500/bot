@@ -51,6 +51,16 @@ def _apply_gold_manual_sl_override(used_symbol, adj_entry, adj_sl, order_type):
     return adj_entry + sl_points
 
 
+def _apply_gold_manual_sl_override(used_symbol, adj_entry, adj_sl, order_type):
+    """When gold + manual lot, override SL to fixed GOLD_MANUAL_SL_POINTS (50 pips = $10 risk with 0.02 lots)."""
+    if not _use_manual_lot_for_backtest(used_symbol):
+        return adj_sl
+    sl_points = getattr(config, 'GOLD_MANUAL_SL_POINTS', 5.0)
+    if order_type == 'BUY':
+        return adj_entry - sl_points
+    return adj_entry + sl_points
+
+
 def _calc_trade_pnl(used_symbol, balance, risk_pct, sl_dist, outcome, outcome_rr, spread_cost):
     """
     Return profit (WIN) or loss (LOSS) amount.

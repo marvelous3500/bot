@@ -10,7 +10,13 @@ from typing import Optional, Dict, Any, Tuple
 
 import config
 from .. import marvellous_config as mc
-from ..indicators import detect_fvg, get_equilibrium, get_equilibrium_from_daily
+from ..indicators import (
+    detect_fvg,
+    get_equilibrium,
+    get_equilibrium_from_daily,
+    price_in_buyside_liquidity,
+    price_in_sellside_liquidity,
+)
 from ..indicators_bos import (
     detect_swing_highs_lows,
     detect_break_of_structure,
@@ -384,6 +390,10 @@ class MarvellousStrategy:
         for i in range(len(entry_df)):
             idx = entry_df.index[i]
             current_time = idx if hasattr(idx, "hour") else pd.Timestamp(idx)
+            
+            # Skip Saturday (5) and Sunday (6) in backtest
+            if getattr(config, "BACKTEST_EXCLUDE_WEEKENDS", False) and current_time.weekday() >= 5:
+                continue
 
             # 1. Bias
             df_h1_slice = self.df_h1[self.df_h1.index <= idx].tail(mc.LOOKBACK_H1_HOURS)
@@ -623,6 +633,36 @@ class MarvellousStrategy:
                                         sl = base_swing + buf
                                         if sl <= entry_price:
                                             sl = entry_price + pip
+                        if getattr(config, "USE_ZONE_DIRECTION_FILTER", False):
+                            m15_slice_zd = self.df_m15[self.df_m15.index <= idx].tail(
+                                getattr(config, "ZONE_DIRECTION_FVG_LOOKBACK", 30)
+                            )
+                            lookback_zd = getattr(config, "ZONE_DIRECTION_FVG_LOOKBACK", 30)
+                            buffer_pct_zd = getattr(config, "ZONE_DIRECTION_BUFFER_PCT", 0.001)
+                            use_eq_zd = getattr(config, "ZONE_DIRECTION_USE_EQUILIBRIUM", True)
+                            equilibrium_zd = None
+                            if use_eq_zd:
+                                eq_lookback = getattr(mc, "EQUILIBRIUM_LOOKBACK", 24)
+                                eq_tf = getattr(mc, "EQUILIBRIUM_TF", "H1").upper()
+                                if eq_tf == "DAILY" and self.df_daily is not None and not self.df_daily.empty:
+                                    equilibrium_zd = get_equilibrium_from_daily(self.df_daily, idx)
+                                else:
+                                    df_eq = self.df_h1 if eq_tf == "H1" else (self.df_4h if self.df_4h is not None and not self.df_4h.empty else self.df_h1)
+                                    if df_eq is not None and not df_eq.empty:
+                                        df_eq_slice = df_eq[df_eq.index <= idx].tail(eq_lookback)
+                                        equilibrium_zd = get_equilibrium(df_eq_slice, eq_lookback)
+                            if h1_bias == "BULLISH":
+                                if price_in_buyside_liquidity(
+                                    entry_price, m15_slice_zd, lookback_zd,
+                                    equilibrium=equilibrium_zd, buffer_pct=buffer_pct_zd, use_equilibrium=use_eq_zd,
+                                ):
+                                    continue
+                            else:
+                                if price_in_sellside_liquidity(
+                                    entry_price, m15_slice_zd, lookback_zd,
+                                    equilibrium=equilibrium_zd, buffer_pct=buffer_pct_zd, use_equilibrium=use_eq_zd,
+                                ):
+                                    continue
                         if h1_bias == "BULLISH":
                             is_bull = row["close"] > row["open"]
                             if is_bull and float(lq_level) < float(row["close"]):

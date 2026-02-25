@@ -7,8 +7,10 @@ SYMBOLS = [ 'GC=F', 'GBPUSD=X', 'BTC-USD', '^NDX']
 
 LIVE_MODE = True   # True = real money, False = paper trading
 MAX_TRADES_PER_DAY_PER_PAIR = False   # True = limits apply per symbol; False = global (legacy)
+
 MAX_TRADES_PER_DAY = 9
 MAX_TRADES_PER_SESSION = 3 
+
 MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
 LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
 MAX_LOT_LIVE = None  # Cap lot size in live mode (safety). 0.02 = ~6% risk on $140 gold.
@@ -20,10 +22,37 @@ TRADE_SESSION_HOURS = {
     13: 'ny', 14: 'ny', 15: 'ny', 16: 'ny',
     0: 'asian', 1: 'asian', 2: 'asian', 3: 'asian', 4: 'asian',
 }
+
+MAX_POSITION_SIZE = 0.02  # Fixed lot when gold uses manual; fallback when calc fails
+USE_DYNAMIC_POSITION_SIZING = True   # True = risk-based for non-gold; gold uses manual when GOLD_USE_MANUAL_LOT=True
+GOLD_USE_MANUAL_LOT = True   # Gold (XAUUSDm etc): use MAX_POSITION_SIZE; other pairs: risk-based sizing
+# Gold manual: fixed SL distance (points). 5.0 points = 50 pips = $10 risk with 0.02 lots
+
+# LQ strategy: session windows (start_hour, end_hour) UTC for session high/low
+LQ_SESSION_HOURS_UTC = {
+    'asian': (0, 5),    # 00:00–04:59 UTC
+    'london': (7, 11),  # 07:00–10:59 UTC
+    'ny': (13, 17),     # 13:00–16:59 UTC
+}
+LQ_MIN_RR = 2.0
+LQ_ONE_TRADE_PER_LEVEL = True
+LQ_SWING_LOOKBACK = 10
+LQ_SL_BUFFER_PCT = 0.02
+LQ_SL_BUFFER_MIN = 0.5
+# Flexibility: filter by session and sweep quality
+LQ_ALLOW_SESSIONS = []                # [] = all sessions; ['london','ny'] = only London/NY
+LQ_ALLOW_PDH_PDL = True               # Trade PDH/PDL sweeps (higher-quality levels)
+LQ_ALLOW_SESSION_SWEEPS = True        # Trade session high/low sweeps (False = PDH/PDL only)
+LQ_REJECTION_WICK_RATIO = 0.55        # Min wick/range for rejection candle (0.5–0.7 typical)
+LQ_REQUIRE_BOS = False                # True = require BOS confirmation (stricter; fewer trades)
+LQ_CONFIRM_BARS = 2                   # Bars to wait for confirmation (1–3)
+LQ_USE_VESTER_ENTRY = True            # Use Vester 1M entry trigger (BOS in zone / sweep+displacement)
+LQ_VESTER_ENTRY_BARS = 15             # Max M1 bars to wait for Vester trigger (15 min)
 MAX_POSITION_SIZE = 0.02  # Fallback when lot calc fails
 USE_DYNAMIC_POSITION_SIZING = True   # Balance × risk % determines lot size
 GOLD_USE_MANUAL_LOT = False  # False = dynamic lot from balance (10%); True = fixed MAX_POSITION_SIZE
 # Gold: fixed SL distance (points). 5.0 = 50 pips. Lot = (balance × risk%) / (5.0 × 100)
+
 GOLD_MANUAL_SL_POINTS = 5.0
 PAPER_TRADING_LOG = 'paper_trades.json'
 LIVE_TRADE_LOG = True   # Append trades to logs/trades_YYYYMMDD.json
@@ -40,6 +69,7 @@ MAX_SL_PIPS = 50        # Max SL distance in pips for all pairs (converted per s
 DAILY_LOSS_LIMIT_PCT = 5.0   # Stop new trades when today's closed P&L loss >= balance × this %
 
 # Backtesting
+BACKTEST_EXCLUDE_WEEKENDS = True
 INITIAL_BALANCE = 100
 RISK_PER_TRADE = 0.10  # 10% risk per trade
 BACKTEST_MAX_TRADES = None  # Stop after N trades (None = no limit)
@@ -69,9 +99,9 @@ MT5_SERVER = os.getenv('MT5_SERVER', 'Exness-MT5Trial')  # Your Exness MT5 serve
 MT5_PATH = os.getenv('MT5_PATH')  # None = auto-detect
 # When True and MT5_PATH is set, the bot starts Exness MT5 automatically when you run paper/live.
 MT5_AUTO_START = os.getenv('MT5_AUTO_START', 'true').lower() in ('true', '1', 'yes')
+MT5_MAGIC_NUMBER = int(os.getenv('MT5_MAGIC_NUMBER', '234000'))  # Unique ID for orders; essential for copy trading identifiers
 # Connection retries and logging
 MT5_CONNECT_RETRIES = 5       # Max attempts for initialize + login
-MT5_CONNECT_DELAY = 5         # Seconds between retries
 MT5_VERBOSE = True            # Log connection steps, data fetches, etc.
 # Optional: fixed order comment (max 31 chars, alphanumeric + space hyphen underscore).
 # None = use strategy reason; '' (set MT5_ORDER_COMMENT= in .env) = send empty; 'ICT' = fixed comment.
@@ -187,6 +217,13 @@ MARVELLOUS_EQUILIBRIUM_TF = 'H1'       # H1, 4H, or DAILY
 # When False, both skip them. Config comes from MARVELLOUS_* above.
 USE_EXTRA_FILTERS = True
 
+# Zone-direction filter: don't buy into Buyside liquidity (bearish FVG/supply), don't sell into Sellside (bullish FVG/demand).
+# Applied in Vester, Marvellous, LQ when True.
+USE_ZONE_DIRECTION_FILTER = True
+ZONE_DIRECTION_FVG_LOOKBACK = 20
+ZONE_DIRECTION_BUFFER_PCT = 0.001
+ZONE_DIRECTION_USE_EQUILIBRIUM = False # False = only FVG zones (looser); True = also block by Premium/Discount
+
 # Marvellous symbol: None = gold (GC=F / XAUUSDm). Set to Yahoo symbol (e.g. 'GBPUSD=X') to run on that pair.
 MARVELLOUS_SYMBOL = None
 # Yahoo ticker -> MT5 symbol for Marvellous live trading
@@ -196,6 +233,7 @@ MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 
 # VesterStrategy: multi-timeframe smart-money (1H bias -> 5M setup -> 1M entry)
 VESTER_ONE_SIGNAL_PER_SETUP = False  # Deprecated: use VESTER_MAX_TRADES_PER_SETUP
 VESTER_MAX_TRADES_PER_SETUP = 3     # Max entries per 5M setup (1 = one per setup, 3 = up to 3, None = unlimited)
+
 VESTER_BACKTEST_SYMBOL = 'GC=F'
 VESTER_LIVE_SYMBOL = 'XAUUSDm'
 VESTER_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}
@@ -209,8 +247,8 @@ VESTER_HTF_LOOKBACK_HOURS = 48
 VESTER_REQUIRE_HTF_ZONE_CONFIRMATION = True  # False = BOS-only bias (more trades)
 # 4H confirmation: when True, use 4H. AS_FILTER=True = only block when 4H opposes 1H (allow neutral).
 # AS_FILTER=False = gate: require 4H to match 1H (skip when 4H neutral or opposite)
-VESTER_REQUIRE_4H_BIAS = True
-VESTER_4H_AS_FILTER = True  # True = block only when 4H opposite; False = require 4H to match
+VESTER_REQUIRE_4H_BIAS = False
+VESTER_4H_AS_FILTER = False  # True = block only when 4H opposite; False = require 4H to match
 VESTER_REQUIRE_4H_ZONE_CONFIRMATION = False
 VESTER_4H_LOOKBACK_BARS = 24  # 4H bars to look back (~4 days)
 # Breaker block: failed OB that aligns with bias; used as HTF filter, not entry
