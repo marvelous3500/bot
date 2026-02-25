@@ -8,7 +8,15 @@ from typing import Optional, Dict, Tuple, Any
 
 import config
 from .base import BaseStrategy
-from ..indicators import calculate_pdl_pdh, detect_rejection_candle
+from ..indicators import (
+    calculate_pdl_pdh,
+    detect_rejection_candle,
+    detect_fvg,
+    get_equilibrium,
+    get_equilibrium_from_daily,
+    price_in_buyside_liquidity,
+    price_in_sellside_liquidity,
+)
 from ..indicators_bos import detect_swing_highs_lows, detect_break_of_structure
 from ..indicators_lq import (
     get_session_high_low,
@@ -257,6 +265,28 @@ class LQStrategy(BaseStrategy):
                 sl_dist = entry_price - sl
                 tp = entry_price + sl_dist * rr
                 sig_type = 'BUY'
+            if getattr(config, "USE_ZONE_DIRECTION_FILTER", False):
+                lookback_zd = getattr(config, "ZONE_DIRECTION_FVG_LOOKBACK", 30)
+                buffer_pct_zd = getattr(config, "ZONE_DIRECTION_BUFFER_PCT", 0.001)
+                use_eq_zd = getattr(config, "ZONE_DIRECTION_USE_EQUILIBRIUM", True)
+                df_slice_zd = df.iloc[: entry_bar_idx + 1].tail(lookback_zd)
+                equilibrium_zd = None
+                if use_eq_zd and self.df_daily is not None and not self.df_daily.empty:
+                    equilibrium_zd = get_equilibrium_from_daily(self.df_daily, entry_time)
+                if equilibrium_zd is None and use_eq_zd and len(df_slice_zd) >= 10:
+                    equilibrium_zd = get_equilibrium(df_slice_zd, min(24, len(df_slice_zd)))
+                if sig_type == "BUY":
+                    if price_in_buyside_liquidity(
+                        entry_price, df_slice_zd, lookback_zd,
+                        equilibrium=equilibrium_zd, buffer_pct=buffer_pct_zd, use_equilibrium=use_eq_zd,
+                    ):
+                        continue
+                else:
+                    if price_in_sellside_liquidity(
+                        entry_price, df_slice_zd, lookback_zd,
+                        equilibrium=equilibrium_zd, buffer_pct=buffer_pct_zd, use_equilibrium=use_eq_zd,
+                    ):
+                        continue
             reason_str = f"LQ {sweep_type} sweep {direction}"
             if vester_reason:
                 reason_str += f" + {vester_reason}"

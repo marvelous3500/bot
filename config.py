@@ -60,6 +60,7 @@ MAX_SL_PIPS = 50        # Max SL distance in pips for all pairs (converted per s
 DAILY_LOSS_LIMIT_PCT = 5.0   # Stop new trades when today's closed P&L loss >= balance × this %
 
 # Backtesting
+BACKTEST_EXCLUDE_WEEKENDS = True
 INITIAL_BALANCE = 100
 RISK_PER_TRADE = 0.10  # 10% risk per trade
 BACKTEST_MAX_TRADES = None  # Stop after N trades (None = no limit)
@@ -207,6 +208,13 @@ MARVELLOUS_EQUILIBRIUM_TF = 'H1'       # H1, 4H, or DAILY
 # When False, both skip them. Config comes from MARVELLOUS_* above.
 USE_EXTRA_FILTERS = True
 
+# Zone-direction filter: don't buy into Buyside liquidity (bearish FVG/supply), don't sell into Sellside (bullish FVG/demand).
+# Applied in Vester, Marvellous, LQ when True.
+USE_ZONE_DIRECTION_FILTER = True
+ZONE_DIRECTION_FVG_LOOKBACK = 20
+ZONE_DIRECTION_BUFFER_PCT = 0.001
+ZONE_DIRECTION_USE_EQUILIBRIUM = False # False = only FVG zones (looser); True = also block by Premium/Discount
+
 # Marvellous symbol: None = gold (GC=F / XAUUSDm). Set to Yahoo symbol (e.g. 'GBPUSD=X') to run on that pair.
 MARVELLOUS_SYMBOL = None
 # Yahoo ticker -> MT5 symbol for Marvellous live trading
@@ -229,8 +237,8 @@ VESTER_HTF_LOOKBACK_HOURS = 48
 VESTER_REQUIRE_HTF_ZONE_CONFIRMATION = True  # False = BOS-only bias (more trades)
 # 4H confirmation: when True, use 4H. AS_FILTER=True = only block when 4H opposes 1H (allow neutral).
 # AS_FILTER=False = gate: require 4H to match 1H (skip when 4H neutral or opposite)
-VESTER_REQUIRE_4H_BIAS = True
-VESTER_4H_AS_FILTER = True  # True = block only when 4H opposite; False = require 4H to match
+VESTER_REQUIRE_4H_BIAS = False
+VESTER_4H_AS_FILTER = False  # True = block only when 4H opposite; False = require 4H to match
 VESTER_REQUIRE_4H_ZONE_CONFIRMATION = False
 VESTER_4H_LOOKBACK_BARS = 24  # 4H bars to look back (~4 days)
 # Breaker block: failed OB that aligns with bias; used as HTF filter, not entry
