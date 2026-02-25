@@ -1,3 +1,4 @@
+import math
 import MetaTrader5 as mt5
 import pandas as pd
 from datetime import datetime
@@ -292,7 +293,8 @@ class MT5Connector:
         lot_size = risk_amount / loss_per_lot
         step = info.volume_step
         lot_size = max(info.volume_min, min(info.volume_max, lot_size))
-        lot_size = round(lot_size / step) * step
+        # Round half up so we get closer to target risk (e.g. 0.0445 → 0.05 not 0.04)
+        lot_size = math.floor(lot_size / step + 0.5) * step
         lot_size = max(info.volume_min, min(info.volume_max, lot_size))
         return round(lot_size, 2)
 
@@ -511,6 +513,19 @@ class MT5Connector:
         err = mt5.last_error()
         err_msg = err[1] if err and len(err) > 1 else str(result.retcode if result is not None else "?")
         return False, err_msg
+
+    def get_today_deals_pnl(self):
+        """Return today's total P&L from closed deals (profit + commission + swap). UTC date. Returns 0.0 if not connected or error."""
+        if not self.connected:
+            return 0.0
+        now = datetime.utcnow()
+        from_date = datetime(now.year, now.month, now.day)
+        to_date = now
+        deals = mt5.history_deals_get(from_date, to_date)
+        if deals is None:
+            return 0.0
+        total = sum(getattr(d, 'profit', 0) + getattr(d, 'commission', 0) + getattr(d, 'swap', 0) for d in deals)
+        return float(total)
 
     def get_positions(self):
         positions = mt5.positions_get()

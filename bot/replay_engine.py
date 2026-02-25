@@ -135,6 +135,12 @@ def run_strategy_at_time(strategy_name, data, current_time):
 
 
 def run_replay(strategy_name, symbol=None, csv_path=None, auto_approve=True):
+    if strategy_name == 'test-sl':
+        print("test-sl is for live lot-size testing only. Use --mode live --strategy test-sl")
+        return
+    if strategy_name == 'lq':
+        print("lq is not yet supported in replay. Use --mode backtest or --mode live.")
+        return
     if strategy_name == 'marvellous':
         from . import marvellous_config as mc
         symbol = symbol or mc.MARVELLOUS_BACKTEST_SYMBOL

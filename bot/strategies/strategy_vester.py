@@ -9,7 +9,14 @@ from datetime import datetime
 
 import config
 from .. import vester_config as vc
-from ..indicators import detect_fvg, detect_rejection_candle, detect_displacement, get_equilibrium
+from ..indicators import (
+    detect_fvg,
+    detect_rejection_candle,
+    detect_displacement,
+    get_equilibrium,
+    price_in_buyside_liquidity,
+    price_in_sellside_liquidity,
+)
 from ..indicators_bos import (
     detect_swing_highs_lows,
     detect_break_of_structure,
@@ -470,6 +477,11 @@ class VesterStrategy(BaseStrategy):
         for i in range(100, len(entry_df)):
             idx = entry_df.index[i]
             current_time = idx if hasattr(idx, "hour") else pd.Timestamp(idx)
+            
+            # Skip Saturday (5) and Sunday (6) in backtest
+            if getattr(config, "BACKTEST_EXCLUDE_WEEKENDS", False) and current_time.weekday() >= 5:
+                continue
+
             session_key = config.TRADE_SESSION_HOURS.get(current_time.hour, "other")
             day_key = current_time.strftime("%Y-%m-%d") if hasattr(current_time, "strftime") else str(current_time.date())
 
@@ -601,6 +613,31 @@ class VesterStrategy(BaseStrategy):
             m5_bar_ts = idx.floor("5min") if hasattr(idx, "floor") else pd.Timestamp(idx).floor("5min")
             if max_per_setup is not None and trades_per_5m_setup.get(m5_bar_ts, 0) >= max_per_setup:
                 continue
+
+            if getattr(config, "USE_ZONE_DIRECTION_FILTER", False):
+                lookback = getattr(config, "ZONE_DIRECTION_FVG_LOOKBACK", 30)
+                buffer_pct = getattr(config, "ZONE_DIRECTION_BUFFER_PCT", 0.001)
+                use_eq = getattr(config, "ZONE_DIRECTION_USE_EQUILIBRIUM", True)
+                equilibrium_zd = None
+                if use_eq:
+                    eq_lookback = getattr(vc, "EQUILIBRIUM_LOOKBACK", 24)
+                    eq_tf = getattr(vc, "EQUILIBRIUM_TF", "H1").upper()
+                    df_eq = self.df_h1 if eq_tf == "H1" else (self.df_h4 if self.df_h4 is not None and not self.df_h4.empty else self.df_h1)
+                    df_eq_slice = df_eq[df_eq.index <= idx].tail(eq_lookback) if df_eq is not None else None
+                    if df_eq_slice is not None and not df_eq_slice.empty:
+                        equilibrium_zd = get_equilibrium(df_eq_slice, eq_lookback)
+                if bias == "BULLISH":
+                    if price_in_buyside_liquidity(
+                        entry_price, df_m5_slice, lookback,
+                        equilibrium=equilibrium_zd, buffer_pct=buffer_pct, use_equilibrium=use_eq,
+                    ):
+                        continue
+                else:
+                    if price_in_sellside_liquidity(
+                        entry_price, df_m5_slice, lookback,
+                        equilibrium=equilibrium_zd, buffer_pct=buffer_pct, use_equilibrium=use_eq,
+                    ):
+                        continue
 
             print(f"[Vester] HTF bias detected ({bias})")
             print("[Vester] 5M sweep detected")

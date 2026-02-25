@@ -7,11 +7,13 @@ SYMBOLS = [ 'GC=F', 'GBPUSD=X', 'BTC-USD', '^NDX']
 
 LIVE_MODE = True   # True = real money, False = paper trading
 MAX_TRADES_PER_DAY_PER_PAIR = False   # True = limits apply per symbol; False = global (legacy)
-MAX_TRADES_PER_DAY = 18
-MAX_TRADES_PER_SESSION = 6 
+
+MAX_TRADES_PER_DAY = 9
+MAX_TRADES_PER_SESSION = 3 
+
 MANUAL_APPROVAL = False   # Require confirmation before each trade; False = bot auto-approves (for server/headless)
 LIVE_CONFIRM_ON_START = True   # When live: require typing 'yes' before loop starts
-MAX_LOT_LIVE = 0.02  # Cap lot size in live mode (safety). 0.02 = ~6% risk on $140 gold.
+MAX_LOT_LIVE = None  # Cap lot size in live mode (safety). 0.02 = ~6% risk on $140 gold.
 MAX_RISK_PCT_LIVE = 0.10   # Never risk more than this % of balance (safety net if broker tick_value wrong)
   # Per session (London, NY); divides daily limit across sessions
 # Session hours (UTC) for per-session limit: London 7-10, NY 13-16, Asian 0-4
@@ -20,28 +22,60 @@ TRADE_SESSION_HOURS = {
     13: 'ny', 14: 'ny', 15: 'ny', 16: 'ny',
     0: 'asian', 1: 'asian', 2: 'asian', 3: 'asian', 4: 'asian',
 }
+
 MAX_POSITION_SIZE = 0.02  # Fixed lot when gold uses manual; fallback when calc fails
 USE_DYNAMIC_POSITION_SIZING = True   # True = risk-based for non-gold; gold uses manual when GOLD_USE_MANUAL_LOT=True
 GOLD_USE_MANUAL_LOT = True   # Gold (XAUUSDm etc): use MAX_POSITION_SIZE; other pairs: risk-based sizing
 # Gold manual: fixed SL distance (points). 5.0 points = 50 pips = $10 risk with 0.02 lots
+=======
+# LQ strategy: session windows (start_hour, end_hour) UTC for session high/low
+LQ_SESSION_HOURS_UTC = {
+    'asian': (0, 5),    # 00:00–04:59 UTC
+    'london': (7, 11),  # 07:00–10:59 UTC
+    'ny': (13, 17),     # 13:00–16:59 UTC
+}
+LQ_MIN_RR = 2.0
+LQ_ONE_TRADE_PER_LEVEL = True
+LQ_SWING_LOOKBACK = 10
+LQ_SL_BUFFER_PCT = 0.02
+LQ_SL_BUFFER_MIN = 0.5
+# Flexibility: filter by session and sweep quality
+LQ_ALLOW_SESSIONS = []                # [] = all sessions; ['london','ny'] = only London/NY
+LQ_ALLOW_PDH_PDL = True               # Trade PDH/PDL sweeps (higher-quality levels)
+LQ_ALLOW_SESSION_SWEEPS = True        # Trade session high/low sweeps (False = PDH/PDL only)
+LQ_REJECTION_WICK_RATIO = 0.55        # Min wick/range for rejection candle (0.5–0.7 typical)
+LQ_REQUIRE_BOS = False                # True = require BOS confirmation (stricter; fewer trades)
+LQ_CONFIRM_BARS = 2                   # Bars to wait for confirmation (1–3)
+LQ_USE_VESTER_ENTRY = True            # Use Vester 1M entry trigger (BOS in zone / sweep+displacement)
+LQ_VESTER_ENTRY_BARS = 15             # Max M1 bars to wait for Vester trigger (15 min)
+MAX_POSITION_SIZE = 0.02  # Fallback when lot calc fails
+USE_DYNAMIC_POSITION_SIZING = True   # Balance × risk % determines lot size
+GOLD_USE_MANUAL_LOT = False  # False = dynamic lot from balance (10%); True = fixed MAX_POSITION_SIZE
+# Gold: fixed SL distance (points). 5.0 = 50 pips. Lot = (balance × risk%) / (5.0 × 100)
+
 GOLD_MANUAL_SL_POINTS = 5.0
 PAPER_TRADING_LOG = 'paper_trades.json'
 LIVE_TRADE_LOG = True   # Append trades to logs/trades_YYYYMMDD.json
 # Risk Management
 RISK_REWARD_RATIO = 5.0  # 1:5 Risk:Reward (TP = 5× risk)
+# Breakeven: move SL to entry when price reaches BREAKEVEN_TRIGGER_RR (e.g. 1R)
+BREAKEVEN_ENABLED = True
+BREAKEVEN_TRIGGER_RR = 1.0   # Move SL to entry when price reaches this (1R = 1× SL dist in profit)
 # Lock-in: when price reaches LOCK_IN_TRIGGER_RR, move SL to LOCK_IN_AT_RR (e.g. 3.3R trigger → SL to 3R)
 LOCK_IN_ENABLED = True
 LOCK_IN_TRIGGER_RR = 3.3   # When price reaches this (e.g. 3.3× SL dist), activate lock-in
 LOCK_IN_AT_RR = 3.0       # Move SL to this level (e.g. 3R = lock in 3× profit)
 MAX_SL_PIPS = 50        # Max SL distance in pips for all pairs (converted per symbol's pip size)
+DAILY_LOSS_LIMIT_PCT = 5.0   # Stop new trades when today's closed P&L loss >= balance × this %
 
 # Backtesting
+BACKTEST_EXCLUDE_WEEKENDS = True
 INITIAL_BALANCE = 100
 RISK_PER_TRADE = 0.10  # 10% risk per trade
 BACKTEST_MAX_TRADES = None  # Stop after N trades (None = no limit)
-BACKTEST_APPLY_TRADE_LIMITS = False  # When True, apply trade limits in backtest (both strategies)
-BACKTEST_MAX_TRADES_PER_DAY = 6   # Backtest daily limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
-BACKTEST_MAX_TRADES_PER_SESSION = 2  # Backtest session limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
+BACKTEST_APPLY_TRADE_LIMITS = True  # When True, apply trade limits in backtest (both strategies)
+BACKTEST_MAX_TRADES_PER_DAY = 9  # Backtest daily limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
+BACKTEST_MAX_TRADES_PER_SESSION = 3  # Backtest session limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
 BACKTEST_PERIOD = '60d'  # Data period: 12d, 60d, 6mo (set before run)
 BACKTEST_SPREAD_PIPS = 2.0       # e.g. 2.0 for gold, 1.0 for forex
 BACKTEST_COMMISSION_PER_LOT = 7.0  # round-trip per lot (e.g. 7.0)
@@ -111,7 +145,6 @@ SHOW_BIAS_OF_DAY = True          # If True, print [BIAS OF DAY] Daily: X | H1: Y
 USE_LUXALGO_ICT = False
 LUXALGO_SWING_LENGTH = 5      # Pivot left/right (LuxAlgo default: 5)
 LUXALGO_OB_USE_BODY = True   # Use candle body for OB range (LuxAlgo default)
-
 # Replay mode: run strategy every N bars (1 = every bar, most trades; 4 = faster, may miss some)
 REPLAY_STEP_BARS = 1
 
@@ -119,7 +152,6 @@ REPLAY_STEP_BARS = 1
 AI_ENABLED = False
 AI_CONFIDENCE_THRESHOLD = 2.0  # 1-5 scale; skip trade if confidence below this
 AI_EXPLAIN_TRADES = False
-
 # Voice alerts (pyttsx3)
 VOICE_ALERTS = False
 VOICE_ALERT_ON_SIGNAL = True   # speak when trade found / about to take
@@ -185,6 +217,13 @@ MARVELLOUS_EQUILIBRIUM_TF = 'H1'       # H1, 4H, or DAILY
 # When False, both skip them. Config comes from MARVELLOUS_* above.
 USE_EXTRA_FILTERS = True
 
+# Zone-direction filter: don't buy into Buyside liquidity (bearish FVG/supply), don't sell into Sellside (bullish FVG/demand).
+# Applied in Vester, Marvellous, LQ when True.
+USE_ZONE_DIRECTION_FILTER = True
+ZONE_DIRECTION_FVG_LOOKBACK = 20
+ZONE_DIRECTION_BUFFER_PCT = 0.001
+ZONE_DIRECTION_USE_EQUILIBRIUM = False # False = only FVG zones (looser); True = also block by Premium/Discount
+
 # Marvellous symbol: None = gold (GC=F / XAUUSDm). Set to Yahoo symbol (e.g. 'GBPUSD=X') to run on that pair.
 MARVELLOUS_SYMBOL = None
 # Yahoo ticker -> MT5 symbol for Marvellous live trading
@@ -193,7 +232,8 @@ MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 
 
 # VesterStrategy: multi-timeframe smart-money (1H bias -> 5M setup -> 1M entry)
 VESTER_ONE_SIGNAL_PER_SETUP = False  # Deprecated: use VESTER_MAX_TRADES_PER_SETUP
-VESTER_MAX_TRADES_PER_SETUP = 4     # Max entries per 5M setup (1 = one per setup, 3 = up to 3, None = unlimited)
+VESTER_MAX_TRADES_PER_SETUP = 3     # Max entries per 5M setup (1 = one per setup, 3 = up to 3, None = unlimited)
+
 VESTER_BACKTEST_SYMBOL = 'GC=F'
 VESTER_LIVE_SYMBOL = 'XAUUSDm'
 VESTER_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}
@@ -207,8 +247,8 @@ VESTER_HTF_LOOKBACK_HOURS = 48
 VESTER_REQUIRE_HTF_ZONE_CONFIRMATION = True  # False = BOS-only bias (more trades)
 # 4H confirmation: when True, use 4H. AS_FILTER=True = only block when 4H opposes 1H (allow neutral).
 # AS_FILTER=False = gate: require 4H to match 1H (skip when 4H neutral or opposite)
-VESTER_REQUIRE_4H_BIAS = True
-VESTER_4H_AS_FILTER = True  # True = block only when 4H opposite; False = require 4H to match
+VESTER_REQUIRE_4H_BIAS = False
+VESTER_4H_AS_FILTER = False  # True = block only when 4H opposite; False = require 4H to match
 VESTER_REQUIRE_4H_ZONE_CONFIRMATION = False
 VESTER_4H_LOOKBACK_BARS = 24  # 4H bars to look back (~4 days)
 # Breaker block: failed OB that aligns with bias; used as HTF filter, not entry
@@ -232,13 +272,13 @@ VESTER_EQUILIBRIUM_TF = 'H1'       # H1 or 4H (Vester has no daily data)
 # Filters
 VESTER_MAX_SPREAD_POINTS = 50.0
 VESTER_MAX_CANDLE_VOLATILITY_ATR_MULT = 4.0
-VESTER_USE_NEWS_FILTER = False
+VESTER_USE_NEWS_FILTER = True
 VESTER_NEWS_BUFFER_MINUTES = 15
 # Risk management
 VESTER_RISK_PER_TRADE = 0.10
-VESTER_MAX_TRADES_PER_SESSION = 2
+VESTER_MAX_TRADES_PER_SESSION = 3
 VESTER_DAILY_LOSS_LIMIT_PCT = 5.0
-VESTER_USE_TRAILING_STOP = False
+VESTER_USE_TRAILING_STOP = True
 VESTER_MIN_RR = 3.0
 # Displacement candle threshold (body vs range ratio)
 VESTER_DISPLACEMENT_RATIO = 0.5

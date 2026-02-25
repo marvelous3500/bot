@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import Optional
+from typing import Optional, List, Tuple
 
 
 def calculate_pdl_pdh(daily_df, current_date):
@@ -119,3 +119,95 @@ def detect_displacement(df, threshold=1.5, window=10):
     is_large_bear = df['body_size'] > (df['avg_body'] * threshold)
     df.loc[is_red & is_large_bear, 'displacement_bear'] = True
     return df
+
+
+def get_recent_fvg_zones(
+    df: pd.DataFrame,
+    lookback: int,
+    end_idx: Optional[int] = None,
+) -> List[Tuple[float, float, str]]:
+    """
+    Return list of (zone_top, zone_bottom, direction) for FVGs in the last lookback bars.
+    zone_top >= zone_bottom. BULLISH = demand/Sellside; BEARISH = supply/Buyside.
+    Requires fvg_bull, fvg_bear columns (run detect_fvg first).
+    """
+    if df is None or df.empty or len(df) < 3:
+        return []
+    if "fvg_bull" not in df.columns or "fvg_bear" not in df.columns:
+        return []
+    end = end_idx if end_idx is not None else len(df)
+    start = max(2, end - lookback)
+    zones = []
+    for i in range(start, end):
+        if i >= len(df):
+            break
+        row = df.iloc[i]
+        if row.get("fvg_bull"):
+            zone_bottom = float(df.iloc[i - 2]["high"])
+            zone_top = float(row["low"])
+            if zone_top >= zone_bottom:
+                zones.append((zone_top, zone_bottom, "BULLISH"))
+        if row.get("fvg_bear"):
+            zone_top = float(df.iloc[i - 2]["low"])
+            zone_bottom = float(row["high"])
+            if zone_top >= zone_bottom:
+                zones.append((zone_top, zone_bottom, "BEARISH"))
+    return zones
+
+
+def _price_in_zone(price: float, zone_top: float, zone_bottom: float, buffer_pct: float = 0.0) -> bool:
+    """True if price is inside [zone_bottom, zone_top] with optional buffer (fraction of price)."""
+    if buffer_pct > 0:
+        buf = price * buffer_pct
+        return zone_bottom - buf <= price <= zone_top + buf
+    return zone_bottom <= price <= zone_top
+
+
+def price_in_buyside_liquidity(
+    entry_price: float,
+    df: pd.DataFrame,
+    lookback: int = 30,
+    equilibrium: Optional[float] = None,
+    buffer_pct: float = 0.001,
+    use_equilibrium: bool = True,
+) -> bool:
+    """
+    True if entry is in Buyside liquidity (supply): bearish FVG zone or above equilibrium.
+    Caller should block BUY when this returns True.
+    """
+    if df is None or df.empty:
+        if use_equilibrium and equilibrium is not None and entry_price > equilibrium:
+            return True
+        return False
+    zones = get_recent_fvg_zones(df, lookback)
+    for zone_top, zone_bottom, direction in zones:
+        if direction == "BEARISH" and _price_in_zone(entry_price, zone_top, zone_bottom, buffer_pct):
+            return True
+    if use_equilibrium and equilibrium is not None and entry_price > equilibrium:
+        return True
+    return False
+
+
+def price_in_sellside_liquidity(
+    entry_price: float,
+    df: pd.DataFrame,
+    lookback: int = 30,
+    equilibrium: Optional[float] = None,
+    buffer_pct: float = 0.001,
+    use_equilibrium: bool = True,
+) -> bool:
+    """
+    True if entry is in Sellside liquidity (demand): bullish FVG zone or below equilibrium.
+    Caller should block SELL when this returns True.
+    """
+    if df is None or df.empty:
+        if use_equilibrium and equilibrium is not None and entry_price < equilibrium:
+            return True
+        return False
+    zones = get_recent_fvg_zones(df, lookback)
+    for zone_top, zone_bottom, direction in zones:
+        if direction == "BULLISH" and _price_in_zone(entry_price, zone_top, zone_bottom, buffer_pct):
+            return True
+    if use_equilibrium and equilibrium is not None and entry_price < equilibrium:
+        return True
+    return False
