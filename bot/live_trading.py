@@ -486,7 +486,7 @@ class LiveTradingEngine:
                                         latest_signal['sl'] = price_f + max_dist
                             except (TypeError, ValueError):
                                 pass
-<<<<<<< HEAD
+
                 # Gold manual: override SL to fixed distance (50 pips = 5 points = $10 risk with 0.02 lots)
                 _is_gold = config.is_gold_symbol(symbol) if hasattr(config, 'is_gold_symbol') else ("XAU" in str(symbol or "").upper() or "GOLD" in str(symbol or "").upper())
                 _use_manual = getattr(config, 'GOLD_USE_MANUAL_LOT', True)
@@ -497,7 +497,7 @@ class LiveTradingEngine:
                         latest_signal['sl'] = price_f - sl_points
                     else:
                         latest_signal['sl'] = price_f + sl_points
-=======
+
                 # Gold: override SL to fixed distance when GOLD_MANUAL_SL_POINTS set (50 pips = 5 points)
                 _is_gold = config.is_gold_symbol(symbol) if hasattr(config, 'is_gold_symbol') else ("XAU" in str(symbol or "").upper() or "GOLD" in str(symbol or "").upper())
                 _sl_points = getattr(config, 'GOLD_MANUAL_SL_POINTS', 0)
@@ -507,7 +507,7 @@ class LiveTradingEngine:
                         latest_signal['sl'] = price_f - _sl_points
                     else:
                         latest_signal['sl'] = price_f + _sl_points
->>>>>>> 8bdb232ae73398a14148981138285fb2f9b292d5
+
                 sl_dist = abs(latest_signal['price'] - latest_signal.get('sl', 0))
                 if latest_signal['type'] == 'BUY':
                     latest_signal['tp'] = latest_signal['price'] + (sl_dist * config.RISK_REWARD_RATIO)
