@@ -123,7 +123,6 @@ LIVE_SYMBOLS = {
     'NAS100': 'NAS100m'
 }
 
-
 # Trading Loop Settings
 LIVE_CHECK_INTERVAL = 15  # Seconds between strategy checks
 # Signal freshness: only take signals where bar time is within last N minutes (avoids stale setups)
