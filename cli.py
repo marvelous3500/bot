@@ -21,9 +21,9 @@ def build_parser():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["marvellous", "vester", "kingsely", "follow", "test-sl", "lq", "all"],
+        choices=["marvellous", "vester", "kingsely", "v1", "vee", "follow", "test-sl", "lq", "all"],
         default="marvellous",
-        help="Strategy to use ('all' = run marvellous+vester; 'lq' = liquidity sweep 15M)",
+        help="Strategy to use ('all' = run marvellous+vester+kingsely; 'lq' = liquidity sweep 15M; 'vee' = AMN 1H/15M/1M)",
     )
     parser.add_argument(
         "--csv",
@@ -39,9 +39,9 @@ def build_parser():
     parser.add_argument(
         "--period",
         type=str,
-        choices=["1d", "12d", "60d", "both"],
+        choices=["1d", "7d", "12d", "60d", "both"],
         default="both",
-        help="Backtest period: 1d, 12d, 60d, or both (default)",
+        help="Backtest period: 1d, 7d, 12d, 60d, or both (default)",
     )
     parser.add_argument(
         "--auto-approve",
@@ -62,6 +62,11 @@ def build_parser():
         "--compare-premium-discount",
         action="store_true",
         help="Run backtest with and without premium/discount filter; show side-by-side comparison for each strategy.",
+    )
+    parser.add_argument(
+        "--revert-vee",
+        action="store_true",
+        help="Restore vee strategy to saved snapshot (1H bias, 15m CHOCH+OB+FVG, entry on OB zone, SL beyond OB, TP 3R).",
     )
     return parser
 
@@ -197,7 +202,7 @@ def _print_premium_discount_comparison(strategy_name, without_pd, with_pd):
 
 def run_backtest(args):
     """Run backtest for the selected strategy (or all strategies if --strategy all)."""
-    from bot.backtest import run_marvellous_backtest, run_vester_backtest, run_kingsely_backtest, run_follow_backtest, run_lq_backtest
+    from bot.backtest import run_marvellous_backtest, run_vester_backtest, run_kingsely_backtest, run_follow_backtest, run_lq_backtest, run_vee_backtest
 
     if args.strategy == "test-sl":
         print("test-sl has no backtest. Use --mode live (or paper) for lot-size testing.")
@@ -287,6 +292,19 @@ def run_backtest(args):
                 vc.REQUIRE_BREAKER_BLOCK = orig_req
                 vc.BREAKER_BLOCK_4H = orig_4h
             _print_breaker_block_comparison(name, without_bb, with_bb)
+        return
+
+    if args.strategy == "v1":
+        from bot.backtest import run_v1_backtest
+        period = args.period if args.period != "both" else "60d"
+        print(f"\n{'='*60}\nBacktesting v1 on {args.symbol}\n{'='*60}")
+        run_v1_backtest(csv_path=args.csv, symbol=args.symbol, period=period)
+        return
+
+    if args.strategy == "vee":
+        period = args.period if args.period != "both" else "60d"
+        print(f"\n{'='*60}\nBacktesting vee on {args.symbol}\n{'='*60}")
+        run_vee_backtest(csv_path=args.csv, symbol=args.symbol, period=period)
         return
 
     if args.strategy == "all":
@@ -401,6 +419,18 @@ def main():
     """Entry point: parse arguments and run the chosen command."""
     parser = build_parser()
     args = parser.parse_args()
+    if getattr(args, "revert_vee", False):
+        import os
+        import shutil
+        repo_root = os.path.dirname(os.path.abspath(__file__))
+        snapshot = os.path.join(repo_root, "scripts", "vee_revert", "strategy_vee_snapshot.py")
+        target = os.path.join(repo_root, "bot", "strategies", "strategy_vee.py")
+        if not os.path.isfile(snapshot):
+            print(f"Snapshot not found: {snapshot}")
+            return
+        shutil.copy2(snapshot, target)
+        print(f"Reverted vee strategy to snapshot: {target}")
+        return
     run(args)
 
 

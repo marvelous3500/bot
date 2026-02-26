@@ -290,6 +290,39 @@ VESTER_SL_ATR_MULT = 1.0  # Buffer = ATR × this (HYBRID only)
 VESTER_SL_MICRO_TF = '1m'  # Micro-structure timeframe: '1m' or '5m' (HYBRID only)
 
 
+# V1 Strategy: H1 Bias (FVG/OB/Sweep) -> 5M BOS + FVG/Displacement -> Retest Entry
+V1_BACKTEST_SYMBOL = 'GC=F'
+V1_LIVE_SYMBOL = 'XAUUSDm'
+V1_RISK_PER_TRADE = 0.10
+V1_MAX_TRADES_PER_SESSION = 5     # Live/paper safety; backtest simulates all signals
+V1_MIN_RR = 2.0                   # 1:2 TP keeps RR reasonable
+V1_REQUIRE_RETEST_REJECTION = False  # False = more trades; True = only strong rejection candles
+V1_SL_BUFFER = 0.0                # Price units (e.g. XAU points). Increase slightly if stops are too tight.
+V1_MAX_SPREAD_POINTS = 50.0
+V1_USE_NEWS_FILTER = True
+V1_HTF_LOOKBACK_BARS = 50         # More bars = more H1 zones, more setups
+V1_LIQUIDITY_LOOKBACK = 20
+V1_CONFIRMATION_LOOKBACK = 48
+V1_USE_PREMIUM_DISCOUNT = True   # False = more trades (no discount/premium filter on entry)
+
+
+# VeeStrategy: 1H bias -> 15m CHOCH -> OB+FVG -> entry on return to OB zone; SL beyond OB, TP 3R
+VEE_BACKTEST_SYMBOL = 'GC=F'
+VEE_LIVE_SYMBOL = 'XAUUSDm'
+VEE_RISK_PER_TRADE = 0.10
+VEE_MAX_TRADES_PER_SESSION = 5
+VEE_MIN_RR = 3.0
+VEE_SWING_LENGTH = 3
+VEE_OB_LOOKBACK = 20
+VEE_HTF_LOOKBACK_HOURS = 48
+VEE_USE_PREMIUM_DISCOUNT = False
+VEE_ENTRY_WINDOW_MINUTES = 120
+VEE_SL_BUFFER_POINTS = 2.0
+VEE_USE_1M_CONFIRMATION = True   # Require 1m BOS or FVG in zone for entry (better win rate)
+# Vee breakeven/lock-in (live/paper)
+VEE_BREAKEVEN_TRIGGER_RR = 1.0   # Move SL to entry when price reaches this many R
+VEE_LOCK_IN_TRIGGER_RR = 3.3    # When price reaches this R, activate lock-in
+VEE_LOCK_IN_AT_RR = 3.0         # Move SL to this R (lock in profit)
 
 
 
