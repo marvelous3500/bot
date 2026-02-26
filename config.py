@@ -229,7 +229,7 @@ ZONE_DIRECTION_USE_EQUILIBRIUM = False # False = only FVG zones (looser); True =
 # Marvellous symbol: None = gold (GC=F / XAUUSDm). Set to Yahoo symbol (e.g. 'GBPUSD=X') to run on that pair.
 MARVELLOUS_SYMBOL = None
 # Yahoo ticker -> MT5 symbol for Marvellous live trading
-MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}
+MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'GBPJPY=X': 'GBPJPYm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}
 
 
 # VesterStrategy: multi-timeframe smart-money (1H bias -> 5M setup -> 1M entry)
@@ -238,7 +238,7 @@ VESTER_MAX_TRADES_PER_SETUP = 3     # Max entries per 5M setup (1 = one per setu
 
 VESTER_BACKTEST_SYMBOL = 'GC=F'
 VESTER_LIVE_SYMBOL = 'XAUUSDm'
-VESTER_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}
+VESTER_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'GBPJPY=X': 'GBPJPYm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}
 # Structure detection
 VESTER_SWING_LENGTH = 3
 VESTER_OB_LOOKBACK = 20
