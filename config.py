@@ -77,6 +77,8 @@ BACKTEST_MAX_TRADES = None  # Stop after N trades (None = no limit)
 BACKTEST_APPLY_TRADE_LIMITS = True  # When True, apply trade limits in backtest (both strategies)
 BACKTEST_MAX_TRADES_PER_DAY = 9  # Backtest daily limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
 BACKTEST_MAX_TRADES_PER_SESSION = 3  # Backtest session limit (used when BACKTEST_APPLY_TRADE_LIMITS=True)
+BACKTEST_APPLY_SIGNAL_MAX_AGE = True# When True, reject backtest entries where (entry_time - signal_time) > strategy's SIGNAL_MAX_AGE_MINUTES
+
 BACKTEST_PERIOD = '60d'  # Data period: 12d, 60d, 6mo (set before run)
 BACKTEST_SPREAD_PIPS = 2.0       # e.g. 2.0 for gold, 1.0 for forex
 BACKTEST_COMMISSION_PER_LOT = 7.0  # round-trip per lot (e.g. 7.0)
@@ -126,9 +128,9 @@ LIVE_SYMBOLS = {
 # Trading Loop Settings
 LIVE_CHECK_INTERVAL = 15  # Seconds between strategy checks
 # Signal freshness: only take signals where bar time is within last N minutes (avoids stale setups)
-SIGNAL_MAX_AGE_MINUTES = 5   # Default; 3 bars of 1m entry TF for vester/vee
+SIGNAL_MAX_AGE_MINUTES = 3   # Default; 3 bars of 1m entry TF for vester/vee
 VESTER_SIGNAL_MAX_AGE_MINUTES = 3   # 3 × 1m bars (vester uses 1m entry)
-VEE_SIGNAL_MAX_AGE_MINUTES = 3      # 3 × 1m bars (vee uses 1m entry)
+VEE_SIGNAL_MAX_AGE_MINUTES = 120      # 3 × 1m bars (vee uses 1m entry)
 MARVELLOUS_SIGNAL_MAX_AGE_MINUTES = 45   # 3 × M15 bars (more tolerance for live)
 SKIP_WHEN_MARKET_CLOSED = True   # When True, skip strategy run and execution on weekend or when symbol trade_mode is disabled
 PRINT_CHECKLIST_ON_START = True  # When True, print real-money checklist at live startup (paper mode: no)

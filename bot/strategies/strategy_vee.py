@@ -272,6 +272,14 @@ class VeeStrategy(BaseStrategy):
             setup = relevant[-1]
             ob_high = setup["ob_high"]
             ob_low = setup["ob_low"]
+            if getattr(config, "BACKTEST_APPLY_SIGNAL_MAX_AGE", False):
+                max_age_min = getattr(config, "VEE_SIGNAL_MAX_AGE_MINUTES", None) or getattr(config, "SIGNAL_MAX_AGE_MINUTES", None)
+                if max_age_min is not None:
+                    entry_ts = pd.Timestamp(current_time)
+                    sig_ts = pd.Timestamp(setup["choch_time"])
+                    age_min = (entry_ts - sig_ts).total_seconds() / 60.0
+                    if age_min > max_age_min:
+                        continue
 
             bar = entry_df.iloc[i]
             if not _price_in_zone(bar["low"], bar["high"], ob_high, ob_low):

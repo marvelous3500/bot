@@ -689,6 +689,14 @@ class VesterStrategy(BaseStrategy):
             m5_bar_ts = idx.floor("5min") if hasattr(idx, "floor") else pd.Timestamp(idx).floor("5min")
             if max_per_setup is not None and trades_per_5m_setup.get(m5_bar_ts, 0) >= max_per_setup:
                 continue
+            if getattr(config, "BACKTEST_APPLY_SIGNAL_MAX_AGE", False):
+                max_age_min = getattr(config, "VESTER_SIGNAL_MAX_AGE_MINUTES", None) or getattr(config, "SIGNAL_MAX_AGE_MINUTES", None)
+                if max_age_min is not None:
+                    entry_ts = pd.Timestamp(idx)
+                    sig_ts = pd.Timestamp(m5_bar_ts)
+                    age_min = (entry_ts - sig_ts).total_seconds() / 60.0
+                    if age_min > max_age_min:
+                        continue
 
             if getattr(config, "USE_ZONE_DIRECTION_FILTER", False):
                 lookback = getattr(config, "ZONE_DIRECTION_FVG_LOOKBACK", 30)
