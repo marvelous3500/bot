@@ -255,6 +255,12 @@ VESTER_4H_LOOKBACK_BARS = 24  # 4H bars to look back (~4 days)
 # Breaker block: failed OB that aligns with bias; used as HTF filter, not entry
 VESTER_REQUIRE_BREAKER_BLOCK = False
 VESTER_BREAKER_BLOCK_4H = False  # When REQUIRE_4H_BIAS=True, also require breaker on 4H
+# H1 liquidity sweep as confirmation (PDH, PDL, session high/low, internal LQ). False = current behaviour; set True to require.
+VESTER_REQUIRE_H1_LIQUIDITY_SWEEP = True
+VESTER_H1_LQ_USE_PDH_PDL = True
+VESTER_H1_LQ_USE_SESSION = True
+VESTER_H1_LQ_USE_INTERNAL = True
+VESTER_H1_LQ_INTERNAL_LOOKBACK = 10
 VESTER_REJECTION_WICK_RATIO = 0.5
 VESTER_REJECTION_BODY_RATIO = 0.3
 # 5M setup window (hours to look back for sweep + BOS + zone)
@@ -315,6 +321,12 @@ VEE_MIN_RR = 3.0
 VEE_SWING_LENGTH = 3
 VEE_OB_LOOKBACK = 20
 VEE_HTF_LOOKBACK_HOURS = 48
+# H1 liquidity sweep as confirmation (PDH, PDL, session high/low, internal). False = current behaviour.
+VEE_REQUIRE_H1_LIQUIDITY_SWEEP = False
+VEE_H1_LQ_USE_PDH_PDL = True
+VEE_H1_LQ_USE_SESSION = True
+VEE_H1_LQ_USE_INTERNAL = True
+VEE_H1_LQ_INTERNAL_LOOKBACK = 10
 VEE_USE_PREMIUM_DISCOUNT = False
 VEE_ENTRY_WINDOW_MINUTES = 120
 VEE_SL_BUFFER_POINTS = 2.0

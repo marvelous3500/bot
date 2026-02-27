@@ -68,6 +68,11 @@ def build_parser():
         action="store_true",
         help="Restore vee strategy to saved snapshot (1H bias, 15m CHOCH+OB+FVG, entry on OB zone, SL beyond OB, TP 3R).",
     )
+    parser.add_argument(
+        "--revert-vester",
+        action="store_true",
+        help="Restore vester strategy to saved snapshot (state before H1 liquidity sweep confirmation).",
+    )
     return parser
 
 
@@ -304,7 +309,10 @@ def run_backtest(args):
     if args.strategy == "vee":
         period = args.period if args.period != "both" else "60d"
         print(f"\n{'='*60}\nBacktesting vee on {args.symbol}\n{'='*60}")
-        run_vee_backtest(csv_path=args.csv, symbol=args.symbol, period=period)
+        kwargs = dict(csv_path=args.csv, symbol=args.symbol, period=period)
+        if getattr(args, "trade_details", False):
+            kwargs["include_trade_details"] = True
+        run_vee_backtest(**kwargs)
         return
 
     if args.strategy == "all":
@@ -430,6 +438,18 @@ def main():
             return
         shutil.copy2(snapshot, target)
         print(f"Reverted vee strategy to snapshot: {target}")
+        return
+    if getattr(args, "revert_vester", False):
+        import os
+        import shutil
+        repo_root = os.path.dirname(os.path.abspath(__file__))
+        snapshot = os.path.join(repo_root, "scripts", "vester_revert", "strategy_vester_snapshot.py")
+        target = os.path.join(repo_root, "bot", "strategies", "strategy_vester.py")
+        if not os.path.isfile(snapshot):
+            print(f"Snapshot not found: {snapshot}")
+            return
+        shutil.copy2(snapshot, target)
+        print(f"Reverted vester strategy to snapshot: {target}")
         return
     run(args)
 

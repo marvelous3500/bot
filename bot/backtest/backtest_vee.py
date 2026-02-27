@@ -117,20 +117,25 @@ def run_vee_backtest(
                 tp_price = adj_entry - sl_dist * risk_rr
 
         outcome = None
+        outcome_bar_time = None
         for idx, bar in future_prices.iterrows():
             if trade["type"] == "BUY":
                 if bar["low"] <= adj_sl:
                     outcome = "LOSS"
+                    outcome_bar_time = idx
                     break
                 if bar["high"] >= tp_price:
                     outcome = "WIN"
+                    outcome_bar_time = idx
                     break
             else:
                 if bar["high"] >= adj_sl:
                     outcome = "LOSS"
+                    outcome_bar_time = idx
                     break
                 if bar["low"] <= tp_price:
                     outcome = "WIN"
+                    outcome_bar_time = idx
                     break
 
         if outcome == "WIN":
@@ -145,8 +150,8 @@ def run_vee_backtest(
             losses += 1
 
         _update_per_day_session(trade_time, per_day, per_session)
-        if trade_details is not None:
-            trade_details.append((trade_time, outcome, entry_price, stop_loss, tp_price, trade.get("reason", "")))
+        if trade_details is not None and outcome is not None:
+            trade_details.append((trade_time, outcome, entry_price, stop_loss, tp_price, outcome_bar_time, trade.get("reason", "")))
 
     if return_stats:
         res = _stats_dict("vee", wins + losses, wins, losses, total_profit, total_loss, balance)
@@ -163,4 +168,20 @@ def run_vee_backtest(
     ret_str = f"{'+' if return_pct >= 0 else ''}{return_pct:,.2f}%"
     print(f"| vee      | {wins+losses:>6} | {wins:>4} | {losses:>6} | {win_rate:>8.2f}% | ${balance:>11,.2f} | {ret_str:>10} |")
     print()
+
+    if include_trade_details and trade_details:
+        print("=" * 60)
+        print("TRADE LOG")
+        print("=" * 60)
+        for i, t in enumerate(trade_details, 1):
+            trade_time, outcome, entry, sl, tp, bar_time, reason = t[0], t[1], t[2], t[3], t[4], t[5], t[6] if len(t) > 6 else ""
+            bar_str = str(bar_time) if bar_time is not None else "N/A"
+            ts = pd.Timestamp(trade_time) if not hasattr(trade_time, "hour") else trade_time
+            day_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts.date()) if hasattr(ts, "date") else "N/A"
+            hour = ts.hour if ts.tzinfo is None else ts.tz_convert("UTC").hour
+            session = config.TRADE_SESSION_HOURS.get(hour, "other")
+            print(f"  #{i} {outcome:4} | Day: {day_str} | Session: {session} | Entry: {entry:.4f} | SL: {sl:.4f} | TP: {tp:.4f} | Bar hit: {bar_str}")
+            if reason:
+                print(f"       Reason: {reason[:70]}{'...' if len(reason) > 70 else ''}")
+        print()
 

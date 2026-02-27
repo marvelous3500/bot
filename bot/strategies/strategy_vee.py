@@ -16,6 +16,12 @@ from ..indicators_bos import (
     detect_break_of_structure,
     identify_order_block,
 )
+from ..indicators_lq import (
+    get_session_for_hour,
+    get_session_high_low,
+    detect_external_sweep,
+    detect_internal_sweep,
+)
 from .base import BaseStrategy
 
 
@@ -62,7 +68,67 @@ class VeeStrategy(BaseStrategy):
             df = detect_break_of_structure(df)
             df = detect_fvg(df)
             setattr(self, ref, df)
+        if getattr(vc, "REQUIRE_H1_LIQUIDITY_SWEEP", False) and self.df_h1 is not None and not self.df_h1.empty:
+            lookback = getattr(vc, "H1_LQ_INTERNAL_LOOKBACK", 10)
+            self.df_h1 = detect_internal_sweep(
+                self.df_h1,
+                swing_high_col="swing_high_price",
+                swing_low_col="swing_low_price",
+                lookback=lookback,
+            )
         return self.df_h1, self.df_m15, self.df_m1
+
+    def _h1_has_liquidity_sweep(self, df: pd.DataFrame, bias: str) -> bool:
+        """
+        True if the H1 slice has at least one bar with a liquidity sweep matching the bias
+        (PDH/PDL, session high/low, or internal). Used when VEE_REQUIRE_H1_LIQUIDITY_SWEEP is True.
+        """
+        use_pdh_pdl = getattr(vc, "H1_LQ_USE_PDH_PDL", True)
+        use_session = getattr(vc, "H1_LQ_USE_SESSION", True)
+        use_internal = getattr(vc, "H1_LQ_USE_INTERNAL", True)
+        session_hours = getattr(config, "LQ_SESSION_HOURS_UTC", {})
+        if not session_hours:
+            session_hours = {"asian": (0, 5), "london": (7, 11), "ny": (13, 17)}
+
+        last_ts = df.index[-1]
+        prev_day_start = pd.Timestamp((pd.Timestamp(last_ts) - pd.Timedelta(days=1)).date())
+        prev_day_end = prev_day_start + pd.Timedelta(days=1)
+        if getattr(df.index, "tz", None) is not None:
+            prev_day_start = prev_day_start.tz_localize(df.index.tz)
+            prev_day_end = prev_day_end.tz_localize(df.index.tz)
+        prev_day_bars = df[(df.index >= prev_day_start) & (df.index < prev_day_end)]
+        pdh = float(prev_day_bars["high"].max()) if not prev_day_bars.empty else None
+        pdl = float(prev_day_bars["low"].min()) if not prev_day_bars.empty else None
+
+        for idx in range(len(df)):
+            r = df.iloc[idx]
+            bar_time = df.index[idx]
+            hour_utc = bar_time.hour if hasattr(bar_time, "hour") else pd.Timestamp(bar_time).hour
+            session_high, session_low = None, None
+            if use_session:
+                session_name = get_session_for_hour(hour_utc, session_hours)
+                if session_name:
+                    session_high, session_low = get_session_high_low(
+                        df, bar_time, session_name, session_hours
+                    )
+            ext = detect_external_sweep(
+                float(r["open"]), float(r["high"]), float(r["low"]), float(r["close"]),
+                pdh if use_pdh_pdl else None,
+                pdl if use_pdh_pdl else None,
+                session_high,
+                session_low,
+            )
+            if bias == "BULLISH":
+                if ext.get("sweep_pdl") or ext.get("sweep_session_low"):
+                    return True
+                if use_internal and r.get("sweep_low_internal"):
+                    return True
+            else:
+                if ext.get("sweep_pdh") or ext.get("sweep_session_high"):
+                    return True
+                if use_internal and r.get("sweep_high_internal"):
+                    return True
+        return False
 
     # ---- HTF bias (1H) ----
 
@@ -77,10 +143,16 @@ class VeeStrategy(BaseStrategy):
         for idx in range(len(df) - 1, -1, -1):
             row = df.iloc[idx]
             if row.get("bos_bull"):
-                return "BULLISH"
+                bias = "BULLISH"
+                break
             if row.get("bos_bear"):
-                return "BEARISH"
-        return None
+                bias = "BEARISH"
+                break
+        else:
+            return None
+        if getattr(vc, "REQUIRE_H1_LIQUIDITY_SWEEP", False) and not self._h1_has_liquidity_sweep(df, bias):
+            return None
+        return bias
 
     # ---- 15m: CHOCH (BOS) + OB that caused it + FVG ----
 
