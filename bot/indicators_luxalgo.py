@@ -57,11 +57,13 @@ def detect_swing_highs_lows(df, swing_length=5):
 
 
 def detect_break_of_structure(df):
-    """Detects MSS (Market Structure Shift) and BOS (Break of Structure)."""
+    """Detects MSS (Market Structure Shift) and BOS (Break of Structure). Adds broken level for entry-TF confirmation."""
     df = df.copy()
     df['bos_bull'] = False
     df['bos_bear'] = False
     df['bos_direction'] = None
+    df['bos_bull_broken_level'] = np.nan
+    df['bos_bear_broken_level'] = np.nan
 
     last_swing_high = None
     last_swing_low = None
@@ -79,6 +81,7 @@ def detect_break_of_structure(df):
                 mss_dir = 1
             df.iloc[i, df.columns.get_loc('bos_bull')] = True
             df.iloc[i, df.columns.get_loc('bos_direction')] = 'BULLISH'
+            df.iloc[i, df.columns.get_loc('bos_bull_broken_level')] = last_swing_high
             last_swing_high = row['high']
 
         if last_swing_low is not None and row['close'] < last_swing_low:
@@ -86,6 +89,7 @@ def detect_break_of_structure(df):
                 mss_dir = -1
             df.iloc[i, df.columns.get_loc('bos_bear')] = True
             df.iloc[i, df.columns.get_loc('bos_direction')] = 'BEARISH'
+            df.iloc[i, df.columns.get_loc('bos_bear_broken_level')] = last_swing_low
             last_swing_low = row['low']
 
     return df

@@ -22,6 +22,7 @@ from ..indicators_bos import (
     detect_break_of_structure,
     identify_order_block,
     detect_breaker_block,
+    is_bos_still_valid_on_entry_df,
 )
 from ..news_filter import is_news_safe
 from ..indicators_lq import (
@@ -635,6 +636,13 @@ class VesterStrategy(BaseStrategy):
             struct_shift, bos_idx = self.detectStructureShift(df_m5_slice)
             if struct_shift != bias:
                 continue
+            bos_time = df_m5_slice.index[bos_idx] if bos_idx is not None and bos_idx < len(df_m5_slice) else None
+            bos_row = df_m5_slice.iloc[bos_idx] if bos_idx is not None and bos_idx < len(df_m5_slice) else None
+            broken_level = None
+            if bos_row is not None:
+                broken_level = bos_row.get("bos_bull_broken_level") if struct_shift == "BULLISH" else bos_row.get("bos_bear_broken_level")
+                if broken_level is not None and pd.isna(broken_level):
+                    broken_level = None
 
             entry_zone_top, entry_zone_bottom = None, None
             current_ob = None
@@ -685,6 +693,10 @@ class VesterStrategy(BaseStrategy):
             )
             if not triggered or entry_price is None:
                 continue
+            if getattr(config, "VESTER_USE_CONFIRMED_BOS_ONLY", False) and bos_time is not None and broken_level is not None and not pd.isna(broken_level):
+                df_m1_up_to = self.df_m1[self.df_m1.index <= idx]
+                if not is_bos_still_valid_on_entry_df(df_m1_up_to, bos_time, idx, float(broken_level), struct_shift):
+                    continue
 
             m5_bar_ts = idx.floor("5min") if hasattr(idx, "floor") else pd.Timestamp(idx).floor("5min")
             if max_per_setup is not None and trades_per_5m_setup.get(m5_bar_ts, 0) >= max_per_setup:

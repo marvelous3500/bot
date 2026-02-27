@@ -15,6 +15,7 @@ from ..indicators_bos import (
     detect_swing_highs_lows,
     detect_break_of_structure,
     identify_order_block,
+    is_bos_still_valid_on_entry_df,
 )
 from ..indicators_lq import (
     get_session_for_hour,
@@ -184,11 +185,17 @@ class VeeStrategy(BaseStrategy):
                         break
                 if not has_fvg:
                     continue
+                broken_level = row.get("bos_bull_broken_level")
+                if broken_level is not None and not pd.isna(broken_level):
+                    broken_level = float(broken_level)
+                else:
+                    broken_level = None
                 setups.append({
                     "direction": "BULLISH",
                     "ob_high": float(ob["high"]),
                     "ob_low": float(ob["low"]),
                     "choch_time": ts,
+                    "broken_level": broken_level,
                 })
                 continue
             if row.get("bos_bear"):
@@ -205,11 +212,17 @@ class VeeStrategy(BaseStrategy):
                         break
                 if not has_fvg:
                     continue
+                broken_level = row.get("bos_bear_broken_level")
+                if broken_level is not None and not pd.isna(broken_level):
+                    broken_level = float(broken_level)
+                else:
+                    broken_level = None
                 setups.append({
                     "direction": "BEARISH",
                     "ob_high": float(ob["high"]),
                     "ob_low": float(ob["low"]),
                     "choch_time": ts,
+                    "broken_level": broken_level,
                 })
 
         return setups
@@ -272,6 +285,12 @@ class VeeStrategy(BaseStrategy):
             setup = relevant[-1]
             ob_high = setup["ob_high"]
             ob_low = setup["ob_low"]
+            if getattr(config, "VEE_USE_CONFIRMED_BOS_ONLY", False):
+                bl = setup.get("broken_level")
+                if bl is not None and not pd.isna(bl):
+                    df_m1_up_to = self.df_m1[self.df_m1.index <= current_time]
+                    if not is_bos_still_valid_on_entry_df(df_m1_up_to, setup["choch_time"], current_time, float(bl), setup["direction"]):
+                        continue
             if getattr(config, "BACKTEST_APPLY_SIGNAL_MAX_AGE", False):
                 max_age_min = getattr(config, "VEE_SIGNAL_MAX_AGE_MINUTES", None)
                 if max_age_min is not None:
