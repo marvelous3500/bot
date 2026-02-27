@@ -273,7 +273,7 @@ class VeeStrategy(BaseStrategy):
             ob_high = setup["ob_high"]
             ob_low = setup["ob_low"]
             if getattr(config, "BACKTEST_APPLY_SIGNAL_MAX_AGE", False):
-                max_age_min = getattr(config, "VEE_SIGNAL_MAX_AGE_MINUTES", None) or getattr(config, "SIGNAL_MAX_AGE_MINUTES", None)
+                max_age_min = getattr(config, "VEE_SIGNAL_MAX_AGE_MINUTES", None)
                 if max_age_min is not None:
                     entry_ts = pd.Timestamp(current_time)
                     sig_ts = pd.Timestamp(setup["choch_time"])

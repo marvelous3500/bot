@@ -690,7 +690,7 @@ class VesterStrategy(BaseStrategy):
             if max_per_setup is not None and trades_per_5m_setup.get(m5_bar_ts, 0) >= max_per_setup:
                 continue
             if getattr(config, "BACKTEST_APPLY_SIGNAL_MAX_AGE", False):
-                max_age_min = getattr(config, "VESTER_SIGNAL_MAX_AGE_MINUTES", None) or getattr(config, "SIGNAL_MAX_AGE_MINUTES", None)
+                max_age_min = getattr(config, "VESTER_SIGNAL_MAX_AGE_MINUTES", None)
                 if max_age_min is not None:
                     entry_ts = pd.Timestamp(idx)
                     sig_ts = pd.Timestamp(m5_bar_ts)

@@ -1124,10 +1124,7 @@ class LiveTradingEngine:
                     if isinstance(signal_time, pd.Timestamp):
                         signal_time = signal_time.to_pydatetime()
                     # Skip stale signals (setup detected hours/minutes ago)
-                    max_age_min = (
-                        getattr(config, f'{self.strategy_name.upper()}_SIGNAL_MAX_AGE_MINUTES', None)
-                        or getattr(config, 'SIGNAL_MAX_AGE_MINUTES', None)
-                    )
+                    max_age_min = getattr(config, f'{self.strategy_name.upper()}_SIGNAL_MAX_AGE_MINUTES', None)
                     if max_age_min is not None and signal_time:
                         now = datetime.utcnow()
                         st = signal_time.replace(tzinfo=None) if hasattr(signal_time, 'tzinfo') and signal_time.tzinfo else signal_time
