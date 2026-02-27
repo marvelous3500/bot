@@ -126,7 +126,7 @@ LIVE_SYMBOLS = {
 # Trading Loop Settings
 LIVE_CHECK_INTERVAL = 15  # Seconds between strategy checks
 # Signal freshness: only take signals where bar time is within last N minutes (avoids stale setups)
-SIGNAL_MAX_AGE_MINUTES = 3   # Default; 3 bars of 1m entry TF for vester/vee
+SIGNAL_MAX_AGE_MINUTES = 5   # Default; 3 bars of 1m entry TF for vester/vee
 VESTER_SIGNAL_MAX_AGE_MINUTES = 3   # 3 × 1m bars (vester uses 1m entry)
 VEE_SIGNAL_MAX_AGE_MINUTES = 3      # 3 × 1m bars (vee uses 1m entry)
 MARVELLOUS_SIGNAL_MAX_AGE_MINUTES = 45   # 3 × M15 bars (more tolerance for live)
