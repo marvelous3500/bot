@@ -55,27 +55,61 @@ class PaperTrading:
         lock_in_trigger = getattr(config, 'LOCK_IN_TRIGGER_RR', 3.3) if config else 3.3
         lock_in_at = getattr(config, 'LOCK_IN_AT_RR', 3.0) if config else 3.0
         risk_ratio = getattr(config, 'RISK_REWARD_RATIO', 5.0) if config else 5.0
+        trailing_enabled = config and getattr(config, 'TRAILING_SL_ENABLED', False)
+        trailing_activation_r = getattr(config, 'TRAILING_SL_ACTIVATION_R', 1.0) if config else 1.0
+        trailing_pips = getattr(config, 'TRAILING_SL_DISTANCE_PIPS', 20.0) if config else 20.0
+        partial_tp_enabled = config and getattr(config, 'PARTIAL_TP_ENABLED', False)
+        partial_tp1_r = getattr(config, 'PARTIAL_TP_TP1_R', 1.5) if config else 1.5
+        partial_close_pct = getattr(config, 'PARTIAL_TP_CLOSE_PCT', 50) if config else 50
+        if not hasattr(self, '_partial_tp_done'):
+            self._partial_tp_done = set()
         for position in self.positions[:]:
             symbol = position['symbol']
             tick = mt5_connector.get_live_price(symbol)
             if tick is None:
                 continue
+            pip_size = mt5_connector.get_pip_size(symbol) if mt5_connector else 0.0001
+            sl = position.get('sl')
+            sl_dist = abs(position['price_open'] - sl) if sl is not None else (abs(position['tp'] - position['price_open']) / risk_ratio if position.get('tp') else 0)
             if position['type'] == 'BUY':
                 current_price = tick['bid']
                 price_diff = current_price - position['price_open']
                 if lock_in_enabled and position.get('tp'):
                     price_open = position['price_open']
                     tp = position['tp']
-                    sl_dist = abs(tp - price_open) / risk_ratio
-                    lock_in_trigger_price = price_open + sl_dist * lock_in_trigger
-                    lock_in_sl = price_open + sl_dist * lock_in_at
-                    sl = position.get('sl')
-                    pip_size = mt5_connector.get_pip_size(symbol) if mt5_connector else 0.0001
+                    _sl_dist = abs(tp - price_open) / risk_ratio
+                    lock_in_trigger_price = price_open + _sl_dist * lock_in_trigger
+                    lock_in_sl = price_open + _sl_dist * lock_in_at
                     tolerance = pip_size * 2
                     sl_already_at_lock = sl is not None and abs(float(sl) - lock_in_sl) <= tolerance
                     if current_price >= lock_in_trigger_price and not sl_already_at_lock:
                         position['sl'] = lock_in_sl
                         print(f"[PAPER] Position {position['ticket']} SL moved to {lock_in_at}R (price reached {lock_in_trigger}R)")
+                if trailing_enabled and sl_dist > 0:
+                    activation_price = position['price_open'] + sl_dist * trailing_activation_r
+                    if current_price >= activation_price and sl is not None:
+                        new_sl = current_price - trailing_pips * pip_size
+                        if new_sl > float(sl) and new_sl < current_price:
+                            position['sl'] = new_sl
+                            print(f"[PAPER] Position {position['ticket']} trailing SL to {new_sl:.5f}")
+                if partial_tp_enabled and position['ticket'] not in self._partial_tp_done and sl_dist > 0:
+                    tp1_price = position['price_open'] + sl_dist * partial_tp1_r
+                    if current_price >= tp1_price:
+                        vol = position['volume']
+                        close_vol = round(vol * (partial_close_pct / 100.0), 2)
+                        if close_vol >= vol - 0.001:
+                            self.close_position(position['ticket'], tp1_price, 'TP Hit')
+                            closed_positions.append(position['ticket'])
+                            continue
+                        partial_profit = (tp1_price - position['price_open']) * close_vol * 100
+                        self.balance += partial_profit
+                        self._partial_tp_done.add(position['ticket'])
+                        position['volume'] = round(vol - close_vol, 2)
+                        self.trades_history.append({
+                            **position, 'price_close': tp1_price, 'time_close': datetime.now().isoformat(),
+                            'profit': partial_profit, 'reason': 'Partial TP1', 'volume': close_vol,
+                        })
+                        print(f"[PAPER] Position {position['ticket']} partial close {partial_close_pct}% at TP1, profit ${partial_profit:.2f}")
                 if position['tp'] and current_price >= position['tp']:
                     self.close_position(position['ticket'], position['tp'], 'TP Hit')
                     closed_positions.append(position['ticket'])
@@ -90,16 +124,39 @@ class PaperTrading:
                 if lock_in_enabled and position.get('tp'):
                     price_open = position['price_open']
                     tp = position['tp']
-                    sl_dist = abs(price_open - tp) / risk_ratio
-                    lock_in_trigger_price = price_open - sl_dist * lock_in_trigger
-                    lock_in_sl = price_open - sl_dist * lock_in_at
-                    sl = position.get('sl')
-                    pip_size = mt5_connector.get_pip_size(symbol) if mt5_connector else 0.0001
+                    _sl_dist = abs(price_open - tp) / risk_ratio
+                    lock_in_trigger_price = price_open - _sl_dist * lock_in_trigger
+                    lock_in_sl = price_open - _sl_dist * lock_in_at
                     tolerance = pip_size * 2
                     sl_already_at_lock = sl is not None and abs(float(sl) - lock_in_sl) <= tolerance
                     if current_price <= lock_in_trigger_price and not sl_already_at_lock:
                         position['sl'] = lock_in_sl
                         print(f"[PAPER] Position {position['ticket']} SL moved to {lock_in_at}R (price reached {lock_in_trigger}R)")
+                if trailing_enabled and sl_dist > 0:
+                    activation_price = position['price_open'] - sl_dist * trailing_activation_r
+                    if current_price <= activation_price and sl is not None:
+                        new_sl = current_price + trailing_pips * pip_size
+                        if new_sl < float(sl) and new_sl > current_price:
+                            position['sl'] = new_sl
+                            print(f"[PAPER] Position {position['ticket']} trailing SL to {new_sl:.5f}")
+                if partial_tp_enabled and position['ticket'] not in self._partial_tp_done and sl_dist > 0:
+                    tp1_price = position['price_open'] - sl_dist * partial_tp1_r
+                    if current_price <= tp1_price:
+                        vol = position['volume']
+                        close_vol = round(vol * (partial_close_pct / 100.0), 2)
+                        if close_vol >= vol - 0.001:
+                            self.close_position(position['ticket'], tp1_price, 'TP Hit')
+                            closed_positions.append(position['ticket'])
+                            continue
+                        partial_profit = (position['price_open'] - tp1_price) * close_vol * 100
+                        self.balance += partial_profit
+                        self._partial_tp_done.add(position['ticket'])
+                        position['volume'] = round(vol - close_vol, 2)
+                        self.trades_history.append({
+                            **position, 'price_close': tp1_price, 'time_close': datetime.now().isoformat(),
+                            'profit': partial_profit, 'reason': 'Partial TP1', 'volume': close_vol,
+                        })
+                        print(f"[PAPER] Position {position['ticket']} partial close {partial_close_pct}% at TP1, profit ${partial_profit:.2f}")
                 if position['tp'] and current_price <= position['tp']:
                     self.close_position(position['ticket'], position['tp'], 'TP Hit')
                     closed_positions.append(position['ticket'])

@@ -70,7 +70,7 @@ Session: {session}
         return False
 
 
-def test_telegram(strategy_name="marvellous"):
+def test_telegram(strategy_name="vester"):
     """
     Send a test setup notification to Telegram. Use to verify bot token and chat ID.
     Returns True if sent successfully, False otherwise.

@@ -227,8 +227,9 @@ class VeeStrategy(BaseStrategy):
 
         return setups
 
-    def run_backtest(self) -> pd.DataFrame:
-        """Step 4: Entry when price returns to OB zone; SL slightly beyond OB; TP 3R."""
+    def run_backtest(self, only_last_n_bars: Optional[int] = None) -> pd.DataFrame:
+        """Step 4: Entry when price returns to OB zone; SL slightly beyond OB; TP 3R.
+        If only_last_n_bars is set (e.g. in live), only consider the last N 1M bars so we signal current setups."""
         if self.df_h1 is None or self.df_m15 is None or self.df_m1 is None:
             return pd.DataFrame()
 
@@ -249,7 +250,10 @@ class VeeStrategy(BaseStrategy):
         else:
             pip = 0.0001
 
-        for i in range(20, len(entry_df)):
+        start_i = 20
+        if only_last_n_bars is not None and only_last_n_bars > 0:
+            start_i = max(20, len(entry_df) - only_last_n_bars)
+        for i in range(start_i, len(entry_df)):
             idx = entry_df.index[i]
             current_time = idx if hasattr(idx, "hour") else pd.Timestamp(idx)
 

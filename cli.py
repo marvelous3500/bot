@@ -21,9 +21,9 @@ def build_parser():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["marvellous", "vester", "kingsely", "v1", "vee", "follow", "test-sl", "lq", "all"],
-        default="marvellous",
-        help="Strategy to use ('all' = run marvellous+vester+kingsely; 'lq' = liquidity sweep 15M; 'vee' = AMN 1H/15M/1M)",
+        choices=["vester", "vee", "test-sl", "all"],
+        default="vester",
+        help="Strategy to use ('all' = run vester+vee; 'vee' = 1H/15M/1M OB+FVG; 'test-sl' = live lot-size test only)",
     )
     parser.add_argument(
         "--csv",
@@ -207,14 +207,14 @@ def _print_premium_discount_comparison(strategy_name, without_pd, with_pd):
 
 def run_backtest(args):
     """Run backtest for the selected strategy (or all strategies if --strategy all)."""
-    from bot.backtest import run_marvellous_backtest, run_vester_backtest, run_kingsely_backtest, run_follow_backtest, run_lq_backtest, run_vee_backtest
+    from bot.backtest import run_vester_backtest, run_vee_backtest
 
     if args.strategy == "test-sl":
         print("test-sl has no backtest. Use --mode live (or paper) for lot-size testing.")
         return
 
     strategies = (
-        ["marvellous", "vester"]
+        ["vester", "vee"]
         if args.strategy == "all"
         else [args.strategy]
     )
@@ -225,85 +225,43 @@ def run_backtest(args):
         for name in strategies:
             print(f"\n{'='*60}\nBacktesting {name} on {args.symbol} (premium/discount comparison)\n{'='*60}")
             kwargs = dict(csv_path=args.csv, symbol=args.symbol, period=period, return_stats=True)
-            if name == "marvellous":
-                from bot import marvellous_config as mc
-                kwargs["symbol"] = kwargs.get("symbol") or mc.MARVELLOUS_BACKTEST_SYMBOL
-                orig = getattr(mc, "USE_PREMIUM_DISCOUNT", False)
-                mc.USE_PREMIUM_DISCOUNT = False
-                without_pd = run_marvellous_backtest(**kwargs)
-                mc.USE_PREMIUM_DISCOUNT = True
-                with_pd = run_marvellous_backtest(**kwargs)
-                mc.USE_PREMIUM_DISCOUNT = orig
-            elif name == "kingsely":
-                from bot import kingsely_config as kc
-                kwargs["symbol"] = kwargs.get("symbol") or kc.KINGSELY_BACKTEST_SYMBOL
-                orig = getattr(kc, "USE_PREMIUM_DISCOUNT", False)
-                kc.USE_PREMIUM_DISCOUNT = False
-                without_pd = run_kingsely_backtest(**kwargs)
-                kc.USE_PREMIUM_DISCOUNT = True
-                with_pd = run_kingsely_backtest(**kwargs)
-                kc.USE_PREMIUM_DISCOUNT = orig
-            else:
-                from bot import vester_config as vc
-                kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
-                orig = getattr(vc, "USE_PREMIUM_DISCOUNT", False)
-                vc.USE_PREMIUM_DISCOUNT = False
+            from bot import vester_config as vc
+            kwargs["symbol"] = kwargs.get("symbol") or (vc.VESTER_BACKTEST_SYMBOL if name == "vester" else getattr(config, "VEE_BACKTEST_SYMBOL", "GC=F"))
+            if name == "vester":
+                orig = getattr(config, "VESTER_USE_PREMIUM_DISCOUNT", False)
+                config.VESTER_USE_PREMIUM_DISCOUNT = False
                 without_pd = run_vester_backtest(**kwargs)
-                vc.USE_PREMIUM_DISCOUNT = True
+                config.VESTER_USE_PREMIUM_DISCOUNT = True
                 with_pd = run_vester_backtest(**kwargs)
-                vc.USE_PREMIUM_DISCOUNT = orig
+                config.VESTER_USE_PREMIUM_DISCOUNT = orig
+            else:
+                without_pd = run_vee_backtest(**kwargs)
+                with_pd = run_vee_backtest(**kwargs)
             _print_premium_discount_comparison(name, without_pd, with_pd)
         return
 
-    # Breaker block comparison: run each strategy with and without breaker block
+    # Breaker block comparison: run each strategy with and without breaker block (vester only; vee has no breaker block)
     if getattr(args, "compare_breaker_block", False):
         period = args.period if args.period != "both" else "60d"
         for name in strategies:
+            if name == "vee":
+                print(f"[SKIP] vee has no breaker block; skipping compare for vee.")
+                continue
             print(f"\n{'='*60}\nBacktesting {name} on {args.symbol} (breaker block comparison)\n{'='*60}")
             kwargs = dict(csv_path=args.csv, symbol=args.symbol, period=period, return_stats=True)
-            if name == "marvellous":
-                from bot import marvellous_config as mc
-                kwargs["symbol"] = kwargs.get("symbol") or mc.MARVELLOUS_BACKTEST_SYMBOL
-                orig = getattr(mc, "REQUIRE_BREAKER_BLOCK", False)
-                mc.REQUIRE_BREAKER_BLOCK = False
-                without_bb = run_marvellous_backtest(**kwargs)
-                mc.REQUIRE_BREAKER_BLOCK = True
-                with_bb = run_marvellous_backtest(**kwargs)
-                mc.REQUIRE_BREAKER_BLOCK = orig
-            elif name == "kingsely":
-                from bot import kingsely_config as kc
-                kwargs["symbol"] = kwargs.get("symbol") or kc.KINGSELY_BACKTEST_SYMBOL
-                orig_req = getattr(kc, "REQUIRE_BREAKER_BLOCK", False)
-                orig_4h = getattr(kc, "BREAKER_BLOCK_4H", False)
-                kc.REQUIRE_BREAKER_BLOCK = False
-                kc.BREAKER_BLOCK_4H = False
-                without_bb = run_kingsely_backtest(**kwargs)
-                kc.REQUIRE_BREAKER_BLOCK = True
-                kc.BREAKER_BLOCK_4H = getattr(config, "KINGSELY_BREAKER_BLOCK_4H", False)
-                with_bb = run_kingsely_backtest(**kwargs)
-                kc.REQUIRE_BREAKER_BLOCK = orig_req
-                kc.BREAKER_BLOCK_4H = orig_4h
-            else:
-                from bot import vester_config as vc
-                kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
-                orig_req = getattr(vc, "REQUIRE_BREAKER_BLOCK", False)
-                orig_4h = getattr(vc, "BREAKER_BLOCK_4H", False)
-                vc.REQUIRE_BREAKER_BLOCK = False
-                vc.BREAKER_BLOCK_4H = False
-                without_bb = run_vester_backtest(**kwargs)
-                vc.REQUIRE_BREAKER_BLOCK = True
-                vc.BREAKER_BLOCK_4H = getattr(config, "VESTER_BREAKER_BLOCK_4H", False)
-                with_bb = run_vester_backtest(**kwargs)
-                vc.REQUIRE_BREAKER_BLOCK = orig_req
-                vc.BREAKER_BLOCK_4H = orig_4h
+            from bot import vester_config as vc
+            kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
+            orig_req = getattr(vc, "REQUIRE_BREAKER_BLOCK", False)
+            orig_4h = getattr(vc, "BREAKER_BLOCK_4H", False)
+            vc.REQUIRE_BREAKER_BLOCK = False
+            vc.BREAKER_BLOCK_4H = False
+            without_bb = run_vester_backtest(**kwargs)
+            vc.REQUIRE_BREAKER_BLOCK = True
+            vc.BREAKER_BLOCK_4H = getattr(config, "VESTER_BREAKER_BLOCK_4H", False)
+            with_bb = run_vester_backtest(**kwargs)
+            vc.REQUIRE_BREAKER_BLOCK = orig_req
+            vc.BREAKER_BLOCK_4H = orig_4h
             _print_breaker_block_comparison(name, without_bb, with_bb)
-        return
-
-    if args.strategy == "v1":
-        from bot.backtest import run_v1_backtest
-        period = args.period if args.period != "both" else "60d"
-        print(f"\n{'='*60}\nBacktesting v1 on {args.symbol}\n{'='*60}")
-        run_v1_backtest(csv_path=args.csv, symbol=args.symbol, period=period)
         return
 
     if args.strategy == "vee":
@@ -325,18 +283,13 @@ def run_backtest(args):
             rows = []
             for name in strategies:
                 kwargs = dict(symbol=args.symbol, period=period, return_stats=True)
-                if name == "marvellous":
-                    from bot import marvellous_config as mc
-                    kwargs["symbol"] = mc.MARVELLOUS_BACKTEST_SYMBOL
-                    s = run_marvellous_backtest(**kwargs)
-                elif name == "kingsely":
-                    from bot import kingsely_config as kc
-                    kwargs["symbol"] = kwargs.get("symbol") or kc.KINGSELY_BACKTEST_SYMBOL
-                    s = run_kingsely_backtest(**kwargs)
-                elif name == "vester":
+                if name == "vester":
                     from bot import vester_config as vc
                     kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
                     s = run_vester_backtest(**kwargs)
+                else:
+                    kwargs["symbol"] = kwargs.get("symbol") or getattr(config, "VEE_BACKTEST_SYMBOL", "GC=F")
+                    s = run_vee_backtest(**kwargs)
                 rows.append(s)
             _print_summary_table(period_label, rows)
         return
@@ -347,24 +300,13 @@ def run_backtest(args):
         kwargs = dict(csv_path=args.csv, symbol=args.symbol, period=period)
         if getattr(args, "trade_details", False):
             kwargs["include_trade_details"] = True
-        if name == "marvellous":
-            from bot import marvellous_config as mc
-            kwargs["symbol"] = kwargs.get("symbol") or mc.MARVELLOUS_BACKTEST_SYMBOL
-            run_marvellous_backtest(**kwargs)
-        elif name == "kingsely":
-            from bot import kingsely_config as kc
-            kwargs["symbol"] = kwargs.get("symbol") or kc.KINGSELY_BACKTEST_SYMBOL
-            run_kingsely_backtest(**kwargs)
-        elif name == "vester":
+        if name == "vester":
             from bot import vester_config as vc
             kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
             run_vester_backtest(**kwargs)
-        elif name == "follow":
-            kwargs["symbol"] = kwargs.get("symbol") or getattr(config, "VESTER_BACKTEST_SYMBOL", "GC=F")
-            run_follow_backtest(**kwargs)
-        elif name == "lq":
-            kwargs["symbol"] = kwargs.get("symbol") or getattr(config, "VESTER_BACKTEST_SYMBOL", "GC=F")
-            run_lq_backtest(**kwargs)
+        elif name == "vee":
+            kwargs["symbol"] = kwargs.get("symbol") or getattr(config, "VEE_BACKTEST_SYMBOL", "GC=F")
+            run_vee_backtest(**kwargs)
 
 
 def run_replay_cmd(args):

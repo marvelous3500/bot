@@ -18,6 +18,6 @@ os.environ['TELEGRAM_ENABLED'] = 'true'
 from bot.telegram_notifier import test_telegram
 
 if __name__ == "__main__":
-    strategy = sys.argv[1] if len(sys.argv) > 1 else "marvellous"
+    strategy = sys.argv[1] if len(sys.argv) > 1 else "vester"
     ok = test_telegram(strategy_name=strategy)
     sys.exit(0 if ok else 1)

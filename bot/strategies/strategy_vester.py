@@ -527,10 +527,11 @@ class VesterStrategy(BaseStrategy):
             return {"close": True}
         return None
 
-    def run_backtest(self) -> pd.DataFrame:
+    def run_backtest(self, only_last_n_bars: Optional[int] = None) -> pd.DataFrame:
         """
         Run full backtest: loop over 1M bars, apply HTF bias -> 5M setup -> 1M entry.
         Enforces filters (spread, volatility, news) and risk limits.
+        If only_last_n_bars is set (e.g. in live), only consider the last N 1M bars so we signal current setups.
         """
         if self.df_h1.empty or self.df_m5.empty or self.df_m1.empty:
             return pd.DataFrame()
@@ -551,7 +552,10 @@ class VesterStrategy(BaseStrategy):
         trades_per_5m_setup: Dict = {}
         apply_limits = getattr(config, "BACKTEST_APPLY_TRADE_LIMITS", False)
 
-        for i in range(100, len(entry_df)):
+        start_i = 100
+        if only_last_n_bars is not None and only_last_n_bars > 0:
+            start_i = max(100, len(entry_df) - only_last_n_bars)
+        for i in range(start_i, len(entry_df)):
             idx = entry_df.index[i]
             current_time = idx if hasattr(idx, "hour") else pd.Timestamp(idx)
             

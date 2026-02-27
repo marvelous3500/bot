@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from .connector_interface import get_connector, TIMEFRAME_M1, TIMEFRAME_M5, TIMEFRAME_M15, TIMEFRAME_H1, TIMEFRAME_H4, TIMEFRAME_D1
 from .paper_trading import PaperTrading
 from .trade_approver import TradeApprover
-from .strategies import MarvellousStrategy, VesterStrategy, KingselyStrategy, V1Strategy, FollowStrategy, LQStrategy, VeeStrategy
+from .strategies import VesterStrategy, VeeStrategy
 from .indicators_bos import detect_swing_highs_lows, detect_break_of_structure
 from ai import get_signal_confidence, explain_trade, speak
 from .telegram_notifier import send_setup_notification
@@ -37,20 +37,14 @@ def _print_live_checklist():
 class LiveTradingEngine:
     """Main live trading engine that runs strategies continuously."""
 
-    def __init__(self, strategy_name='marvellous', paper_mode=True, symbol=None):
+    def __init__(self, strategy_name='vester', paper_mode=True, symbol=None):
         self.strategy_name = strategy_name
         self.paper_mode = paper_mode
         self.cli_symbol = symbol  # --symbol from CLI (e.g. 'BTC-USD'); overrides config for live/paper
-        
+
         login = config.MT5_LOGIN
         password = config.MT5_PASSWORD
         server = config.MT5_SERVER
-        
-        if strategy_name == 'kingsely':
-            from . import kingsely_config as kc
-            if kc.MT5_LOGIN: login = kc.MT5_LOGIN
-            if kc.MT5_PASSWORD: password = kc.MT5_PASSWORD
-            if kc.MT5_SERVER: server = kc.MT5_SERVER
 
         self.mt5 = get_connector(
             login=login,
@@ -77,22 +71,13 @@ class LiveTradingEngine:
         if not symbol or not order_type:
             return None
         setup_ts = None
-        if self.strategy_name in ('vester', 'kingsely', 'follow', 'test-sl'):
-            setup_ts = signal.get('setup_5m')
-            if setup_ts is None:
-                t = signal.get('time')
-                if t is not None:
-                    ts = t if hasattr(t, 'floor') else pd.Timestamp(t)
-                    setup_ts = ts.floor('5min')
-        elif self.strategy_name == 'lq':
-            setup_ts = signal.get('setup_m15')
+        if self.strategy_name == 'vester':
+            setup_ts = signal.get('setup_15m')
             if setup_ts is None:
                 t = signal.get('time')
                 if t is not None:
                     ts = t if hasattr(t, 'floor') else pd.Timestamp(t)
                     setup_ts = ts.floor('15min')
-        elif self.strategy_name == 'marvellous':
-            setup_ts = signal.get('setup_m15')
         elif self.strategy_name == 'vee':
             setup_ts = signal.get('setup_15m')
             if setup_ts is None:
@@ -115,22 +100,14 @@ class LiveTradingEngine:
         max_per_setup = None
         if self.strategy_name == 'vester':
             max_per_setup = getattr(config, 'VESTER_MAX_TRADES_PER_SETUP', None)
+        if max_per_setup is None:
+            max_per_setup = 1 if getattr(config, 'VESTER_ONE_SIGNAL_PER_SETUP', True) else None
+        elif self.strategy_name == 'vee':
+            max_per_setup = getattr(config, 'VEE_MAX_TRADES_PER_SETUP', None)
             if max_per_setup is None:
-                max_per_setup = 1 if getattr(config, 'VESTER_ONE_SIGNAL_PER_SETUP', True) else None
-        elif self.strategy_name == 'kingsely':
-            max_per_setup = getattr(config, 'KINGSELY_MAX_TRADES_PER_SETUP', None)
-            if max_per_setup is None:
-                max_per_setup = 1 if getattr(config, 'KINGSELY_ONE_SIGNAL_PER_SETUP', True) else None
-        elif self.strategy_name == 'marvellous':
-            max_per_setup = getattr(config, 'MARVELLOUS_MAX_TRADES_PER_SETUP', None)
-            if max_per_setup is None:
-                max_per_setup = 1 if getattr(config, 'MARVELLOUS_ONE_SIGNAL_PER_SETUP', True) else None
-        elif self.strategy_name == 'follow':
-            max_per_setup = getattr(config, 'FOLLOW_MAX_TRADES_PER_SETUP', None)  # None = no limit for testing
+                max_per_setup = 3
         elif self.strategy_name == 'test-sl':
             max_per_setup = None  # One-shot: no setup limit
-        elif self.strategy_name == 'lq':
-            max_per_setup = 1  # One trade per setup (LQ has its own per-level tracking)
         if max_per_setup is None:
             return True, None
         key = self._get_setup_key(signal)
@@ -222,40 +199,23 @@ class LiveTradingEngine:
 
     def _get_symbol_for_bias(self):
         """Return the symbol used for bias-of-day and market-open check (matches strategy's trading symbol)."""
-        if self.strategy_name == 'marvellous':
-            from . import marvellous_config as mc
-            if self.cli_symbol:
-                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
-            else:
-                symbol = getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
-        elif self.strategy_name == 'vester':
+        if self.strategy_name == 'vester':
             from . import vester_config as vc
             if self.cli_symbol:
                 symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'VESTER_LIVE_SYMBOL', vc.VESTER_LIVE_SYMBOL)
             else:
                 symbol = getattr(config, 'VESTER_LIVE_SYMBOL', vc.VESTER_LIVE_SYMBOL)
-        elif self.strategy_name == 'kingsely':
-            from . import kingsely_config as kc
-            if self.cli_symbol:
-                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'KINGSELY_LIVE_SYMBOL', kc.KINGSELY_LIVE_SYMBOL)
-            else:
-                symbol = getattr(config, 'KINGSELY_LIVE_SYMBOL', kc.KINGSELY_LIVE_SYMBOL)
-        elif self.strategy_name == 'test-sl':
-            if self.cli_symbol:
-                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
-            else:
-                symbol = config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
-        elif self.strategy_name == 'lq':
-            if self.cli_symbol:
-                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
-            else:
-                symbol = config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
         elif self.strategy_name == 'vee':
             from . import vee_config as vc
             if self.cli_symbol:
                 symbol = config.cli_symbol_to_mt5(self.cli_symbol) or getattr(config, 'VEE_LIVE_SYMBOL', vc.VEE_LIVE_SYMBOL)
             else:
                 symbol = getattr(config, 'VEE_LIVE_SYMBOL', vc.VEE_LIVE_SYMBOL)
+        elif self.strategy_name == 'test-sl':
+            if self.cli_symbol:
+                symbol = config.cli_symbol_to_mt5(self.cli_symbol) or config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
+            else:
+                symbol = config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
         else:
             if self.cli_symbol:
                 symbol = config.cli_symbol_to_mt5(self.cli_symbol) or config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
@@ -290,49 +250,7 @@ class LiveTradingEngine:
             next((v for k, v in config.LIVE_SYMBOLS.items() if 'XAU' in k.upper() or 'GOLD' in k.upper()), None) or
             list(config.LIVE_SYMBOLS.values())[0]
         )
-        if self.strategy_name == 'marvellous':
-            from . import marvellous_config as mc
-            # CLI --symbol overrides: try that MT5 symbol first (e.g. BTC-USD -> BTCUSDm)
-            cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
-            marv_live = getattr(config, 'MARVELLOUS_LIVE_SYMBOL', mc.MARVELLOUS_LIVE_SYMBOL)
-            gold_symbols = list(dict.fromkeys([
-                s for s in [cli_mt5, marv_live, symbol, 'XAUUSD', 'XAUUSDm'] if s
-            ]))
-            entry_tf = getattr(mc, 'ENTRY_TIMEFRAME', '5m')
-            df_daily = df_4h = df_h1 = df_m15 = df_entry = None
-            for sym in gold_symbols:
-                df_daily = self.mt5.get_bars(sym, TIMEFRAME_D1, count=50)
-                df_4h = self.mt5.get_bars(sym, TIMEFRAME_H4, count=100)
-                df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
-                df_m15 = self.mt5.get_bars(sym, TIMEFRAME_M15, count=1000)
-                if entry_tf == '15m':
-                    df_entry = df_m15.copy() if df_m15 is not None else None
-                else:
-                    tf_entry = TIMEFRAME_M1 if entry_tf == '1m' else TIMEFRAME_M5
-                    df_entry = self.mt5.get_bars(sym, tf_entry, count=1000)
-                if all(x is not None for x in (df_daily, df_4h, df_h1, df_m15, df_entry)):
-                    symbol = sym
-                    break
-            if df_h1 is None or df_m15 is None or df_entry is None:
-                if getattr(config, 'LIVE_DEBUG', False):
-                    print(f"[LIVE_DEBUG] marvellous: Bar data missing (tried: {gold_symbols})")
-                return []
-            if getattr(config, 'LIVE_DEBUG', False):
-                print(f"[LIVE_DEBUG] {symbol} marvellous: D1/4H/H1/M15/Entry({entry_tf}) loaded")
-            strat = MarvellousStrategy(
-                df_daily=df_daily,
-                df_4h=df_4h,
-                df_h1=df_h1,
-                df_m15=df_m15,
-                df_entry=df_entry,
-                symbol=symbol,
-                verbose=False,
-            )
-            strat.prepare_data()
-            signals_df = strat.run_backtest()
-            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] marvellous: 0 signals")
-        elif self.strategy_name == 'vester':
+        if self.strategy_name == 'vester':
             from . import vester_config as vc
             cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
             vester_live = getattr(config, 'VESTER_LIVE_SYMBOL', vc.VESTER_LIVE_SYMBOL)
@@ -364,136 +282,10 @@ class LiveTradingEngine:
                 verbose=False,
             )
             strat.prepare_data()
-            signals_df = strat.run_backtest()
+            only_last = getattr(config, 'VESTER_LIVE_ONLY_LAST_N_BARS', None)
+            signals_df = strat.run_backtest(only_last_n_bars=only_last)
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] vester: 0 signals")
-        elif self.strategy_name == 'kingsely':
-            from . import kingsely_config as kc
-            cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
-            kingsely_live = getattr(config, 'KINGSELY_LIVE_SYMBOL', kc.KINGSELY_LIVE_SYMBOL)
-            kingsely_symbols = list(dict.fromkeys([
-                s for s in [cli_mt5, kingsely_live, symbol, 'XAUUSD', 'XAUUSDm'] if s
-            ]))
-            df_h1 = df_m5 = df_m1 = df_h4 = None
-            agg = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
-            for sym in kingsely_symbols:
-                df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
-                df_m5 = self.mt5.get_bars(sym, TIMEFRAME_M5, count=1000)
-                df_m1 = self.mt5.get_bars(sym, TIMEFRAME_M1, count=1000)
-                if all(x is not None for x in (df_h1, df_m5, df_m1)):
-                    symbol = sym
-                    df_h4 = df_h1.resample("4h").agg(agg).dropna()
-                    break
-            if df_h1 is None or df_m5 is None or df_m1 is None:
-                if getattr(config, 'LIVE_DEBUG', False):
-                    print(f"[LIVE_DEBUG] kingsely: Bar data missing (tried: {kingsely_symbols})")
-                return []
-            if getattr(config, 'LIVE_DEBUG', False):
-                print(f"[LIVE_DEBUG] {symbol} kingsely: H1/M5/M1" + ("/4H" if df_h4 is not None else "") + " loaded")
-            strat = KingselyStrategy(
-                df_h1=df_h1,
-                df_m5=df_m5,
-                df_m1=df_m1,
-                df_h4=df_h4,
-                symbol=symbol,
-                verbose=False,
-            )
-            strat.prepare_data()
-            signals_df = strat.run_backtest()
-            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] kingsely: 0 signals")
-            return signals_df.to_dict('records')
-
-        elif self.strategy_name == 'v1':
-            from . import v1_config as vc
-            # V1 uses H1, 5M, and Daily
-            cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
-            v1_live = getattr(config, 'V1_LIVE_SYMBOL', vc.V1_LIVE_SYMBOL)
-            v1_symbols = list(dict.fromkeys([
-                s for s in [cli_mt5, v1_live, symbol, 'XAUUSD', 'XAUUSDz'] if s
-            ]))
-            
-            df_h1 = df_m5 = daily_df = None
-            
-            for sym in v1_symbols:
-                df_h1 = self.mt5.get_bars(sym, TIMEFRAME_H1, count=200)
-                df_m5 = self.mt5.get_bars(sym, TIMEFRAME_M5, count=1000)
-                daily_df = self.mt5.get_bars(sym, TIMEFRAME_D1, count=100)
-                
-                if all(x is not None for x in (df_h1, df_m5, daily_df)):
-                    symbol = sym
-                    break
-            
-            if df_h1 is None or df_m5 is None:
-                if getattr(config, 'LIVE_DEBUG', False):
-                    print(f"[LIVE_DEBUG] v1: Bar data missing (tried: {v1_symbols})")
-                return []
-                
-            strat = V1Strategy(
-                df_h1=df_h1,
-                df_m5=df_m5,
-                daily_df=daily_df,
-                symbol=symbol,
-                verbose=False,
-            )
-            signals_df = strat.run_backtest()
-            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] v1: 0 signals")
-            return signals_df.to_dict('records')
-
-        elif self.strategy_name == 'follow':
-            cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
-            follow_symbols = list(dict.fromkeys([
-                s for s in [cli_mt5, symbol, 'XAUUSD', 'XAUUSDm'] if s
-            ]))
-            df_m5 = None
-            for sym in follow_symbols:
-                df_m5 = self.mt5.get_bars(sym, TIMEFRAME_M5, count=1000)
-                if df_m5 is not None and not df_m5.empty:
-                    symbol = sym
-                    break
-            if df_m5 is None or df_m5.empty:
-                if getattr(config, 'LIVE_DEBUG', False):
-                    print(f"[LIVE_DEBUG] follow: M5 bar data missing (tried: {follow_symbols})")
-                return []
-            if getattr(config, 'LIVE_DEBUG', False):
-                print(f"[LIVE_DEBUG] {symbol} follow: M5 loaded")
-            strat = FollowStrategy(df=df_m5, symbol=symbol, verbose=False)
-            strat.prepare_data()
-            signals_df = strat.run_backtest()
-            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] follow: 0 signals")
-        elif self.strategy_name == 'lq':
-            cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
-            lq_symbols = list(dict.fromkeys([
-                s for s in [cli_mt5, symbol, 'XAUUSD', 'XAUUSDm'] if s
-            ]))
-            df_daily = df_m15 = df_m1 = None
-            use_vester_entry = getattr(config, 'LQ_USE_VESTER_ENTRY', False)
-            for sym in lq_symbols:
-                df_daily = self.mt5.get_bars(sym, TIMEFRAME_D1, count=50)
-                df_m15 = self.mt5.get_bars(sym, TIMEFRAME_M15, count=1000)
-                if use_vester_entry:
-                    df_m1 = self.mt5.get_bars(sym, TIMEFRAME_M1, count=2000)
-                if df_daily is not None and not df_daily.empty and df_m15 is not None and not df_m15.empty:
-                    if not use_vester_entry or (df_m1 is not None and not df_m1.empty):
-                        symbol = sym
-                        break
-            if df_daily is None or df_daily.empty or df_m15 is None or df_m15.empty:
-                if getattr(config, 'LIVE_DEBUG', False):
-                    print(f"[LIVE_DEBUG] lq: D1/M15 data missing (tried: {lq_symbols})")
-                return []
-            if use_vester_entry and (df_m1 is None or df_m1.empty):
-                if getattr(config, 'LIVE_DEBUG', False):
-                    print(f"[LIVE_DEBUG] lq: M1 data missing for Vester entry")
-                return []
-            if getattr(config, 'LIVE_DEBUG', False):
-                print(f"[LIVE_DEBUG] {symbol} lq: D1 + M15" + (" + M1" if use_vester_entry else "") + " loaded")
-            strat = LQStrategy(df_daily=df_daily, df_m15=df_m15, df_m1=df_m1, symbol=symbol, verbose=False)
-            strat.prepare_data()
-            signals_df = strat.run_backtest()
-            if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
-                print(f"[LIVE_DEBUG] lq: 0 signals")
         elif self.strategy_name == 'test-sl':
             cli_mt5 = config.cli_symbol_to_mt5(self.cli_symbol) if self.cli_symbol else None
             test_symbols = list(dict.fromkeys([
@@ -553,7 +345,8 @@ class LiveTradingEngine:
                 symbol=symbol,
                 verbose=False,
             )
-            signals_df = strat.run_backtest()
+            only_last = getattr(config, 'VEE_LIVE_ONLY_LAST_N_BARS', None)
+            signals_df = strat.run_backtest(only_last_n_bars=only_last)
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] vee: 0 signals")
         else:
@@ -570,15 +363,11 @@ class LiveTradingEngine:
             elif tick:
                 latest_signal['symbol'] = symbol
                 latest_signal['price'] = tick['ask'] if latest_signal['type'] == 'BUY' else tick['bid']
-                # Marvellous/Vester: add buffer below/above so slight price move doesn't invalidate SL
-                if self.strategy_name in ('marvellous', 'vester'):
+                # Vester/Vee: add buffer below/above so slight price move doesn't invalidate SL
+                if self.strategy_name in ('vester', 'vee'):
                     sl = latest_signal.get('sl')
                     if sl is not None:
-                        buf_key = (
-                            'MARVELLOUS_SL_BUFFER' if self.strategy_name == 'marvellous' else
-                            'KINGSELY_SL_BUFFER' if self.strategy_name == 'kingsely' else
-                            'VESTER_SL_BUFFER'
-                        )
+                        buf_key = 'VESTER_SL_BUFFER' if self.strategy_name == 'vester' else 'VEE_SL_BUFFER_POINTS'
                         buf = config.get_symbol_config(symbol, buf_key) or getattr(config, buf_key, 1.0)
                         try:
                             sl_f = float(sl)
@@ -586,21 +375,6 @@ class LiveTradingEngine:
                                 latest_signal['sl'] = sl_f - buf  # Move SL lower for BUY
                             else:
                                 latest_signal['sl'] = sl_f + buf  # Move SL higher for SELL
-                        except (TypeError, ValueError):
-                            pass
-                # Marvellous: if live price invalidated SL and fallback enabled, use fallback SL
-                use_fallback = self.strategy_name == 'marvellous' and getattr(config, 'MARVELLOUS_USE_SL_FALLBACK', False)
-                if use_fallback:
-                    sl = latest_signal.get('sl')
-                    price = latest_signal['price']
-                    if sl is not None:
-                        try:
-                            sl_f, price_f = float(sl), float(price)
-                            fallback_dist = config.get_symbol_config(symbol, 'MARVELLOUS_SL_FALLBACK_DISTANCE') or getattr(config, 'MARVELLOUS_SL_FALLBACK_DISTANCE', 5.0)
-                            if latest_signal['type'] == 'BUY' and sl_f >= price_f:
-                                latest_signal['sl'] = price_f - fallback_dist
-                            elif latest_signal['type'] == 'SELL' and sl_f <= price_f:
-                                latest_signal['sl'] = price_f + fallback_dist
                         except (TypeError, ValueError):
                             pass
                 # Cap SL at MAX_SL_PIPS (converted per symbol's pip size)
@@ -651,12 +425,8 @@ class LiveTradingEngine:
                 rr_ratio = getattr(config, "RISK_REWARD_RATIO", 5.0)
                 if self.strategy_name == "vester":
                     rr_ratio = getattr(config, "VESTER_MIN_RR", rr_ratio)
-                elif self.strategy_name == "kingsely":
-                    rr_ratio = getattr(config, "KINGSELY_MIN_RR", rr_ratio)
-                elif self.strategy_name == "lq":
-                    rr_ratio = getattr(config, "LQ_MIN_RR", rr_ratio)
-                elif self.strategy_name == "v1":
-                    rr_ratio = getattr(config, "V1_MIN_RR", rr_ratio)
+                elif self.strategy_name == "vee":
+                    rr_ratio = getattr(config, "VEE_MIN_RR", rr_ratio)
                 sl_dist = abs(latest_signal['price'] - latest_signal.get('sl', 0))
                 if latest_signal['type'] == 'BUY':
                     latest_signal['tp'] = latest_signal['price'] + (sl_dist * rr_ratio)
@@ -675,7 +445,7 @@ class LiveTradingEngine:
                     balance = account['balance'] if account else 0
                     sl = latest_signal.get('sl')
                     if sl is not None and balance > 0:
-                        risk_pct = getattr(config, 'VESTER_RISK_PER_TRADE', config.RISK_PER_TRADE) if self.strategy_name == 'vester' else config.RISK_PER_TRADE
+                        risk_pct = getattr(config, 'VESTER_RISK_PER_TRADE', config.RISK_PER_TRADE) if self.strategy_name == 'vester' else (getattr(config, 'VEE_RISK_PER_TRADE', config.RISK_PER_TRADE) if self.strategy_name == 'vee' else config.RISK_PER_TRADE)
                         lot = self.mt5.calc_lot_size_from_risk(
                             symbol, balance, latest_signal['price'], sl, risk_pct
                         )
@@ -841,15 +611,23 @@ class LiveTradingEngine:
             mt5_err = None
         else:
             _comment = config.MT5_ORDER_COMMENT if config.MT5_ORDER_COMMENT is not None else signal.get('reason', '')
-            result, mt5_err = self.mt5.place_order(
-                symbol=signal['symbol'],
-                order_type=signal['type'],
-                volume=vol,
-                price=signal['price'],
-                sl=signal['sl'],
-                tp=signal['tp'],
-                comment=_comment
-            )
+            result, mt5_err = None, None
+            retry_count = getattr(config, 'ENTRY_RETRY_COUNT', 0) or 0
+            retry_delay = getattr(config, 'ENTRY_RETRY_DELAY_SEC', 1) or 1
+            for attempt in range(retry_count + 1):
+                result, mt5_err = self.mt5.place_order(
+                    symbol=signal['symbol'],
+                    order_type=signal['type'],
+                    volume=vol,
+                    price=signal['price'],
+                    sl=signal['sl'],
+                    tp=signal['tp'],
+                    comment=_comment
+                )
+                if result is not None:
+                    break
+                if attempt < retry_count and retry_delay > 0:
+                    time.sleep(retry_delay)
         if result:
             result['time'] = datetime.utcnow()
             self.trades_today.append(result)
@@ -990,6 +768,120 @@ class LiveTradingEngine:
             elif getattr(config, 'MT5_VERBOSE', False):
                 print(f"[LOCK-IN] Failed to move SL for {ticket}: {err}")
 
+    def _check_trailing_sl(self):
+        """When price moved in favor by TRAILING_SL_ACTIVATION_R, trail SL by TRAILING_SL_DISTANCE_PIPS (only tightens). Live only."""
+        if self.paper_mode or not getattr(config, 'TRAILING_SL_ENABLED', False):
+            return
+        activation_r = getattr(config, 'TRAILING_SL_ACTIVATION_R', 1.0)
+        distance_pips = getattr(config, 'TRAILING_SL_DISTANCE_PIPS', 20.0)
+        atr_mult = getattr(config, 'TRAILING_SL_ATR_MULT', None)
+        risk_ratio = getattr(config, 'RISK_REWARD_RATIO', 5.0)
+        positions = self.mt5.get_positions()
+        for pos in positions:
+            ticket = pos.get('ticket')
+            symbol = pos.get('symbol')
+            price_open = pos.get('price_open')
+            sl = pos.get('sl')
+            tp = pos.get('tp')
+            pos_type = pos.get('type')
+            if ticket is None or symbol is None or price_open is None:
+                continue
+            try:
+                price_open = float(price_open)
+                sl = float(sl) if sl is not None and sl != 0 else None
+            except (TypeError, ValueError):
+                continue
+            if sl is None:
+                continue
+            sl_dist = abs(price_open - sl)
+            if sl_dist <= 0:
+                continue
+            activation_price = (price_open + sl_dist * activation_r) if pos_type == 'BUY' else (price_open - sl_dist * activation_r)
+            tick = self.mt5.get_live_price(symbol)
+            if not tick:
+                continue
+            current = float(tick.get('bid' if pos_type == 'BUY' else 'ask') or 0)
+            if current == 0:
+                continue
+            if pos_type == 'BUY' and current < activation_price:
+                continue
+            if pos_type == 'SELL' and current > activation_price:
+                continue
+            pip_size = self.mt5.get_pip_size(symbol)
+            if pip_size is None or pip_size <= 0:
+                pip_size = 0.0001
+            if atr_mult is not None and atr_mult > 0:
+                atr_val = self.mt5.get_atr(symbol, 14)
+                trail_dist = (atr_val or sl_dist * 0.1) * atr_mult
+            else:
+                trail_dist = distance_pips * pip_size
+            if pos_type == 'BUY':
+                new_sl = current - trail_dist
+                if new_sl <= sl or new_sl >= current:
+                    continue
+            else:
+                new_sl = current + trail_dist
+                if new_sl >= sl or new_sl <= current:
+                    continue
+            ok, err = self.mt5.modify_position(ticket, sl=new_sl, tp=tp)
+            if ok:
+                print(f"[TRAILING-SL] Position {ticket} SL moved to {new_sl:.5f}")
+            elif getattr(config, 'MT5_VERBOSE', False):
+                print(f"[TRAILING-SL] Failed {ticket}: {err}")
+
+    def _check_partial_tp(self):
+        """When price hits TP1 (PARTIAL_TP_TP1_R), close PARTIAL_TP_CLOSE_PCT of position. Live only."""
+        if self.paper_mode or not getattr(config, 'PARTIAL_TP_ENABLED', False):
+            return
+        tp1_r = getattr(config, 'PARTIAL_TP_TP1_R', 1.5)
+        close_pct = getattr(config, 'PARTIAL_TP_CLOSE_PCT', 50) or 50
+        risk_ratio = getattr(config, 'RISK_REWARD_RATIO', 5.0)
+        if not hasattr(self, '_partial_tp_done'):
+            self._partial_tp_done = set()
+        positions = self.mt5.get_positions()
+        open_tickets = {p.get('ticket') for p in positions if p.get('ticket') is not None}
+        self._partial_tp_done &= open_tickets  # drop closed positions from set
+        for pos in positions:
+            ticket = pos.get('ticket')
+            symbol = pos.get('symbol')
+            price_open = pos.get('price_open')
+            sl = pos.get('sl')
+            tp = pos.get('tp')
+            volume = pos.get('volume')
+            pos_type = pos.get('type')
+            if ticket is None or ticket in self._partial_tp_done or symbol is None or price_open is None or volume is None:
+                continue
+            try:
+                price_open = float(price_open)
+                sl = float(sl) if sl is not None and sl != 0 else None
+                volume = float(volume)
+            except (TypeError, ValueError):
+                continue
+            if sl is None:
+                sl_dist = abs(float(tp) - price_open) / risk_ratio if tp else 0
+            else:
+                sl_dist = abs(price_open - sl)
+            if sl_dist <= 0:
+                continue
+            tp1_price = (price_open + sl_dist * tp1_r) if pos_type == 'BUY' else (price_open - sl_dist * tp1_r)
+            tick = self.mt5.get_live_price(symbol)
+            if not tick:
+                continue
+            current = float(tick.get('bid' if pos_type == 'BUY' else 'ask') or 0)
+            if pos_type == 'BUY' and current < tp1_price:
+                continue
+            if pos_type == 'SELL' and current > tp1_price:
+                continue
+            vol_to_close = round(volume * (close_pct / 100.0), 2)
+            if vol_to_close <= 0:
+                continue
+            ok, err = self.mt5.close_position_partial(ticket, vol_to_close)
+            if ok:
+                self._partial_tp_done.add(ticket)
+                print(f"[PARTIAL-TP] Position {ticket} closed {close_pct}% at TP1 ({tp1_r}R)")
+            elif getattr(config, 'MT5_VERBOSE', False):
+                print(f"[PARTIAL-TP] Failed {ticket}: {err}")
+
     def _log_trade(self, signal, result):
         """Append trade to logs/trades_YYYYMMDD.json."""
         import json
@@ -1101,6 +993,8 @@ class LiveTradingEngine:
                 self.update_positions()
                 self._check_breakeven()
                 self._check_lock_in()
+                self._check_trailing_sl()
+                self._check_partial_tp()
                 self._last_run_errors = []
                 if getattr(config, "SHOW_BIAS_OF_DAY", False) and not self.paper_mode and self.mt5.connected:
                     sym = self._get_symbol_for_bias()
@@ -1123,16 +1017,7 @@ class LiveTradingEngine:
                     signal_time = signal.get('time', datetime.now())
                     if isinstance(signal_time, pd.Timestamp):
                         signal_time = signal_time.to_pydatetime()
-                    # Skip stale signals (setup detected hours/minutes ago)
-                    max_age_min = getattr(config, f'{self.strategy_name.upper()}_SIGNAL_MAX_AGE_MINUTES', None)
-                    if max_age_min is not None and signal_time:
-                        now = datetime.utcnow()
-                        st = signal_time.replace(tzinfo=None) if hasattr(signal_time, 'tzinfo') and signal_time.tzinfo else signal_time
-                        age_sec = max(0, (now - st).total_seconds())
-                        if age_sec > max_age_min * 60:
-                            self._last_run_errors.append(f"Signal too old ({age_sec/60:.0f} min)")
-                            print(f"[SKIP] Signal too old ({age_sec/60:.0f} min, max {max_age_min} min)")
-                            continue
+                    # Staleness handled by only_last_n_bars in strategy (current bar only); no separate max-age check
                     if last_signal_time and abs((signal_time - last_signal_time).total_seconds()) < 300:
                         self._last_run_errors.append("5 min cooldown")
                         print(f"[SKIP] Signal within 5 min of last execution (cooldown)")
@@ -1165,12 +1050,6 @@ class LiveTradingEngine:
                     reason = signal.get('reason', '')
                     if reason:
                         print(f"[REASON] {reason}")
-                    diag = signal.get('marvellous_diagnostic')
-                    if diag and self.strategy_name == 'marvellous':
-                        print(f"[MARVELLOUS DIAGNOSTIC] Check chart at these times:")
-                        for k, v in diag.items():
-                            if v:
-                                print(f"  {k}: {v}")
                     if sl is not None:
                         print(f"[SL] Stop loss: {float(sl):.5f} | Risk in dollars: ${dollar_risk:.2f}" if dollar_risk is not None else f"[SL] Stop loss: {float(sl):.5f} | Risk in dollars: n/a")
                     if config.VOICE_ALERTS and config.VOICE_ALERT_ON_SIGNAL:

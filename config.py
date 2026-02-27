@@ -1,9 +1,4 @@
 #VESTER_REQUIRE_HTF_ZONE_CONFIRMATION = False  # False = BOS-only bias (more trades) (key)
-#Trading Pairs (Yahoo Finance Tickers) — first is default for backtest/CLI
-# GBPUSD=X : GBP/USD (default)
-# GC=F : Gold Futures
-# BTC-USD : Bitcoin
-# ^NDX : Nasdaq 100 Index
 SYMBOLS = [ 'GC=F', 'GBPUSD=X', 'BTC-USD', '^NDX']
 
 LIVE_MODE = True   # True = real money, False = paper trading
@@ -29,31 +24,6 @@ USE_DYNAMIC_POSITION_SIZING = True   # True = risk-based for non-gold; gold uses
 GOLD_USE_MANUAL_LOT = False   # Gold (XAUUSDm etc): use MAX_POSITION_SIZE; other pairs: risk-based sizing
 # Gold manual: fixed SL distance (points). 5.0 points = 50 pips = $10 risk with 0.02 lots
 
-# LQ strategy: session windows (start_hour, end_hour) UTC for session high/low
-LQ_SESSION_HOURS_UTC = {
-    'asian': (0, 5),    # 00:00–04:59 UTC
-    'london': (7, 11),  # 07:00–10:59 UTC
-    'ny': (13, 17),     # 13:00–16:59 UTC
-}
-LQ_MIN_RR = 2.0
-LQ_ONE_TRADE_PER_LEVEL = True
-LQ_SWING_LOOKBACK = 10
-LQ_SL_BUFFER_PCT = 0.02
-LQ_SL_BUFFER_MIN = 0.5
-# Flexibility: filter by session and sweep quality
-LQ_ALLOW_SESSIONS = []                # [] = all sessions; ['london','ny'] = only London/NY
-LQ_ALLOW_PDH_PDL = True               # Trade PDH/PDL sweeps (higher-quality levels)
-LQ_ALLOW_SESSION_SWEEPS = True        # Trade session high/low sweeps (False = PDH/PDL only)
-LQ_REJECTION_WICK_RATIO = 0.55        # Min wick/range for rejection candle (0.5–0.7 typical)
-LQ_REQUIRE_BOS = False                # True = require BOS confirmation (stricter; fewer trades)
-LQ_CONFIRM_BARS = 2                   # Bars to wait for confirmation (1–3)
-LQ_USE_VESTER_ENTRY = True            # Use Vester 1M entry trigger (BOS in zone / sweep+displacement)
-LQ_VESTER_ENTRY_BARS = 15             # Max M1 bars to wait for Vester trigger (15 min)
-MAX_POSITION_SIZE = 0.02  # Fallback when lot calc fails
-USE_DYNAMIC_POSITION_SIZING = True   # Balance × risk % determines lot size
-GOLD_USE_MANUAL_LOT = False  # False = dynamic lot from balance (10%); True = fixed MAX_POSITION_SIZE
-# Gold: fixed SL distance (points). 5.0 = 50 pips. Lot = (balance × risk%) / (5.0 × 100)
-
 GOLD_MANUAL_SL_POINTS = 5.0
 PAPER_TRADING_LOG = 'paper_trades.json'
 LIVE_TRADE_LOG = True   # Append trades to logs/trades_YYYYMMDD.json
@@ -66,6 +36,20 @@ BREAKEVEN_TRIGGER_RR = 1.0   # Move SL to entry when price reaches this (1R = 1�
 LOCK_IN_ENABLED = True
 LOCK_IN_TRIGGER_RR = 3.3   # When price reaches this (e.g. 3.3× SL dist), activate lock-in
 LOCK_IN_AT_RR = 3.0       # Move SL to this level (e.g. 3R = lock in 3× profit)
+# Trailing SL: after price moves in favor by ACTIVATION_R, trail SL by DISTANCE (only tightens, never loosens)
+TRAILING_SL_ENABLED = False
+TRAILING_SL_ACTIVATION_R = 1.0   # Start trailing after price reaches this R in profit
+TRAILING_SL_DISTANCE_PIPS = 20.0  # Trail SL this many pips behind price (or use TRAILING_SL_ATR_MULT)
+TRAILING_SL_ATR_MULT = None       # If set, trail distance = ATR * this (overrides PIPS when set)
+# Partial TP: close part of position at TP1, rest runs to TP2/SL
+PARTIAL_TP_ENABLED = False
+PARTIAL_TP_TP1_R = 1.5           # First target in R (e.g. 1.5R)
+PARTIAL_TP_TP2_R = 3.0           # Second target in R (final TP from strategy used if larger)
+PARTIAL_TP_CLOSE_PCT = 50        # Close this % of position at TP1 (e.g. 50 = half)
+# Entry: retry and slippage (market orders)
+ENTRY_RETRY_COUNT = 2            # Retry order up to this many times on failure (0 = no retry)
+ENTRY_RETRY_DELAY_SEC = 1        # Seconds between retries
+ENTRY_SLIPPAGE_PIPS = 3.0        # Max slippage in pips for market order (MT5 deviation)
 MAX_SL_PIPS = 50        # Max SL distance in pips for all pairs (converted per symbol's pip size)
 DAILY_LOSS_LIMIT_PCT = 1.0 # Stop new trades when today's closed P&L loss >= balance × this %
 ENABLE_DAILY_LOSS_LIMIT = False # Toggle daily loss limit safety check
@@ -130,11 +114,12 @@ LIVE_SYMBOLS = {
 
 # Trading Loop Settings
 LIVE_CHECK_INTERVAL = 15  # Seconds between strategy checks
-# Signal freshness: only take signals where bar time is within last N minutes (avoids stale setups)
-SIGNAL_MAX_AGE_MINUTES = 3   # Default; 3 bars of 1m entry TF for vester/vee
-VESTER_SIGNAL_MAX_AGE_MINUTES = 3   # 3 × 1m bars (vester uses 1m entry)
-VEE_SIGNAL_MAX_AGE_MINUTES = 10      # 3 × 1m bars (vee uses 1m entry)
-MARVELLOUS_SIGNAL_MAX_AGE_MINUTES = 45   # 3 × M15 bars (more tolerance for live)
+# Live only: consider only the last N bars (1 = current bar only, best practice). None = full history (backtest)
+VESTER_LIVE_ONLY_LAST_N_BARS = 1
+VEE_LIVE_ONLY_LAST_N_BARS = 1
+# Backtest only: max minutes between setup bar and entry bar (used when BACKTEST_APPLY_SIGNAL_MAX_AGE=True)
+VESTER_SIGNAL_MAX_AGE_MINUTES = 3
+VEE_SIGNAL_MAX_AGE_MINUTES = 10
 SKIP_WHEN_MARKET_CLOSED = True   # When True, skip strategy run and execution on weekend or when symbol trade_mode is disabled
 PRINT_CHECKLIST_ON_START = True  # When True, print real-money checklist at live startup (paper mode: no)
 USE_MARGIN_CHECK = True   # Pre-trade margin check for live mode (skip if insufficient free margin)
@@ -147,7 +132,7 @@ AT_TP_POINTS = 5.0               # Consider "at TP" when entry price is within t
 # Bias of the day (ICT-style): show Daily + H1 BOS bias in live loop when True
 SHOW_BIAS_OF_DAY = True          # If True, print [BIAS OF DAY] Daily: X | H1: Y each cycle
 
-# ICT indicator source: False = Kingsley fractal, True = LuxAlgo-style pivot (used by Marvellous via indicators_bos)
+# ICT indicator source: False = Kingsley fractal, True = LuxAlgo-style pivot (used by strategies via indicators_bos)
 USE_LUXALGO_ICT = False
 LUXALGO_SWING_LENGTH = 5      # Pivot left/right (LuxAlgo default: 5)
 LUXALGO_OB_USE_BODY = True   # Use candle body for OB range (LuxAlgo default)
@@ -162,78 +147,14 @@ AI_EXPLAIN_TRADES = False
 VOICE_ALERTS = False
 VOICE_ALERT_ON_SIGNAL = True   # speak when trade found / about to take
 VOICE_ALERT_ON_REJECT = True   # speak when trade rejected and why
-# Marvellous Strategy (XAUUSD gold, ICT-style with bias + zone validation)
-# NOTE: REQUIRE_*_ZONE_CONFIRMATION only applies when that timeframe's REQUIRE_*_BIAS is True.
-#       E.g. REQUIRE_4H_ZONE_CONFIRMATION has no effect when REQUIRE_4H_BIAS=False.
-MARVELLOUS_INSTRUMENT = 'XAUUSD'
-MARVELLOUS_ONE_SIGNAL_PER_SETUP = False  # Deprecated: use MARVELLOUS_MAX_TRADES_PER_SETUP
-MARVELLOUS_MAX_TRADES_PER_SETUP = 3     # Max entries per M15 setup (1 = one per setup, 3 = up to 3, None = unlimited)
-MARVELLOUS_REQUIRE_H1_BIAS = True
-MARVELLOUS_REQUIRE_4H_BIAS = False
-MARVELLOUS_REQUIRE_DAILY_BIAS = False
-MARVELLOUS_REQUIRE_H1_ZONE_CONFIRMATION = True   # Only H1 is used when 4H/Daily bias are off
-MARVELLOUS_REQUIRE_4H_ZONE_CONFIRMATION = False   # Only used when REQUIRE_4H_BIAS=True
-MARVELLOUS_REQUIRE_DAILY_ZONE_CONFIRMATION = False  # Only used when REQUIRE_DAILY_BIAS=True
-MARVELLOUS_LOOKBACK_H1_HOURS = 48
-MARVELLOUS_LOOKBACK_4H_BARS = 24
-MARVELLOUS_LOOKBACK_DAILY_BARS = 10
-MARVELLOUS_REACTION_THRESHOLDS = {'wick_pct': 0.5, 'body_pct': 0.3}
-MARVELLOUS_BIAS_COMBINATION_METHOD = 'unanimous'
-MARVELLOUS_ENABLE_ASIA_SESSION = True   # Asian (Tokyo) session UTC 00:00-04:00
-MARVELLOUS_ASIAN_SESSION_HOURS = [0, 1, 2, 3, 4]
-MARVELLOUS_ENABLE_LONDON_SESSION = True
-MARVELLOUS_ENABLE_NEWYORK_SESSION = True
-MARVELLOUS_AVOID_NEWS = True
-MARVELLOUS_NEWS_BUFFER_BEFORE_MINUTES = 15
-MARVELLOUS_NEWS_BUFFER_AFTER_MINUTES = 15
-MARVELLOUS_NEWS_API = 'investpy'
-MARVELLOUS_NEWS_COUNTRIES = ['United States', 'Euro Zone']
-FCSAPI_KEY = os.getenv('FCSAPI_KEY')  # For FCS API economic calendar fallback
-MARVELLOUS_MIN_ATR_THRESHOLD = 0.5
-MARVELLOUS_MAX_SPREAD_POINTS = 50.0
-
-MARVELLOUS_USE_LIQUIDITY_MAP = False
-MARVELLOUS_LIQUIDITY_ZONE_STRENGTH_THRESHOLD = 0.5
-# Entry timeframe: '5m' (default), '15m', or '1m' — precision entry bar after M15 signal
-MARVELLOUS_ENTRY_TIMEFRAME = '1m'
-MARVELLOUS_BACKTEST_SYMBOL = 'GC=F'
-MARVELLOUS_LIVE_SYMBOL = 'XAUUSDm'
-MARVELLOUS_SWING_LENGTH = 3
-MARVELLOUS_OB_LOOKBACK = 20
-MARVELLOUS_LIQ_SWEEP_LOOKBACK = 5
-MARVELLOUS_TP_SWING_LOOKAHEAD = 3
-MARVELLOUS_ENTRY_WINDOW_HOURS = 8
-MARVELLOUS_ENTRY_WINDOW_MINUTES = 60   # Minutes after M15 signal to allow 5m entry (15=strict, 60=more trades)
-MARVELLOUS_SL_BUFFER = 1.0
-MARVELLOUS_USE_SL_FALLBACK = True
-MARVELLOUS_SL_FALLBACK_DISTANCE = 5.0
-# SL method: 'OB' = M15 liquidity level (default), 'HYBRID' = swing + ATR buffer (tighter with 1m)
-MARVELLOUS_SL_METHOD = 'OB'
-MARVELLOUS_SL_ATR_MULT = 1.0   # Buffer = ATR × this (HYBRID only)
-MARVELLOUS_SL_MICRO_TF = '1m'  # Micro-structure timeframe: '1m' or '5m' (HYBRID only)
-# Breaker block: failed OB that aligns with bias; used as HTF filter, not entry
-MARVELLOUS_REQUIRE_BREAKER_BLOCK = False
-MARVELLOUS_BREAKER_BLOCK_TF = 'H1'  # H1, 4H, or DAILY
-# Premium/Discount (ICT): only buy in discount, sell in premium. False = disabled.
-MARVELLOUS_USE_PREMIUM_DISCOUNT = False
-MARVELLOUS_EQUILIBRIUM_LOOKBACK = 24   # Bars for range
-MARVELLOUS_EQUILIBRIUM_TF = 'H1'       # H1, 4H, or DAILY
-
-# Extra filters: when True, Marvellous applies news/session/ATR/spread/liquidity filters.
-# When False, both skip them. Config comes from MARVELLOUS_* above.
+# Extra filters (news/session/ATR/spread when enabled in strategies)
 USE_EXTRA_FILTERS = True
 
 # Zone-direction filter: don't buy into Buyside liquidity (bearish FVG/supply), don't sell into Sellside (bullish FVG/demand).
-# Applied in Vester, Marvellous, LQ when True.
 USE_ZONE_DIRECTION_FILTER = True
 ZONE_DIRECTION_FVG_LOOKBACK = 20
 ZONE_DIRECTION_BUFFER_PCT = 0.001
 ZONE_DIRECTION_USE_EQUILIBRIUM = False # False = only FVG zones (looser); True = also block by Premium/Discount
-
-# Marvellous symbol: None = gold (GC=F / XAUUSDm). Set to Yahoo symbol (e.g. 'GBPUSD=X') to run on that pair.
-MARVELLOUS_SYMBOL = None
-# Yahoo ticker -> MT5 symbol for Marvellous live trading
-MARVELLOUS_YAHOO_TO_MT5 = {'GC=F': 'XAUUSDm', 'GBPUSD=X': 'GBPUSDm', 'GBPJPY=X': 'GBPJPYm', 'BTC-USD': 'BTCUSDm', '^NDX': 'NAS100m'}
 
 
 # VesterStrategy: multi-timeframe smart-money (1H bias -> 5M setup -> 1M entry)
@@ -301,22 +222,6 @@ VESTER_SL_ATR_MULT = 1.0  # Buffer = ATR × this (HYBRID only)
 VESTER_SL_MICRO_TF = '1m'  # Micro-structure timeframe: '1m' or '5m' (HYBRID only)
 
 
-# V1 Strategy: H1 Bias (FVG/OB/Sweep) -> 5M BOS + FVG/Displacement -> Retest Entry
-V1_BACKTEST_SYMBOL = 'GC=F'
-V1_LIVE_SYMBOL = 'XAUUSDm'
-V1_RISK_PER_TRADE = 0.10
-V1_MAX_TRADES_PER_SESSION = 5     # Live/paper safety; backtest simulates all signals
-V1_MIN_RR = 2.0                   # 1:2 TP keeps RR reasonable
-V1_REQUIRE_RETEST_REJECTION = False  # False = more trades; True = only strong rejection candles
-V1_SL_BUFFER = 0.0                # Price units (e.g. XAU points). Increase slightly if stops are too tight.
-V1_MAX_SPREAD_POINTS = 50.0
-V1_USE_NEWS_FILTER = True
-V1_HTF_LOOKBACK_BARS = 50         # More bars = more H1 zones, more setups
-V1_LIQUIDITY_LOOKBACK = 20
-V1_CONFIRMATION_LOOKBACK = 48
-V1_USE_PREMIUM_DISCOUNT = True   # False = more trades (no discount/premium filter on entry)
-
-
 # VeeStrategy: 1H bias -> 15m CHOCH -> OB+FVG -> entry on return to OB zone; SL beyond OB, TP 3R
 VEE_BACKTEST_SYMBOL = 'GC=F'
 VEE_LIVE_SYMBOL = 'XAUUSDm'
@@ -344,13 +249,11 @@ VEE_LOCK_IN_AT_RR = 3.0         # Move SL to this R (lock in profit)
 
 
 # Symbol-specific config overrides. When the bot trades this pair, it uses these values instead of defaults.
-# Keys: BACKTEST_SPREAD_PIPS, BACKTEST_SLIPPAGE_PIPS, PIP_SIZE, MARVELLOUS_MIN_ATR_THRESHOLD,
-#       MARVELLOUS_SL_BUFFER, MARVELLOUS_SL_FALLBACK_DISTANCE, MARVELLOUS_MAX_SPREAD_POINTS
+# Keys: BACKTEST_SPREAD_PIPS, BACKTEST_SLIPPAGE_PIPS, PIP_SIZE, etc.
 SYMBOL_CONFIGS = {
     "NAS100m": {
         "BACKTEST_SPREAD_PIPS": 2.5,
         "PIP_SIZE": 1.0,                     # Index points
-        "MARVELLOUS_MIN_ATR_THRESHOLD": 40,
     },
     # Gold: 1 lot = 100 oz, $1 move = $100 per 1 lot. Override when broker tick_value is wrong.
     "XAUUSDm": {"LOSS_PER_LOT_PER_POINT": 100},
@@ -363,8 +266,8 @@ def cli_symbol_to_mt5(cli_symbol):
     if not cli_symbol:
         return None
     s = str(cli_symbol).strip()
-    if s in MARVELLOUS_YAHOO_TO_MT5:
-        return MARVELLOUS_YAHOO_TO_MT5[s]
+    if s in VESTER_YAHOO_TO_MT5:
+        return VESTER_YAHOO_TO_MT5[s]
     normalized = s.upper().replace("-", "").replace("=", "").replace("^", "")
     for key, mt5_val in LIVE_SYMBOLS.items():
         if key.upper().replace("M", "") == normalized or key.upper() == normalized:
