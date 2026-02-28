@@ -231,13 +231,21 @@ class LiveTradingEngine:
                 symbol = config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
         return symbol
 
-    def _get_bias_of_day(self, symbol):
-        """Compute ICT-style bias from last closed Daily and H1 bars (BOS). Returns {'daily': str, 'h1': str} or None."""
+    def _get_bias_of_day(self, symbol, extra_tf=None):
+        """Compute ICT-style bias from last closed Daily and H1 bars (BOS).
+        If extra_tf is (label, tf_const, count), also compute bias for that timeframe (e.g. 5M for vester, 15M for vee).
+        Returns {'daily': str, 'h1': str, ...} or None."""
         result = {}
-        for label, tf_const, count in [('daily', TIMEFRAME_D1, 50), ('h1', TIMEFRAME_H1, 200)]:
+        timeframes = [('daily', TIMEFRAME_D1, 50), ('h1', TIMEFRAME_H1, 200)]
+        if extra_tf is not None:
+            timeframes.append(extra_tf)
+        for label, tf_const, count in timeframes:
             df = self.mt5.get_bars(symbol, tf_const, count=count)
             if df is None or len(df) < 5:
-                return None
+                if label in ('daily', 'h1'):
+                    return None
+                result[label] = 'N/A'
+                continue
             df = df.copy()
             df = detect_swing_highs_lows(df, swing_length=3)
             df = detect_break_of_structure(df)
@@ -1042,9 +1050,19 @@ class LiveTradingEngine:
                 self._last_run_errors = []
                 if getattr(config, "SHOW_BIAS_OF_DAY", False) and not self.paper_mode and self.mt5.connected:
                     sym = self._get_symbol_for_bias()
-                    bias = self._get_bias_of_day(sym)
+                    extra_tf = None
+                    if self.strategy_name in ('vester', 'trend_vester'):
+                        extra_tf = ('5M', TIMEFRAME_M5, 500)
+                    elif self.strategy_name == 'vee':
+                        extra_tf = ('15M', TIMEFRAME_M15, 500)
+                    bias = self._get_bias_of_day(sym, extra_tf=extra_tf)
                     if bias is not None:
-                        print(f"[BIAS OF DAY] Daily: {bias['daily']} | H1: {bias['h1']} ({sym})")
+                        line = f"[BIAS OF DAY] Daily: {bias['daily']} | H1: {bias['h1']}"
+                        if '5M' in bias:
+                            line += f" | 5M: {bias['5M']}"
+                        elif '15M' in bias:
+                            line += f" | 15M: {bias['15M']}"
+                        print(f"{line} ({sym})")
                 if getattr(config, "MT5_VERBOSE", False):
                     print(f"[MT5] Running strategy check...")
                 signals = self.run_strategy()

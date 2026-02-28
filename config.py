@@ -113,7 +113,7 @@ LIVE_SYMBOLS = {
 }
 
 # Trading Loop Settings
-LIVE_CHECK_INTERVAL = 15  # Seconds between strategy checks
+LIVE_CHECK_INTERVAL = 5  # Seconds between strategy checks
 # Live only: consider only the last N bars (1 = current bar only, best practice). None = full history (backtest)
 VESTER_LIVE_ONLY_LAST_N_BARS = 1
 VEE_LIVE_ONLY_LAST_N_BARS = 1
