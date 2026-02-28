@@ -252,8 +252,8 @@ VEE_H1_LQ_INTERNAL_LOOKBACK = 10
 VEE_USE_PREMIUM_DISCOUNT = False
 VEE_ENTRY_WINDOW_MINUTES = 120   # Minutes after 15m CHOCH to allow entry (120 = more trades)
 VEE_SL_BUFFER_POINTS = 2.0
-VEE_USE_1M_CONFIRMATION = True   # Require 1m BOS or FVG in zone for entry
-VEE_1M_REQUIRE_BOS_ONLY = False  # False = BOS or FVG (more trades); True = BOS only (fewer, stricter)
+VEE_USE_1M_CONFIRMATION = False   # Require 1m BOS or FVG in zone for entry
+VEE_1M_REQUIRE_BOS_ONLY = True   # False = BOS or FVG (more trades); True = BOS only (fewer, stricter)
 VEE_ALLOWED_SESSIONS = []        # [] = all sessions (more trades); ["ny","london"] = fewer, higher quality
 # Vee breakeven/lock-in (live/paper)
 VEE_BREAKEVEN_TRIGGER_RR = 1.5   # Move SL to entry when price reaches this many R

@@ -1,6 +1,6 @@
 """
-VeeStrategy: 1H bias -> 15m CHOCH -> OB+FVG -> entry on return to OB zone with 1m confirmation (BOS or FVG in zone).
-SL slightly beyond OB; TP 3R. Use --revert-vee to restore snapshot (candle-in-zone entry, no 1m confirmation).
+VeeStrategy (origin style): 1H bias -> 15m CHOCH -> OB+FVG -> entry when price returns to OB zone (candle-in-zone).
+SL slightly beyond OB; TP 3R. Session limit only; no 1m BOS/FVG confirmation, no per-setup/per-SL caps.
 """
 
 from typing import Optional, Dict, Any, Tuple, List
@@ -264,12 +264,7 @@ class VeeStrategy(BaseStrategy):
             if getattr(config, "BACKTEST_EXCLUDE_WEEKENDS", False) and current_time.weekday() >= 5:
                 continue
 
-            ts = pd.Timestamp(current_time)
-            hour_utc = ts.tz_convert("UTC").hour if getattr(ts, "tzinfo", None) is not None else ts.hour
-            session_key = config.TRADE_SESSION_HOURS.get(hour_utc, "other")
-            allowed = getattr(config, "VEE_ALLOWED_SESSIONS", None)
-            if allowed and session_key not in allowed:
-                continue
+            session_key = config.TRADE_SESSION_HOURS.get(current_time.hour, "other")
             if trades_per_session.get(session_key, 0) >= vc.MAX_TRADES_PER_SESSION:
                 continue
 
@@ -301,20 +296,6 @@ class VeeStrategy(BaseStrategy):
                 continue
             ob_high = setup["ob_high"]
             ob_low = setup["ob_low"]
-            if getattr(config, "VEE_USE_CONFIRMED_BOS_ONLY", False):
-                bl = setup.get("broken_level")
-                if bl is not None and not pd.isna(bl):
-                    df_m1_up_to = self.df_m1[self.df_m1.index <= current_time]
-                    if not is_bos_still_valid_on_entry_df(df_m1_up_to, setup["choch_time"], current_time, float(bl), setup["direction"]):
-                        continue
-            if getattr(config, "BACKTEST_APPLY_SIGNAL_MAX_AGE", False):
-                max_age_min = getattr(config, "VEE_SIGNAL_MAX_AGE_MINUTES", None)
-                if max_age_min is not None:
-                    entry_ts = pd.Timestamp(current_time)
-                    sig_ts = pd.Timestamp(setup["choch_time"])
-                    age_min = (entry_ts - sig_ts).total_seconds() / 60.0
-                    if age_min > max_age_min:
-                        continue
 
             bar = entry_df.iloc[i]
             if not _price_in_zone(bar["low"], bar["high"], ob_high, ob_low):
@@ -322,23 +303,12 @@ class VeeStrategy(BaseStrategy):
 
             direction = "BUY" if bias == "BULLISH" else "SELL"
             use_1m_conf = getattr(config, "VEE_USE_1M_CONFIRMATION", True)
-            require_bos_only = getattr(config, "VEE_1M_REQUIRE_BOS_ONLY", False)
             if use_1m_conf:
                 if direction == "BUY":
-                    m1_bos_ok = bool(bar.get("bos_bull"))
-                    m1_fvg_ok = bool(bar.get("fvg_bull")) and bar["close"] > bar["open"]
-                    if require_bos_only:
-                        if not m1_bos_ok:
-                            continue
-                    elif not (m1_bos_ok or m1_fvg_ok):
+                    if not (bool(bar.get("bos_bull")) or (bool(bar.get("fvg_bull")) and bar["close"] > bar["open"])):
                         continue
                 else:
-                    m1_bos_ok = bool(bar.get("bos_bear"))
-                    m1_fvg_ok = bool(bar.get("fvg_bear")) and bar["close"] < bar["open"]
-                    if require_bos_only:
-                        if not m1_bos_ok:
-                            continue
-                    elif not (m1_bos_ok or m1_fvg_ok):
+                    if not (bool(bar.get("bos_bear")) or (bool(bar.get("fvg_bear")) and bar["close"] < bar["open"])):
                         continue
 
             if direction == "BUY":
@@ -363,18 +333,17 @@ class VeeStrategy(BaseStrategy):
                     continue
                 tp = entry_price - sl_dist * rr
 
-            # Enforce minimum SL distance (e.g. 50 pips for gold from SYMBOL_CONFIGS)
             min_sl_pips = config.get_symbol_config(self.symbol, "VESTER_MIN_SL_PIPS") or getattr(config, "VESTER_MIN_SL_PIPS", 5.0)
-            pip_for_min_sl = 0.10 if ("XAU" in str(self.symbol or "") or "GC" in str(self.symbol or "")) else pip
-            min_sl_dist = min_sl_pips * pip_for_min_sl
+            pip_min = 0.10 if ("XAU" in str(self.symbol or "") or "GC" in str(self.symbol or "")) else pip
+            min_dist = min_sl_pips * pip_min
             if direction == "BUY":
-                if (entry_price - sl) < min_sl_dist:
-                    sl = entry_price - min_sl_dist
+                if (entry_price - sl) < min_dist:
+                    sl = entry_price - min_dist
                     sl_dist = entry_price - sl
                     tp = entry_price + sl_dist * rr
             else:
-                if (sl - entry_price) < min_sl_dist:
-                    sl = entry_price + min_sl_dist
+                if (sl - entry_price) < min_dist:
+                    sl = entry_price + min_dist
                     sl_dist = sl - entry_price
                     tp = entry_price - sl_dist * rr
 
