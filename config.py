@@ -158,8 +158,9 @@ ZONE_DIRECTION_USE_EQUILIBRIUM = False # False = only FVG zones (looser); True =
 
 
 # VesterStrategy: multi-timeframe smart-money (1H bias -> 5M setup -> 1M entry)
-VESTER_ONE_SIGNAL_PER_SETUP = False  # Deprecated: use VESTER_MAX_TRADES_PER_SETUP
-VESTER_MAX_TRADES_PER_SETUP = 3     # Max entries per 5M setup (1 = one per setup, 3 = up to 3, None = unlimited)
+VESTER_ONE_SIGNAL_PER_SETUP = True  # Deprecated: use VESTER_MAX_TRADES_PER_SETUP
+VESTER_MAX_TRADES_PER_SETUP = 2    # Max entries per 5M setup (1 = one per setup, avoids cluster losses)
+VESTER_MAX_TRADES_PER_SL_LEVEL = 1  # Max entries per unique SL level (1 = avoid multiple trades sharing same SL/zone)
 
 VESTER_BACKTEST_SYMBOL = 'GC=F'
 VESTER_LIVE_SYMBOL = 'XAUUSDm'
@@ -194,7 +195,7 @@ VESTER_M5_WINDOW_HOURS = 12
 # When no 5M FVG/OB found, use liquidity sweep level as entry zone (wider zone = more trades)
 VESTER_USE_LIQ_LEVEL_AS_ZONE = True
 VESTER_LIQ_ZONE_ATR_MULT = 0.5  # Zone width = ± this * ATR around sweep level
-# Allow 1M entry on price-in-zone + same-direction candle (no BOS/displacement required)
+# Allow 1M entry on price-in-zone + same-direction candle (no BOS/displacement required). False = require 1M BOS or sweep+displacement (fewer, higher-quality entries).
 VESTER_ALLOW_SIMPLE_ZONE_ENTRY = True
 # Require 5M liquidity sweep before entry (False = more trades, sweep optional)
 VESTER_REQUIRE_5M_SWEEP = False
@@ -216,6 +217,8 @@ VESTER_MIN_RR = 3.0
 # Displacement candle threshold (body vs range ratio)
 VESTER_DISPLACEMENT_RATIO = 0.5
 VESTER_SL_BUFFER = 1.0
+# Minimum SL distance in pips (avoids ultra-tight SL that gets hit by spread/noise). Gold: 5 pips = 0.05; forex: 5 pips = 0.0005.
+VESTER_MIN_SL_PIPS = 5.0
 # SL method: 'HYBRID' = micro-structure swing + ATR buffer; 'OB' = OB/zone + fixed pip buffer
 VESTER_SL_METHOD = 'OB'
 VESTER_SL_ATR_MULT = 1.0  # Buffer = ATR × this (HYBRID only)
@@ -234,6 +237,8 @@ VEE_BACKTEST_SYMBOL = 'GC=F'
 VEE_LIVE_SYMBOL = 'XAUUSDm'
 VEE_RISK_PER_TRADE = 0.10
 VEE_MAX_TRADES_PER_SESSION = 5
+VEE_MAX_TRADES_PER_SETUP = 1    # Max entries per 15m CHOCH/OB setup (1 = one trade per zone)
+VEE_MAX_TRADES_PER_SL_LEVEL = 1  # Max entries per unique SL level (1 = avoid multiple trades sharing same SL/zone)
 VEE_MIN_RR = 3.0
 VEE_SWING_LENGTH = 3
 VEE_OB_LOOKBACK = 20
@@ -245,11 +250,13 @@ VEE_H1_LQ_USE_SESSION = True
 VEE_H1_LQ_USE_INTERNAL = True
 VEE_H1_LQ_INTERNAL_LOOKBACK = 10
 VEE_USE_PREMIUM_DISCOUNT = False
-VEE_ENTRY_WINDOW_MINUTES = 120
+VEE_ENTRY_WINDOW_MINUTES = 120   # Minutes after 15m CHOCH to allow entry (120 = more trades)
 VEE_SL_BUFFER_POINTS = 2.0
-VEE_USE_1M_CONFIRMATION = True   # Require 1m BOS or FVG in zone for entry (better win rate)
+VEE_USE_1M_CONFIRMATION = True   # Require 1m BOS or FVG in zone for entry
+VEE_1M_REQUIRE_BOS_ONLY = False  # False = BOS or FVG (more trades); True = BOS only (fewer, stricter)
+VEE_ALLOWED_SESSIONS = []        # [] = all sessions (more trades); ["ny","london"] = fewer, higher quality
 # Vee breakeven/lock-in (live/paper)
-VEE_BREAKEVEN_TRIGGER_RR = 1.0   # Move SL to entry when price reaches this many R
+VEE_BREAKEVEN_TRIGGER_RR = 1.5   # Move SL to entry when price reaches this many R
 VEE_LOCK_IN_TRIGGER_RR = 3.3    # When price reaches this R, activate lock-in
 VEE_LOCK_IN_AT_RR = 3.0         # Move SL to this R (lock in profit)
 
@@ -263,8 +270,9 @@ SYMBOL_CONFIGS = {
         "PIP_SIZE": 1.0,                     # Index points
     },
     # Gold: 1 lot = 100 oz, $1 move = $100 per 1 lot. Override when broker tick_value is wrong.
-    "XAUUSDm": {"LOSS_PER_LOT_PER_POINT": 100},
-    "XAUUSD": {"LOSS_PER_LOT_PER_POINT": 100},
+    # VESTER_MIN_SL_PIPS: 50 = minimum 50 pips SL distance (0.50 in price) so ultra-tight SLs are widened.
+    "XAUUSDm": {"LOSS_PER_LOT_PER_POINT": 100, "VESTER_MIN_SL_PIPS": 50},
+    "XAUUSD": {"LOSS_PER_LOT_PER_POINT": 100, "VESTER_MIN_SL_PIPS": 50},
 }
 
 

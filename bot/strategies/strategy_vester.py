@@ -550,6 +550,8 @@ class VesterStrategy(BaseStrategy):
         if max_per_setup is None:
             max_per_setup = 1 if getattr(vc, "VESTER_ONE_SIGNAL_PER_SETUP", True) else None
         trades_per_5m_setup: Dict = {}
+        trades_per_sl_key: Dict[str, int] = {}  # one trade per unique SL level (avoids cluster losses when same zone)
+        max_per_sl = getattr(config, "VESTER_MAX_TRADES_PER_SL_LEVEL", 1)
         apply_limits = getattr(config, "BACKTEST_APPLY_TRADE_LIMITS", False)
 
         start_i = 100
@@ -798,6 +800,15 @@ class VesterStrategy(BaseStrategy):
                     if sl <= entry_price:
                         sl = entry_price + pip
 
+            min_sl_pips = config.get_symbol_config(self.symbol, "VESTER_MIN_SL_PIPS") or getattr(config, "VESTER_MIN_SL_PIPS", 5.0)
+            min_sl_dist = min_sl_pips * pip
+            if bias == "BULLISH":
+                if (entry_price - sl) < min_sl_dist:
+                    sl = entry_price - min_sl_dist
+            else:
+                if (sl - entry_price) < min_sl_dist:
+                    sl = entry_price + min_sl_dist
+
             if bias == "BULLISH":
                 future_highs = self.df_m5[(self.df_m5.index > idx) & (self.df_m5["swing_high"] == True)].head(3)
                 tp = future_highs.iloc[0]["swing_high_price"] if not future_highs.empty else None
@@ -838,11 +849,16 @@ class VesterStrategy(BaseStrategy):
                 ):
                     continue
 
+            sl_key = f"{round(float(sl), 2)}" if ("XAU" in str(self.symbol or "") or "GC" in str(self.symbol or "")) else f"{round(float(sl), 5)}"
+            if max_per_sl is not None and trades_per_sl_key.get(sl_key, 0) >= max_per_sl:
+                continue
+
             htf_label = "1H+4H" if getattr(vc, "REQUIRE_4H_BIAS", False) else "1H"
             reason = f"Vester: {htf_label} {bias} + 5M setup + {trigger_reason}"
             sig = self.placeTrade("BUY" if bias == "BULLISH" else "SELL", entry_price, sl, tp, idx, reason)
             sig["setup_5m"] = m5_bar_ts
             signals.append(sig)
+            trades_per_sl_key[sl_key] = trades_per_sl_key.get(sl_key, 0) + 1
             trades_per_5m_setup[m5_bar_ts] = trades_per_5m_setup.get(m5_bar_ts, 0) + 1
             trades_per_session[session_key] = trades_per_session.get(session_key, 0) + 1
             trades_per_day[day_key] = trades_per_day.get(day_key, 0) + 1

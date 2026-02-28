@@ -242,6 +242,10 @@ class VeeStrategy(BaseStrategy):
         entry_df = self.df_m1
         signals: List[Dict[str, Any]] = []
         trades_per_session: Dict[str, int] = {}
+        trades_per_setup_15m: Dict[str, int] = {}
+        trades_per_sl_key: Dict[str, int] = {}
+        max_per_setup = getattr(config, "VEE_MAX_TRADES_PER_SETUP", None)
+        max_per_sl = getattr(config, "VEE_MAX_TRADES_PER_SL_LEVEL", None)
         entry_window = getattr(config, "VEE_ENTRY_WINDOW_MINUTES", 120)
         rr = vc.MIN_RR
         buffer_pts = getattr(vc, "SL_BUFFER_POINTS", 0.0) or 0.0
@@ -260,7 +264,12 @@ class VeeStrategy(BaseStrategy):
             if getattr(config, "BACKTEST_EXCLUDE_WEEKENDS", False) and current_time.weekday() >= 5:
                 continue
 
-            session_key = config.TRADE_SESSION_HOURS.get(current_time.hour, "other")
+            ts = pd.Timestamp(current_time)
+            hour_utc = ts.tz_convert("UTC").hour if getattr(ts, "tzinfo", None) is not None else ts.hour
+            session_key = config.TRADE_SESSION_HOURS.get(hour_utc, "other")
+            allowed = getattr(config, "VEE_ALLOWED_SESSIONS", None)
+            if allowed and session_key not in allowed:
+                continue
             if trades_per_session.get(session_key, 0) >= vc.MAX_TRADES_PER_SESSION:
                 continue
 
@@ -287,6 +296,9 @@ class VeeStrategy(BaseStrategy):
             if not relevant:
                 continue
             setup = relevant[-1]
+            setup_key = str(setup["choch_time"])
+            if max_per_setup is not None and trades_per_setup_15m.get(setup_key, 0) >= max_per_setup:
+                continue
             ob_high = setup["ob_high"]
             ob_low = setup["ob_low"]
             if getattr(config, "VEE_USE_CONFIRMED_BOS_ONLY", False):
@@ -310,16 +322,23 @@ class VeeStrategy(BaseStrategy):
 
             direction = "BUY" if bias == "BULLISH" else "SELL"
             use_1m_conf = getattr(config, "VEE_USE_1M_CONFIRMATION", True)
+            require_bos_only = getattr(config, "VEE_1M_REQUIRE_BOS_ONLY", False)
             if use_1m_conf:
                 if direction == "BUY":
                     m1_bos_ok = bool(bar.get("bos_bull"))
                     m1_fvg_ok = bool(bar.get("fvg_bull")) and bar["close"] > bar["open"]
-                    if not (m1_bos_ok or m1_fvg_ok):
+                    if require_bos_only:
+                        if not m1_bos_ok:
+                            continue
+                    elif not (m1_bos_ok or m1_fvg_ok):
                         continue
                 else:
                     m1_bos_ok = bool(bar.get("bos_bear"))
                     m1_fvg_ok = bool(bar.get("fvg_bear")) and bar["close"] < bar["open"]
-                    if not (m1_bos_ok or m1_fvg_ok):
+                    if require_bos_only:
+                        if not m1_bos_ok:
+                            continue
+                    elif not (m1_bos_ok or m1_fvg_ok):
                         continue
 
             if direction == "BUY":
@@ -344,6 +363,25 @@ class VeeStrategy(BaseStrategy):
                     continue
                 tp = entry_price - sl_dist * rr
 
+            # Enforce minimum SL distance (e.g. 50 pips for gold from SYMBOL_CONFIGS)
+            min_sl_pips = config.get_symbol_config(self.symbol, "VESTER_MIN_SL_PIPS") or getattr(config, "VESTER_MIN_SL_PIPS", 5.0)
+            pip_for_min_sl = 0.10 if ("XAU" in str(self.symbol or "") or "GC" in str(self.symbol or "")) else pip
+            min_sl_dist = min_sl_pips * pip_for_min_sl
+            if direction == "BUY":
+                if (entry_price - sl) < min_sl_dist:
+                    sl = entry_price - min_sl_dist
+                    sl_dist = entry_price - sl
+                    tp = entry_price + sl_dist * rr
+            else:
+                if (sl - entry_price) < min_sl_dist:
+                    sl = entry_price + min_sl_dist
+                    sl_dist = sl - entry_price
+                    tp = entry_price - sl_dist * rr
+
+            sl_key = f"{round(float(sl), 2)}" if ("XAU" in str(self.symbol or "") or "GC" in str(self.symbol or "")) else f"{round(float(sl), 5)}"
+            if max_per_sl is not None and trades_per_sl_key.get(sl_key, 0) >= max_per_sl:
+                continue
+
             signals.append({
                 "time": current_time,
                 "type": direction,
@@ -353,6 +391,8 @@ class VeeStrategy(BaseStrategy):
                 "reason": f"Vee: 1H {bias} + 15m CHOCH/OB+FVG + 1m conf, entry on OB zone",
                 "setup_15m": setup["choch_time"],
             })
+            trades_per_setup_15m[setup_key] = trades_per_setup_15m.get(setup_key, 0) + 1
+            trades_per_sl_key[sl_key] = trades_per_sl_key.get(sl_key, 0) + 1
             trades_per_session[session_key] = trades_per_session.get(session_key, 0) + 1
 
         return pd.DataFrame(signals)

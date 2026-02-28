@@ -63,6 +63,7 @@ class LiveTradingEngine:
         self.trades_today = []
         self.running = False
         self._trades_per_setup = {}  # (symbol, type, setup_key) -> count
+        self._trades_per_sl_key = {}  # (symbol, type, sl_rounded) -> count (avoid multiple trades at same SL)
 
     def _get_setup_key(self, signal):
         """Return hashable key (symbol, type, setup_str) for setup tracking, or None if not applicable."""
@@ -118,13 +119,33 @@ class LiveTradingEngine:
         count = self._trades_per_setup.get(key, 0)
         if count >= max_per_setup:
             return False, f"Max trades per setup reached ({count}/{max_per_setup})"
+        max_per_sl = getattr(config, "VESTER_MAX_TRADES_PER_SL_LEVEL", None) if self.strategy_name in ("vester", "trend_vester") else getattr(config, "VEE_MAX_TRADES_PER_SL_LEVEL", None)
+        if max_per_sl is not None and self.strategy_name in ("vester", "trend_vester", "vee"):
+            sl = signal.get("sl")
+            if sl is not None:
+                symbol = signal.get("symbol", "")
+                order_type = signal.get("type", "")
+                is_gold = symbol and ("XAU" in str(symbol).upper() or "GC" in str(symbol).upper())
+                sl_rounded = round(float(sl), 2) if is_gold else round(float(sl), 5)
+                sl_key = (symbol, order_type, sl_rounded)
+                if self._trades_per_sl_key.get(sl_key, 0) >= max_per_sl:
+                    return False, "Already have trade at this SL level"
         return True, None
 
     def _record_setup_trade(self, signal):
-        """Increment trades-per-setup count after successful execution."""
+        """Increment trades-per-setup and trades-per-SL count after successful execution."""
         key = self._get_setup_key(signal)
         if key is not None:
             self._trades_per_setup[key] = self._trades_per_setup.get(key, 0) + 1
+        if (getattr(config, "VESTER_MAX_TRADES_PER_SL_LEVEL", None) is not None or getattr(config, "VEE_MAX_TRADES_PER_SL_LEVEL", None) is not None) and self.strategy_name in ("vester", "trend_vester", "vee"):
+            sl = signal.get("sl")
+            if sl is not None:
+                symbol = signal.get("symbol", "")
+                order_type = signal.get("type", "")
+                is_gold = symbol and ("XAU" in str(symbol).upper() or "GC" in str(symbol).upper())
+                sl_rounded = round(float(sl), 2) if is_gold else round(float(sl), 5)
+                sl_key = (symbol, order_type, sl_rounded)
+                self._trades_per_sl_key[sl_key] = self._trades_per_sl_key.get(sl_key, 0) + 1
 
     def connect(self):
         return self.mt5.connect()
