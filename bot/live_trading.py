@@ -270,13 +270,20 @@ class LiveTradingEngine:
             df = df.copy()
             df = detect_swing_highs_lows(df, swing_length=3)
             df = detect_break_of_structure(df)
-            last_closed = df.iloc[-2] if len(df) >= 2 else df.iloc[-1]
-            if last_closed.get('bos_bull'):
-                result[label] = 'BULLISH'
-            elif last_closed.get('bos_bear'):
-                result[label] = 'BEARISH'
-            else:
-                result[label] = 'NEUTRAL'
+            # Use most recent BOS in lookback (like trend_vester), not just last closed bar
+            lookback = min(50, len(df) - 1)
+            bias = None
+            for i in range(len(df) - 1, max(0, len(df) - lookback) - 1, -1):
+                if i < 0:
+                    break
+                row = df.iloc[i]
+                if row.get('bos_bull'):
+                    bias = 'BULLISH'
+                    break
+                if row.get('bos_bear'):
+                    bias = 'BEARISH'
+                    break
+            result[label] = bias if bias is not None else 'NEUTRAL'
         return result
 
     def run_strategy(self):
