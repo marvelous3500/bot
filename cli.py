@@ -21,9 +21,9 @@ def build_parser():
     parser.add_argument(
         "--strategy",
         type=str,
-        choices=["vester", "vee", "test-sl", "all"],
+        choices=["vester", "vee", "trend_vester", "test-sl", "all"],
         default="vester",
-        help="Strategy to use ('all' = run vester+vee; 'vee' = 1H/15M/1M OB+FVG; 'test-sl' = live lot-size test only)",
+        help="Strategy: vester, vee, trend_vester (H1 trend + vester 1M entry), test-sl (lot test)",
     )
     parser.add_argument(
         "--csv",
@@ -207,14 +207,14 @@ def _print_premium_discount_comparison(strategy_name, without_pd, with_pd):
 
 def run_backtest(args):
     """Run backtest for the selected strategy (or all strategies if --strategy all)."""
-    from bot.backtest import run_vester_backtest, run_vee_backtest
+    from bot.backtest import run_vester_backtest, run_vee_backtest, run_trend_vester_backtest
 
     if args.strategy == "test-sl":
         print("test-sl has no backtest. Use --mode live (or paper) for lot-size testing.")
         return
 
     strategies = (
-        ["vester", "vee"]
+        ["vester", "vee", "trend_vester"]
         if args.strategy == "all"
         else [args.strategy]
     )
@@ -287,9 +287,14 @@ def run_backtest(args):
                     from bot import vester_config as vc
                     kwargs["symbol"] = kwargs.get("symbol") or vc.VESTER_BACKTEST_SYMBOL
                     s = run_vester_backtest(**kwargs)
-                else:
+                elif name == "vee":
                     kwargs["symbol"] = kwargs.get("symbol") or getattr(config, "VEE_BACKTEST_SYMBOL", "GC=F")
                     s = run_vee_backtest(**kwargs)
+                elif name == "trend_vester":
+                    kwargs["symbol"] = kwargs.get("symbol") or getattr(config, "TREND_VESTER_BACKTEST_SYMBOL", "GC=F")
+                    s = run_trend_vester_backtest(**kwargs)
+                else:
+                    continue
                 rows.append(s)
             _print_summary_table(period_label, rows)
         return
@@ -307,6 +312,9 @@ def run_backtest(args):
         elif name == "vee":
             kwargs["symbol"] = kwargs.get("symbol") or getattr(config, "VEE_BACKTEST_SYMBOL", "GC=F")
             run_vee_backtest(**kwargs)
+        elif name == "trend_vester":
+            kwargs["symbol"] = kwargs.get("symbol") or getattr(config, "TREND_VESTER_BACKTEST_SYMBOL", "GC=F")
+            run_trend_vester_backtest(**kwargs)
 
 
 def run_replay_cmd(args):

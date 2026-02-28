@@ -7,24 +7,18 @@ Use these commands from the project folder (e.g. `C:\Users\...\Desktop\bot` or `
 ## Backtest (historical data, no MT5)
 
 ```bash
-# Default: marvellous strategy
+# Default: vester strategy
 python main.py --mode backtest
 
 # One strategy, one symbol
-python main.py --mode backtest --strategy marvellous --symbol "GC=F"
-python main.py --mode backtest --strategy test --symbol "GC=F"
 python main.py --mode backtest --strategy vester --symbol "GC=F"
+python main.py --mode backtest --strategy vee --symbol "GC=F"
+python main.py --mode backtest --strategy trend_vester --symbol "GC=F"
 
-# Print per-trade log (entry, SL, TP, outcome, bar hit) and losing trades analysis
+# Print per-trade log (entry, SL, TP, outcome, bar hit)
 python main.py --mode backtest --strategy vester --symbol "GC=F" --trade-details
 
-# Verify Marvellous config is loaded (after editing config.py)
-python scripts/print_marvellous_config.py
-
-# Marvellous: compare 12d vs 60d backtest (side by side)
-python scripts/compare_marvellous_periods.py
-
-# Run all strategies (marvellous + test)
+# Run all strategies (vester + vee + trend_vester)
 python main.py --mode backtest --strategy all
 
 # Backtest period when using --strategy all (12d, 60d, or both)
@@ -32,23 +26,23 @@ python main.py --mode backtest --strategy all --period 12d
 python main.py --mode backtest --strategy all --period 60d
 ```
 
-**Strategies:** `marvellous` | `test` | `vester` | `all`
+**Strategies:** `vester` | `vee` | `trend_vester` | `test-sl` | `all`
 
 ---
 
 ## Paper trading (MT5 required, no real orders)
 
 ```bash
-# Default strategy: marvellous
+# Default strategy: vester
 python main.py --mode paper
 
 # Auto-approve (no manual prompt) — for server/headless runs
 python main.py --mode paper --auto-approve
 
 # Specific strategy
-python main.py --mode paper --strategy marvellous
-python main.py --mode paper --strategy test   # Gold, smoke test
 python main.py --mode paper --strategy vester
+python main.py --mode paper --strategy vee
+python main.py --mode paper --strategy trend_vester   # H1 trend + vester 1M entry (more signals)
 ```
 
 ---
@@ -56,21 +50,17 @@ python main.py --mode paper --strategy vester
 ## Live trading (MT5 required, real orders)
 
 ```bash
-# Default strategy: marvellous
+# Default strategy: vester
 python main.py --mode live
 
 # Auto-approve (no manual prompt) — for server/headless runs
 python main.py --mode live --auto-approve
 
 # Specific strategy
-<<<<<<< HEAD
-python main.py --mode live --strategy h1_m5_bos
-python main.py --mode live --strategy kingsely_gold  --auto-approve  # Gold (XAUUSD) only
-python main.py --mode live --strategy test             # Gold, smoke test
-=======
-python main.py --mode live --strategy marvellous
-python main.py --mode live --strategy test    # Gold, smoke test
->>>>>>> 2f1f500eaed6b15e9ebcbcd71158d420e1af31ae
+python main.py --mode live --strategy vester
+python main.py --mode live --strategy vee
+python main.py --mode live --strategy trend_vester   # More signals when vester hasn't fired in days
+python main.py --mode live --strategy test-sl         # Lot-size test only (gold)
 ```
 
 ---

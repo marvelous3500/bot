@@ -222,6 +222,13 @@ VESTER_SL_ATR_MULT = 1.0  # Buffer = ATR × this (HYBRID only)
 VESTER_SL_MICRO_TF = '1m'  # Micro-structure timeframe: '1m' or '5m' (HYBRID only)
 
 
+# TrendVesterStrategy: H1 trend (BOS only) + vester 1M entry. No H1 zone/sweep, no 5M sweep required — more signals.
+TREND_VESTER_BACKTEST_SYMBOL = 'GC=F'
+TREND_VESTER_LIVE_SYMBOL = 'XAUUSDm'
+TREND_VESTER_MAX_TRADES_PER_SETUP = 3
+TREND_VESTER_MAX_TRADES_PER_SESSION = 5
+TREND_VESTER_LIVE_ONLY_LAST_N_BARS = 1
+
 # VeeStrategy: 1H bias -> 15m CHOCH -> OB+FVG -> entry on return to OB zone; SL beyond OB, TP 3R
 VEE_BACKTEST_SYMBOL = 'GC=F'
 VEE_LIVE_SYMBOL = 'XAUUSDm'
