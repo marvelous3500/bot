@@ -1,12 +1,12 @@
-"""Backtest runners for each strategy."""
+"""Backtest runners (vester, vee, trend_vester)."""
 from .common import _stats_dict
-from .backtest_marvellous import run_marvellous_backtest
 from .backtest_vester import run_vester_backtest
-from .backtest_follow import run_follow_backtest
+from .backtest_vee import run_vee_backtest
+from .backtest_trend_vester import run_trend_vester_backtest
 
 __all__ = [
     "_stats_dict",
-    "run_marvellous_backtest",
     "run_vester_backtest",
-    "run_follow_backtest",
+    "run_vee_backtest",
+    "run_trend_vester_backtest",
 ]

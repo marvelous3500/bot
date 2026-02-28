@@ -1,3 +1,4 @@
+import math
 import MetaTrader5 as mt5
 import pandas as pd
 from datetime import datetime
@@ -292,7 +293,8 @@ class MT5Connector:
         lot_size = risk_amount / loss_per_lot
         step = info.volume_step
         lot_size = max(info.volume_min, min(info.volume_max, lot_size))
-        lot_size = round(lot_size / step) * step
+        # Round half up so we get closer to target risk (e.g. 0.0445 → 0.05 not 0.04)
+        lot_size = math.floor(lot_size / step + 0.5) * step
         lot_size = max(info.volume_min, min(info.volume_max, lot_size))
         return round(lot_size, 2)
 
@@ -411,6 +413,12 @@ class MT5Connector:
             allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 _-")
             safe_comment = "".join(c if c in allowed else " " for c in raw)
             safe_comment = " ".join(safe_comment.split())[:31].strip() or "ICT"
+        # Deviation (slippage) in points: ENTRY_SLIPPAGE_PIPS -> points (1 pip = 10 points for 5-digit, 1 point for 2-digit gold)
+        point = getattr(symbol_info, 'point', 0.00001)
+        pip_size = 10.0 * point if point and point < 0.01 else (point or 0.01)
+        slippage_pips = getattr(config, 'ENTRY_SLIPPAGE_PIPS', 3.0) or 0
+        deviation_pts = max(1, int(round(slippage_pips * pip_size / (point or 0.00001)))) if point else 20
+        deviation_pts = min(deviation_pts, 500)
         # Filling mode: try FOK, IOC, RETURN (Exness gold often needs FOK or IOC, not RETURN)
         filling_modes = [
             ("FOK", mt5.ORDER_FILLING_FOK),
@@ -426,8 +434,8 @@ class MT5Connector:
                 "volume": volume,
                 "type": trade_type,
                 "price": execution_price,
-                "deviation": 20,
-                "magic": 234000,
+                "deviation": deviation_pts,
+                "magic": getattr(config, 'MT5_MAGIC_NUMBER', 234000),
                 "comment": safe_comment,
                 "type_time": mt5.ORDER_TIME_GTC,
                 "type_filling": type_filling,
@@ -486,6 +494,21 @@ class MT5Connector:
         digits = getattr(info, 'digits', 5)
         # 1 pip = 10 * point for 5/3-digit forex and 2-digit gold
         return 10.0 * point
+
+    def get_atr(self, symbol, period=14):
+        """Return ATR(period) from M15 bars, or None if not available. Used for trailing SL when TRAILING_SL_ATR_MULT set."""
+        if not self.connected:
+            return None
+        df = self.get_bars(symbol, '15m', count=period + 20)
+        if df is None or len(df) < period + 2:
+            return None
+        high = df['high'].astype(float)
+        low = df['low'].astype(float)
+        close = df['close'].astype(float)
+        prev_close = close.shift(1)
+        tr = pd.concat([high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1).max(axis=1)
+        atr = tr.rolling(period).mean().iloc[-1]
+        return float(atr) if not pd.isna(atr) else None
 
     def modify_position(self, ticket, sl=None, tp=None):
         """Modify an open position's SL and/or TP. Returns (True, None) on success, (False, error_msg) on failure."""
@@ -560,7 +583,7 @@ class MT5Connector:
             "position": ticket,
             "price": price,
             "deviation": 20,
-            "magic": 234000,
+            "magic": getattr(config, 'MT5_MAGIC_NUMBER', 234000),
             "comment": "Close position",
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": mt5.ORDER_FILLING_IOC,
@@ -570,3 +593,54 @@ class MT5Connector:
             return False
         print(f"Position {ticket} closed successfully")
         return True
+
+    def close_position_partial(self, ticket, volume_to_close):
+        """Close part of a position by volume. Returns (True, None) on success, (False, error_msg) on failure."""
+        if not self.connected:
+            return False, "Not connected"
+        positions = mt5.positions_get(ticket=ticket)
+        if positions is None or len(positions) == 0:
+            return False, "Position not found"
+        position = positions[0]
+        vol_min = getattr(mt5.symbol_info(position.symbol), 'volume_min', 0.01)
+        vol_step = getattr(mt5.symbol_info(position.symbol), 'volume_step', 0.01)
+        try:
+            v = float(volume_to_close)
+            v = max(vol_min, min(float(position.volume), round(v / vol_step) * vol_step))
+        except (TypeError, ValueError):
+            return False, "Invalid volume"
+        if v >= position.volume - 0.0001:
+            ok = self.close_position(ticket)
+            return (True, None) if ok else (False, "Close failed")
+        if position.type == mt5.POSITION_TYPE_BUY:
+            order_type = mt5.ORDER_TYPE_SELL
+            price = mt5.symbol_info_tick(position.symbol).bid
+        else:
+            order_type = mt5.ORDER_TYPE_BUY
+            price = mt5.symbol_info_tick(position.symbol).ask
+        deviation_pts = 20
+        if config:
+            slippage_pips = getattr(config, 'ENTRY_SLIPPAGE_PIPS', 3.0) or 0
+            point = getattr(mt5.symbol_info(position.symbol), 'point', 0.00001)
+            pip_size = 10.0 * point if point and point < 0.01 else (point or 0.01)
+            deviation_pts = max(1, min(500, int(round(slippage_pips * pip_size / (point or 0.00001))))) if point else 20
+        request = {
+            "action": mt5.TRADE_ACTION_DEAL,
+            "symbol": position.symbol,
+            "volume": round(v, 2),
+            "type": order_type,
+            "position": ticket,
+            "price": price,
+            "deviation": deviation_pts,
+            "magic": getattr(config, 'MT5_MAGIC_NUMBER', 234000),
+            "comment": "Partial close",
+            "type_time": mt5.ORDER_TIME_GTC,
+            "type_filling": mt5.ORDER_FILLING_IOC,
+        }
+        result = mt5.order_send(request)
+        if result is not None and result.retcode == mt5.TRADE_RETCODE_DONE:
+            _log(f"Position {ticket} partially closed: {v} lots")
+            return True, None
+        err = mt5.last_error()
+        err_msg = err[1] if err and len(err) > 1 else str(getattr(result, 'retcode', '?'))
+        return False, err_msg

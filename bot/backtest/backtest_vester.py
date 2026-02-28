@@ -53,9 +53,12 @@ def run_vester_backtest(
         df_m1 = df.resample("1min").agg(agg).dropna()
     else:
         symbol = symbol or getattr(config, "VESTER_BACKTEST_SYMBOL", vc.VESTER_BACKTEST_SYMBOL)
-        period = period or getattr(config, "BACKTEST_PERIOD", "60d")
-        fetch_period = "7d"
-        period_note = f" (Yahoo 1m limit; {period} requested)" if period != "7d" else ""
+        if period == "1d":
+            fetch_period = "1d"
+        else:
+            fetch_period = "7d"
+            
+        period_note = f" (Yahoo 1m limit; {period} requested)" if period not in ["1d", "7d"] else ""
         display_period = fetch_period
         df_h1 = fetch_data_yfinance(symbol, period=fetch_period, interval="1h")
         df_m5 = fetch_data_yfinance(symbol, period=fetch_period, interval="5m")
@@ -100,7 +103,11 @@ def run_vester_backtest(
     lock_in_enabled = getattr(config, "LOCK_IN_ENABLED", True)
     lock_in_trigger = getattr(config, "LOCK_IN_TRIGGER_RR", 3.3)
     lock_in_at = getattr(config, "LOCK_IN_AT_RR", 3.0)
+    trailing_enabled = getattr(config, "TRAILING_SL_ENABLED", False)
+    trailing_activation_r = getattr(config, "TRAILING_SL_ACTIVATION_R", 1.0)
+    trailing_pips = getattr(config, "TRAILING_SL_DISTANCE_PIPS", 20.0)
     risk_pct = getattr(config, "VESTER_RISK_PER_TRADE", vc.RISK_PER_TRADE)
+    pip_size = get_pip_size_for_symbol(used_symbol)
 
     if signals.empty:
         if return_stats:
@@ -160,10 +167,15 @@ def run_vester_backtest(
             outcome = None
             outcome_rr = risk
             lock_in_triggered = False
+            effective_sl = adj_sl
             for idx, bar in future_prices.iterrows():
                 if lock_in_enabled and lock_in_trigger_price and lock_in_sl and bar["high"] >= lock_in_trigger_price:
                     lock_in_triggered = True
                 effective_sl = lock_in_sl if lock_in_triggered else adj_sl
+                if trailing_enabled and sl_dist > 0 and bar["high"] >= adj_entry + sl_dist * trailing_activation_r:
+                    trail_sl = bar["high"] - trailing_pips * pip_size
+                    if trail_sl > effective_sl and trail_sl < bar["high"]:
+                        effective_sl = trail_sl
                 if bar["low"] <= effective_sl:
                     outcome = "LOSS" if effective_sl == adj_sl else "WIN"
                     outcome_rr = 0.0 if outcome == "LOSS" else lock_in_at
@@ -204,10 +216,15 @@ def run_vester_backtest(
             outcome = None
             outcome_rr = risk
             lock_in_triggered = False
+            effective_sl = adj_sl
             for idx, bar in future_prices.iterrows():
                 if lock_in_enabled and lock_in_trigger_price and lock_in_sl and bar["low"] <= lock_in_trigger_price:
                     lock_in_triggered = True
                 effective_sl = lock_in_sl if lock_in_triggered else adj_sl
+                if trailing_enabled and sl_dist > 0 and bar["low"] <= adj_entry - sl_dist * trailing_activation_r:
+                    trail_sl = bar["low"] + trailing_pips * pip_size
+                    if trail_sl < effective_sl and trail_sl > bar["low"]:
+                        effective_sl = trail_sl
                 if bar["high"] >= effective_sl:
                     outcome = "LOSS" if effective_sl == adj_sl else "WIN"
                     outcome_rr = 0.0 if outcome == "LOSS" else lock_in_at

@@ -65,10 +65,12 @@ def detect_break_of_structure(df):
 
 
 def _detect_bos_kingsley(df):
-    """Detects Break of Structure (Kingsley)."""
+    """Detects Break of Structure (Kingsley). Adds broken level for entry-TF confirmation (fake vs real BOS)."""
     df['bos_bull'] = False
     df['bos_bear'] = False
     df['bos_direction'] = None
+    df['bos_bull_broken_level'] = np.nan
+    df['bos_bear_broken_level'] = np.nan
     swing_highs = df[df['swing_high'] == True].copy()
     swing_lows = df[df['swing_low'] == True].copy()
     if swing_highs.empty or swing_lows.empty:
@@ -84,12 +86,45 @@ def _detect_bos_kingsley(df):
         if last_swing_high is not None and row['close'] > last_swing_high:
             df.iloc[i, df.columns.get_loc('bos_bull')] = True
             df.iloc[i, df.columns.get_loc('bos_direction')] = 'BULLISH'
+            df.iloc[i, df.columns.get_loc('bos_bull_broken_level')] = last_swing_high
             last_swing_high = row['high']
         if last_swing_low is not None and row['close'] < last_swing_low:
             df.iloc[i, df.columns.get_loc('bos_bear')] = True
             df.iloc[i, df.columns.get_loc('bos_direction')] = 'BEARISH'
+            df.iloc[i, df.columns.get_loc('bos_bear_broken_level')] = last_swing_low
             last_swing_low = row['low']
     return df
+
+
+def is_bos_still_valid_on_entry_df(
+    df_1m: pd.DataFrame,
+    bos_time,
+    current_time,
+    broken_level: float,
+    direction: str,
+) -> bool:
+    """
+    Return True if the BOS has not been invalidated on the entry TF (1m).
+    Invalidated = any 1m bar after BOS time closed back through the broken level.
+    direction: 'BULLISH' -> broken level was swing high; invalidation = close < level.
+    direction: 'BEARISH' -> broken level was swing low; invalidation = close > level.
+    """
+    if df_1m is None or df_1m.empty or broken_level is None or pd.isna(broken_level):
+        return True
+    bos_ts = pd.Timestamp(bos_time)
+    cur_ts = pd.Timestamp(current_time)
+    if cur_ts <= bos_ts:
+        return True
+    subset = df_1m[(df_1m.index > bos_ts) & (df_1m.index <= cur_ts)]
+    if subset.empty:
+        return True
+    if direction == "BULLISH":
+        if (subset["close"] < broken_level).any():
+            return False
+    else:
+        if (subset["close"] > broken_level).any():
+            return False
+    return True
 
 
 def identify_order_block(df, bos_index, ob_lookback=20):

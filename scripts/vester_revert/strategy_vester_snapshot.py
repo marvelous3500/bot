@@ -22,15 +22,8 @@ from ..indicators_bos import (
     detect_break_of_structure,
     identify_order_block,
     detect_breaker_block,
-    is_bos_still_valid_on_entry_df,
 )
 from ..news_filter import is_news_safe
-from ..indicators_lq import (
-    get_session_for_hour,
-    get_session_high_low,
-    detect_external_sweep,
-    detect_internal_sweep,
-)
 from .base import BaseStrategy
 
 
@@ -112,14 +105,6 @@ class VesterStrategy(BaseStrategy):
             df = detect_rejection_candle(df, wick_ratio=vc.REJECTION_WICK_RATIO)
             df = detect_displacement(df, threshold=1.5, window=10)
             setattr(self, df_ref, df)
-        if getattr(vc, "REQUIRE_H1_LIQUIDITY_SWEEP", False) and self.df_h1 is not None and not self.df_h1.empty:
-            lookback = getattr(vc, "H1_LQ_INTERNAL_LOOKBACK", 10)
-            self.df_h1 = detect_internal_sweep(
-                self.df_h1,
-                swing_high_col="swing_high_price",
-                swing_low_col="swing_low_price",
-                lookback=lookback,
-            )
         return self.df_h1, self.df_m5, self.df_m1
 
     def detect4HBias(
@@ -230,137 +215,75 @@ class VesterStrategy(BaseStrategy):
         if bias is None:
             return None, None
 
-        need_zone = getattr(vc, "REQUIRE_HTF_ZONE_CONFIRMATION", True)
-        need_sweep = getattr(vc, "REQUIRE_H1_LIQUIDITY_SWEEP", False)
-        if not need_zone and not need_sweep:
+        if not getattr(vc, "REQUIRE_HTF_ZONE_CONFIRMATION", True):
             return bias, {"zone_type": "BOS_ONLY"}
 
-        zone_found = False
-        zone_proof = None
-        if need_zone:
-            wick_pct = vc.REJECTION_WICK_RATIO
-            body_pct = vc.REJECTION_BODY_RATIO
-            ob_lookback = vc.OB_LOOKBACK
-            for i in range(len(df) - 1, max(0, len(df) - vc.FVG_LOOKBACK), -1):
-                row = df.iloc[i]
-                zone_top, zone_bottom = None, None
-                zone_type = None
+        wick_pct = vc.REJECTION_WICK_RATIO
+        body_pct = vc.REJECTION_BODY_RATIO
+        ob_lookback = vc.OB_LOOKBACK
 
-                if row.get("fvg_bull") and bias == "BULLISH":
-                    zone_bottom = df.iloc[i - 2]["high"]
-                    zone_top = row["low"]
-                    zone_type = "FVG"
-                elif row.get("fvg_bear") and bias == "BEARISH":
-                    zone_top = df.iloc[i - 2]["low"]
-                    zone_bottom = row["high"]
-                    zone_type = "FVG"
+        for i in range(len(df) - 1, max(0, len(df) - vc.FVG_LOOKBACK), -1):
+            row = df.iloc[i]
+            zone_top, zone_bottom = None, None
+            zone_type = None
 
-                if zone_top is None:
-                    bos_bar = None
-                    for k in range(i, max(0, i - 10), -1):
-                        if df.iloc[k].get("bos_bull") and bias == "BULLISH":
-                            bos_bar = k
-                            break
-                        if df.iloc[k].get("bos_bear") and bias == "BEARISH":
-                            bos_bar = k
-                            break
-                    if bos_bar is not None:
-                        ob = identify_order_block(df, bos_bar, ob_lookback=ob_lookback)
-                        if ob is not None and ob.get("direction") == bias:
-                            zone_top, zone_bottom = ob["high"], ob["low"]
-                            zone_type = "OB"
+            if row.get("fvg_bull") and bias == "BULLISH":
+                zone_bottom = df.iloc[i - 2]["high"]
+                zone_top = row["low"]
+                zone_type = "FVG"
+            elif row.get("fvg_bear") and bias == "BEARISH":
+                zone_top = df.iloc[i - 2]["low"]
+                zone_bottom = row["high"]
+                zone_type = "FVG"
 
-                if zone_top is None or zone_bottom is None:
-                    continue
-
-                for j in range(i, min(len(df), i + 20)):
-                    if j >= len(df):
+            if zone_top is None:
+                bos_bar = None
+                for k in range(i, max(0, i - 10), -1):
+                    if df.iloc[k].get("bos_bull") and bias == "BULLISH":
+                        bos_bar = k
                         break
-                    r = df.iloc[j]
-                    rng = r["high"] - r["low"]
-                    if rng <= 0:
-                        continue
-                    touched = (zone_bottom <= r["low"] <= zone_top) or (zone_bottom <= r["high"] <= zone_top)
-                    if not touched:
-                        continue
-                    lower_wick = min(r["open"], r["close"]) - r["low"]
-                    upper_wick = r["high"] - max(r["open"], r["close"])
-                    body = abs(r["close"] - r["open"])
-                    if bias == "BULLISH" and (lower_wick / rng >= wick_pct or (body / rng >= body_pct and r["close"] > r["open"])):
-                        zone_found = True
-                        zone_proof = {"zone_top": zone_top, "zone_bottom": zone_bottom, "zone_type": zone_type, "bar_idx": j, "timestamp": df.index[j]}
+                    if df.iloc[k].get("bos_bear") and bias == "BEARISH":
+                        bos_bar = k
                         break
-                    if bias == "BEARISH" and (upper_wick / rng >= wick_pct or (body / rng >= body_pct and r["close"] < r["open"])):
-                        zone_found = True
-                        zone_proof = {"zone_top": zone_top, "zone_bottom": zone_bottom, "zone_type": zone_type, "bar_idx": j, "timestamp": df.index[j]}
-                        break
-                if zone_found:
+                if bos_bar is not None:
+                    ob = identify_order_block(df, bos_bar, ob_lookback=ob_lookback)
+                    if ob is not None and ob.get("direction") == bias:
+                        zone_top, zone_bottom = ob["high"], ob["low"]
+                        zone_type = "OB"
+
+            if zone_top is None or zone_bottom is None:
+                continue
+
+            for j in range(i, min(len(df), i + 20)):
+                if j >= len(df):
                     break
-
-        sweep_found = self._h1_has_liquidity_sweep(df, bias) if need_sweep else False
-        if zone_found:
-            return bias, zone_proof
-        if need_sweep and sweep_found:
-            return bias, {"zone_type": "H1_SWEEP"}
+                r = df.iloc[j]
+                rng = r["high"] - r["low"]
+                if rng <= 0:
+                    continue
+                touched = (zone_bottom <= r["low"] <= zone_top) or (zone_bottom <= r["high"] <= zone_top)
+                if not touched:
+                    continue
+                lower_wick = min(r["open"], r["close"]) - r["low"]
+                upper_wick = r["high"] - max(r["open"], r["close"])
+                body = abs(r["close"] - r["open"])
+                if bias == "BULLISH" and (lower_wick / rng >= wick_pct or (body / rng >= body_pct and r["close"] > r["open"])):
+                    return bias, {
+                        "zone_top": zone_top,
+                        "zone_bottom": zone_bottom,
+                        "zone_type": zone_type,
+                        "bar_idx": j,
+                        "timestamp": df.index[j],
+                    }
+                if bias == "BEARISH" and (upper_wick / rng >= wick_pct or (body / rng >= body_pct and r["close"] < r["open"])):
+                    return bias, {
+                        "zone_top": zone_top,
+                        "zone_bottom": zone_bottom,
+                        "zone_type": zone_type,
+                        "bar_idx": j,
+                        "timestamp": df.index[j],
+                    }
         return None, None
-
-    def _h1_has_liquidity_sweep(
-        self, df: pd.DataFrame, bias: str
-    ) -> bool:
-        """
-        Return True if the H1 slice has at least one bar with a liquidity sweep
-        matching the bias (PDH/PDL, session high/low, or internal).
-        Used when VESTER_REQUIRE_H1_LIQUIDITY_SWEEP is True.
-        """
-        use_pdh_pdl = getattr(vc, "H1_LQ_USE_PDH_PDL", True)
-        use_session = getattr(vc, "H1_LQ_USE_SESSION", True)
-        use_internal = getattr(vc, "H1_LQ_USE_INTERNAL", True)
-        session_hours = getattr(config, "LQ_SESSION_HOURS_UTC", {})
-        if not session_hours:
-            session_hours = {"asian": (0, 5), "london": (7, 11), "ny": (13, 17)}
-
-        last_ts = df.index[-1]
-        prev_day_start = pd.Timestamp((pd.Timestamp(last_ts) - pd.Timedelta(days=1)).date())
-        prev_day_end = prev_day_start + pd.Timedelta(days=1)
-        if getattr(df.index, "tz", None) is not None:
-            prev_day_start = prev_day_start.tz_localize(df.index.tz)
-            prev_day_end = prev_day_end.tz_localize(df.index.tz)
-        prev_day_bars = df[(df.index >= prev_day_start) & (df.index < prev_day_end)]
-        pdh = float(prev_day_bars["high"].max()) if not prev_day_bars.empty else None
-        pdl = float(prev_day_bars["low"].min()) if not prev_day_bars.empty else None
-
-        for idx in range(len(df)):
-            r = df.iloc[idx]
-            bar_time = df.index[idx]
-            if hasattr(bar_time, "hour"):
-                hour_utc = bar_time.hour
-            else:
-                hour_utc = pd.Timestamp(bar_time).hour
-            session_high, session_low = None, None
-            if use_session:
-                session_name = get_session_for_hour(hour_utc, session_hours)
-                if session_name:
-                    session_high, session_low = get_session_high_low(
-                        df, bar_time, session_name, session_hours
-                    )
-            ext = detect_external_sweep(
-                float(r["open"]), float(r["high"]), float(r["low"]), float(r["close"]),
-                pdh if use_pdh_pdl else None,
-                pdl if use_pdh_pdl else None,
-                session_high,
-                session_low,
-            )
-            if bias == "BULLISH":
-                if ext.get("sweep_pdl") or ext.get("sweep_session_low"):
-                    return True
-                if use_internal and r.get("sweep_low_internal"):
-                    return True
-            else:
-                if ext.get("sweep_pdh") or ext.get("sweep_session_high"):
-                    return True
-                if use_internal and r.get("sweep_high_internal"):
-                    return True
-        return False
 
     def detectLiquiditySweep(
         self,
@@ -527,16 +450,14 @@ class VesterStrategy(BaseStrategy):
             return {"close": True}
         return None
 
-    def run_backtest(self, only_last_n_bars: Optional[int] = None) -> pd.DataFrame:
+    def run_backtest(self) -> pd.DataFrame:
         """
         Run full backtest: loop over 1M bars, apply HTF bias -> 5M setup -> 1M entry.
         Enforces filters (spread, volatility, news) and risk limits.
-        If only_last_n_bars is set (e.g. in live), only consider the last N 1M bars so we signal current setups.
         """
         if self.df_h1.empty or self.df_m5.empty or self.df_m1.empty:
             return pd.DataFrame()
 
-        self._live_setup_status = None  # Set when we have 5M setup but no 1M trigger (for live log)
         signals = []
         entry_df = self.df_m1
         atr_series = _atr(entry_df, 14)
@@ -551,14 +472,9 @@ class VesterStrategy(BaseStrategy):
         if max_per_setup is None:
             max_per_setup = 1 if getattr(vc, "VESTER_ONE_SIGNAL_PER_SETUP", True) else None
         trades_per_5m_setup: Dict = {}
-        trades_per_sl_key: Dict[str, int] = {}  # one trade per unique SL level (avoids cluster losses when same zone)
-        max_per_sl = getattr(config, "VESTER_MAX_TRADES_PER_SL_LEVEL", 1)
         apply_limits = getattr(config, "BACKTEST_APPLY_TRADE_LIMITS", False)
 
-        start_i = 100
-        if only_last_n_bars is not None and only_last_n_bars > 0:
-            start_i = max(100, len(entry_df) - only_last_n_bars)
-        for i in range(start_i, len(entry_df)):
+        for i in range(100, len(entry_df)):
             idx = entry_df.index[i]
             current_time = idx if hasattr(idx, "hour") else pd.Timestamp(idx)
             
@@ -643,13 +559,6 @@ class VesterStrategy(BaseStrategy):
             struct_shift, bos_idx = self.detectStructureShift(df_m5_slice)
             if struct_shift != bias:
                 continue
-            bos_time = df_m5_slice.index[bos_idx] if bos_idx is not None and bos_idx < len(df_m5_slice) else None
-            bos_row = df_m5_slice.iloc[bos_idx] if bos_idx is not None and bos_idx < len(df_m5_slice) else None
-            broken_level = None
-            if bos_row is not None:
-                broken_level = bos_row.get("bos_bull_broken_level") if struct_shift == "BULLISH" else bos_row.get("bos_bear_broken_level")
-                if broken_level is not None and pd.isna(broken_level):
-                    broken_level = None
 
             entry_zone_top, entry_zone_bottom = None, None
             current_ob = None
@@ -685,20 +594,6 @@ class VesterStrategy(BaseStrategy):
             if entry_zone_top is None:
                 continue
 
-            # Live: record 5M setup and what we need on 1M (cleared when we trigger)
-            if only_last_n_bars is not None:
-                direction = "SELL" if bias == "BEARISH" else "BUY"
-                if direction == "SELL":
-                    wait_1m = "price in zone + bearish candle | or 1M BOS down in zone | or sweep high + bearish displacement"
-                else:
-                    wait_1m = "price in zone + bullish candle | or 1M BOS up in zone | or sweep low + bullish displacement"
-                self._live_setup_status = {
-                    "direction": direction,
-                    "zone_top": entry_zone_top,
-                    "zone_bottom": entry_zone_bottom,
-                    "waiting_1m": wait_1m,
-                }
-
             df_m1_slice = entry_df.iloc[: i + 1]
             if len(df_m1_slice) < 20:
                 continue
@@ -714,24 +609,10 @@ class VesterStrategy(BaseStrategy):
             )
             if not triggered or entry_price is None:
                 continue
-            if only_last_n_bars is not None:
-                self._live_setup_status = None  # We triggered; clear waiting message
-            if getattr(config, "VESTER_USE_CONFIRMED_BOS_ONLY", False) and bos_time is not None and broken_level is not None and not pd.isna(broken_level):
-                df_m1_up_to = self.df_m1[self.df_m1.index <= idx]
-                if not is_bos_still_valid_on_entry_df(df_m1_up_to, bos_time, idx, float(broken_level), struct_shift):
-                    continue
 
             m5_bar_ts = idx.floor("5min") if hasattr(idx, "floor") else pd.Timestamp(idx).floor("5min")
             if max_per_setup is not None and trades_per_5m_setup.get(m5_bar_ts, 0) >= max_per_setup:
                 continue
-            if getattr(config, "BACKTEST_APPLY_SIGNAL_MAX_AGE", False):
-                max_age_min = getattr(config, "VESTER_SIGNAL_MAX_AGE_MINUTES", None)
-                if max_age_min is not None:
-                    entry_ts = pd.Timestamp(idx)
-                    sig_ts = pd.Timestamp(m5_bar_ts)
-                    age_min = (entry_ts - sig_ts).total_seconds() / 60.0
-                    if age_min > max_age_min:
-                        continue
 
             if getattr(config, "USE_ZONE_DIRECTION_FILTER", False):
                 lookback = getattr(config, "ZONE_DIRECTION_FVG_LOOKBACK", 30)
@@ -817,15 +698,6 @@ class VesterStrategy(BaseStrategy):
                     if sl <= entry_price:
                         sl = entry_price + pip
 
-            min_sl_pips = config.get_symbol_config(self.symbol, "VESTER_MIN_SL_PIPS") or getattr(config, "VESTER_MIN_SL_PIPS", 5.0)
-            min_sl_dist = min_sl_pips * pip
-            if bias == "BULLISH":
-                if (entry_price - sl) < min_sl_dist:
-                    sl = entry_price - min_sl_dist
-            else:
-                if (sl - entry_price) < min_sl_dist:
-                    sl = entry_price + min_sl_dist
-
             if bias == "BULLISH":
                 future_highs = self.df_m5[(self.df_m5.index > idx) & (self.df_m5["swing_high"] == True)].head(3)
                 tp = future_highs.iloc[0]["swing_high_price"] if not future_highs.empty else None
@@ -866,16 +738,11 @@ class VesterStrategy(BaseStrategy):
                 ):
                     continue
 
-            sl_key = f"{round(float(sl), 2)}" if ("XAU" in str(self.symbol or "") or "GC" in str(self.symbol or "")) else f"{round(float(sl), 5)}"
-            if max_per_sl is not None and trades_per_sl_key.get(sl_key, 0) >= max_per_sl:
-                continue
-
             htf_label = "1H+4H" if getattr(vc, "REQUIRE_4H_BIAS", False) else "1H"
             reason = f"Vester: {htf_label} {bias} + 5M setup + {trigger_reason}"
             sig = self.placeTrade("BUY" if bias == "BULLISH" else "SELL", entry_price, sl, tp, idx, reason)
             sig["setup_5m"] = m5_bar_ts
             signals.append(sig)
-            trades_per_sl_key[sl_key] = trades_per_sl_key.get(sl_key, 0) + 1
             trades_per_5m_setup[m5_bar_ts] = trades_per_5m_setup.get(m5_bar_ts, 0) + 1
             trades_per_session[session_key] = trades_per_session.get(session_key, 0) + 1
             trades_per_day[day_key] = trades_per_day.get(day_key, 0) + 1

@@ -1,14 +1,14 @@
-"""Trading strategies."""
+"""Trading strategies (vester, vee, trend_vester)."""
 from .base import BaseStrategy
-from .strategy_marvellous import MarvellousStrategy
 from .strategy_vester import VesterStrategy
-from .strategy_follow import FollowStrategy
+from .strategy_vee import VeeStrategy
+from .strategy_trend_vester import TrendVesterStrategy
 from .strategy_test_sl import TestSLStrategy
 
 __all__ = [
     "BaseStrategy",
-    "MarvellousStrategy",
     "VesterStrategy",
-    "FollowStrategy",
+    "VeeStrategy",
+    "TrendVesterStrategy",
     "TestSLStrategy",
 ]

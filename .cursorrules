@@ -1,0 +1,39 @@
+# Treading-Bot (ICT Trading Bot) Rules
+
+Always apply these rules when working on this project to ensure architectural consistency.
+
+## Project Context
+- **Description**: A Python-based ICT (Inner Circle Trader) trading bot for backtesting (Yahoo/CSV), paper trading, and live execution (MetaTrader 5).
+- **Core Strategy Logic**: Located in `bot/strategies/`.
+- **Indicators**: Functional/stateless helpers in `bot/indicators.py` or `bot/indicators_bos.py`.
+- **Live Engine**: `bot/live_trading.py` (LiveTradingEngine).
+- **Config**: Always check `config.py` for toggles and `.env` for secrets.
+
+## Architectural Patterns
+
+### 1. Indicators (Functional Pattern)
+- Indicators MUST be functions that take a `pd.DataFrame` and return the same `pd.DataFrame` with new columns.
+- Avoid maintaining state inside indicator modules.
+- Use vectorized pandas/numpy for performance.
+
+### 2. Strategies (Class-based Pattern)
+- Strategies MUST inherit from `BaseStrategy` (if applicable) or follow the `prepare_data` + `run_backtest` interface.
+- `prepare_data()`: Calls indicator functions to prepare the dataframe.
+- `run_backtest()`: Iterates over the primary timeframe and returns a DataFrame of signals (`time`, `type`, `price`, `sl`, `tp`, `reason`).
+
+### 3. Data Conventions
+- OHLCV columns must be **lowercase**: `open`, `high`, `low`, `close`, `volume`.
+- Index MUST be a Datetime index (timezone-naive preferred for backtests).
+
+### 4. Live Trading Safety
+- **SL is Mandatory**: Every execution signal must have a non-null, valid Stop Loss.
+- **Safety Checks**: The `LiveTradingEngine` enforces daily limits and margin checks.
+
+## Development Workflow
+- **New Strategy**: Add class to `bot/strategies/`, runner to `bot/backtest/`, and wire into `main.py` and `LiveTradingEngine`.
+- **New Indicator**: Add function to `bot/indicators.py`, then use it in strategy `prepare_data()`.
+
+## Documentation Reference
+- High-level overview: [ONBOARDING.md](ONBOARDING.md)
+- Development details: [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)
+- Live trading specific: [LIVE_TRADING_GUIDE.md](LIVE_TRADING_GUIDE.md)
