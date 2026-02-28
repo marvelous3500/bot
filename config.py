@@ -115,8 +115,8 @@ LIVE_SYMBOLS = {
 # Trading Loop Settings
 LIVE_CHECK_INTERVAL = 5  # Seconds between strategy checks
 # Live only: consider only the last N bars (1 = current bar only, best practice). None = full history (backtest)
-VESTER_LIVE_ONLY_LAST_N_BARS = 3
-VEE_LIVE_ONLY_LAST_N_BARS = 3
+VESTER_LIVE_ONLY_LAST_N_BARS = 8
+VEE_LIVE_ONLY_LAST_N_BARS = 8
 # Backtest only: max minutes between setup bar and entry bar (used when BACKTEST_APPLY_SIGNAL_MAX_AGE=True)
 VESTER_SIGNAL_MAX_AGE_MINUTES = 3
 VEE_SIGNAL_MAX_AGE_MINUTES = 10
