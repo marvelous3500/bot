@@ -239,6 +239,7 @@ class VeeStrategy(BaseStrategy):
         if not setups:
             return pd.DataFrame()
 
+        self._live_setup_status = None
         entry_df = self.df_m1
         signals: List[Dict[str, Any]] = []
         trades_per_session: Dict[str, int] = {}
@@ -297,6 +298,11 @@ class VeeStrategy(BaseStrategy):
             ob_high = setup["ob_high"]
             ob_low = setup["ob_low"]
 
+            if only_last_n_bars is not None:
+                direction = "BUY" if bias == "BULLISH" else "SELL"
+                wait_1m = "price in zone + BOS or FVG (bearish candle for SELL, bullish for BUY)"
+                self._live_setup_status = {"direction": direction, "zone_top": ob_high, "zone_bottom": ob_low, "waiting_1m": wait_1m, "setup_tf": "15M"}
+
             bar = entry_df.iloc[i]
             if not _price_in_zone(bar["low"], bar["high"], ob_high, ob_low):
                 continue
@@ -351,6 +357,8 @@ class VeeStrategy(BaseStrategy):
             if max_per_sl is not None and trades_per_sl_key.get(sl_key, 0) >= max_per_sl:
                 continue
 
+            if only_last_n_bars is not None:
+                self._live_setup_status = None
             signals.append({
                 "time": current_time,
                 "type": direction,

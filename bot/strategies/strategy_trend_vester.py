@@ -42,6 +42,7 @@ class TrendVesterStrategy(VesterStrategy):
         if self.df_h1.empty or self.df_m5.empty or self.df_m1.empty:
             return pd.DataFrame()
 
+        self._live_setup_status = None
         signals = []
         entry_df = self.df_m1
         atr_series = _atr(entry_df, 14)
@@ -147,6 +148,11 @@ class TrendVesterStrategy(VesterStrategy):
             if entry_zone_top is None:
                 continue
 
+            if only_last_n_bars is not None:
+                direction = "SELL" if bias == "BEARISH" else "BUY"
+                wait_1m = "price in zone + bearish candle | or 1M BOS down in zone | or sweep high + bearish displacement" if direction == "SELL" else "price in zone + bullish candle | or 1M BOS up in zone | or sweep low + bullish displacement"
+                self._live_setup_status = {"direction": direction, "zone_top": entry_zone_top, "zone_bottom": entry_zone_bottom, "waiting_1m": wait_1m}
+
             df_m1_slice = entry_df.iloc[: i + 1]
             if len(df_m1_slice) < 20:
                 continue
@@ -162,6 +168,8 @@ class TrendVesterStrategy(VesterStrategy):
             )
             if not triggered or entry_price is None:
                 continue
+            if only_last_n_bars is not None:
+                self._live_setup_status = None
 
             if getattr(config, "VESTER_USE_CONFIRMED_BOS_ONLY", False) and broken_level is not None and not pd.isna(broken_level):
                 from ..indicators_bos import is_bos_still_valid_on_entry_df

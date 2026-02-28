@@ -252,13 +252,15 @@ class LiveTradingEngine:
                 symbol = config.LIVE_SYMBOLS.get('XAUUSD') or 'XAUUSDm'
         return symbol
 
-    def _get_bias_of_day(self, symbol, extra_tf=None):
+    def _get_bias_of_day(self, symbol, extra_tf=None, extra_tfs=None):
         """Compute ICT-style bias from last closed Daily and H1 bars (BOS).
-        If extra_tf is (label, tf_const, count), also compute bias for that timeframe (e.g. 5M for vester, 15M for vee).
+        extra_tf = single (label, tf_const, count). extra_tfs = list of same for multiple (e.g. 5M + 1M).
         Returns {'daily': str, 'h1': str, ...} or None."""
         result = {}
         timeframes = [('daily', TIMEFRAME_D1, 50), ('h1', TIMEFRAME_H1, 200)]
-        if extra_tf is not None:
+        if extra_tfs:
+            timeframes.extend(extra_tfs)
+        elif extra_tf is not None:
             timeframes.append(extra_tf)
         for label, tf_const, count in timeframes:
             df = self.mt5.get_bars(symbol, tf_const, count=count)
@@ -328,6 +330,7 @@ class LiveTradingEngine:
             strat.prepare_data()
             only_last = getattr(config, 'VESTER_LIVE_ONLY_LAST_N_BARS', None)
             signals_df = strat.run_backtest(only_last_n_bars=only_last)
+            self._last_strat = strat
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] vester: 0 signals")
         elif self.strategy_name == 'trend_vester':
@@ -364,6 +367,7 @@ class LiveTradingEngine:
             strat.prepare_data()
             only_last = getattr(config, 'TREND_VESTER_LIVE_ONLY_LAST_N_BARS', None)
             signals_df = strat.run_backtest(only_last_n_bars=only_last)
+            self._last_strat = strat
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] trend_vester: 0 signals")
         elif self.strategy_name == 'test-sl':
@@ -427,6 +431,7 @@ class LiveTradingEngine:
             )
             only_last = getattr(config, 'VEE_LIVE_ONLY_LAST_N_BARS', None)
             signals_df = strat.run_backtest(only_last_n_bars=only_last)
+            self._last_strat = strat
             if getattr(config, 'LIVE_DEBUG', False) and signals_df.empty:
                 print(f"[LIVE_DEBUG] vee: 0 signals")
         else:
@@ -1079,16 +1084,19 @@ class LiveTradingEngine:
                 if getattr(config, "SHOW_BIAS_OF_DAY", False) and not self.paper_mode and self.mt5.connected:
                     sym = self._get_symbol_for_bias()
                     extra_tf = None
+                    extra_tfs = None
                     if self.strategy_name in ('vester', 'trend_vester'):
-                        extra_tf = ('5M', TIMEFRAME_M5, 500)
+                        extra_tfs = [('5M', TIMEFRAME_M5, 500), ('1M', TIMEFRAME_M1, 300)]
                     elif self.strategy_name == 'vee':
-                        extra_tf = ('15M', TIMEFRAME_M15, 500)
-                    bias = self._get_bias_of_day(sym, extra_tf=extra_tf)
+                        extra_tfs = [('15M', TIMEFRAME_M15, 500), ('1M', TIMEFRAME_M1, 300)]
+                    bias = self._get_bias_of_day(sym, extra_tf=extra_tf, extra_tfs=extra_tfs)
                     if bias is not None:
                         line = f"[BIAS OF DAY] Daily: {bias['daily']} | H1: {bias['h1']}"
                         if '5M' in bias:
                             line += f" | 5M: {bias['5M']}"
-                        elif '15M' in bias:
+                        if '1M' in bias:
+                            line += f" | 1M: {bias['1M']}"
+                        if '15M' in bias:
                             line += f" | 15M: {bias['15M']}"
                         print(f"{line} ({sym})")
                 if getattr(config, "MT5_VERBOSE", False):
@@ -1096,6 +1104,16 @@ class LiveTradingEngine:
                 signals = self.run_strategy()
                 if signals:
                     print(f"\n[MT5] Got {len(signals)} signal(s). Attempting execution...")
+                elif self.strategy_name in ('vester', 'trend_vester', 'vee') and getattr(self, '_last_strat', None):
+                    st = getattr(self._last_strat, '_live_setup_status', None)
+                    if st:
+                        z_top = st.get('zone_top')
+                        z_bot = st.get('zone_bottom')
+                        direction = st.get('direction', '')
+                        wait = st.get('waiting_1m', '')
+                        setup_tf = st.get('setup_tf', '5M')
+                        if z_top is not None and z_bot is not None:
+                            print(f"[SETUP] {setup_tf} setup: {direction} zone {z_bot:.2f}-{z_top:.2f} | 1M: {wait}")
                 for signal in signals:
                     # Skip signals that would fail SL validation (e.g. strategy emitted SL on wrong side)
                     valid, sl_reason = self._validate_signal_sl(signal)
