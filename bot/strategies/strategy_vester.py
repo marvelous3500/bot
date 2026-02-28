@@ -230,78 +230,78 @@ class VesterStrategy(BaseStrategy):
         if bias is None:
             return None, None
 
-        if getattr(vc, "REQUIRE_H1_LIQUIDITY_SWEEP", False):
-            if not self._h1_has_liquidity_sweep(df, bias):
-                return None, None
-
-        if not getattr(vc, "REQUIRE_HTF_ZONE_CONFIRMATION", True):
+        need_zone = getattr(vc, "REQUIRE_HTF_ZONE_CONFIRMATION", True)
+        need_sweep = getattr(vc, "REQUIRE_H1_LIQUIDITY_SWEEP", False)
+        if not need_zone and not need_sweep:
             return bias, {"zone_type": "BOS_ONLY"}
 
-        wick_pct = vc.REJECTION_WICK_RATIO
-        body_pct = vc.REJECTION_BODY_RATIO
-        ob_lookback = vc.OB_LOOKBACK
+        zone_found = False
+        zone_proof = None
+        if need_zone:
+            wick_pct = vc.REJECTION_WICK_RATIO
+            body_pct = vc.REJECTION_BODY_RATIO
+            ob_lookback = vc.OB_LOOKBACK
+            for i in range(len(df) - 1, max(0, len(df) - vc.FVG_LOOKBACK), -1):
+                row = df.iloc[i]
+                zone_top, zone_bottom = None, None
+                zone_type = None
 
-        for i in range(len(df) - 1, max(0, len(df) - vc.FVG_LOOKBACK), -1):
-            row = df.iloc[i]
-            zone_top, zone_bottom = None, None
-            zone_type = None
+                if row.get("fvg_bull") and bias == "BULLISH":
+                    zone_bottom = df.iloc[i - 2]["high"]
+                    zone_top = row["low"]
+                    zone_type = "FVG"
+                elif row.get("fvg_bear") and bias == "BEARISH":
+                    zone_top = df.iloc[i - 2]["low"]
+                    zone_bottom = row["high"]
+                    zone_type = "FVG"
 
-            if row.get("fvg_bull") and bias == "BULLISH":
-                zone_bottom = df.iloc[i - 2]["high"]
-                zone_top = row["low"]
-                zone_type = "FVG"
-            elif row.get("fvg_bear") and bias == "BEARISH":
-                zone_top = df.iloc[i - 2]["low"]
-                zone_bottom = row["high"]
-                zone_type = "FVG"
+                if zone_top is None:
+                    bos_bar = None
+                    for k in range(i, max(0, i - 10), -1):
+                        if df.iloc[k].get("bos_bull") and bias == "BULLISH":
+                            bos_bar = k
+                            break
+                        if df.iloc[k].get("bos_bear") and bias == "BEARISH":
+                            bos_bar = k
+                            break
+                    if bos_bar is not None:
+                        ob = identify_order_block(df, bos_bar, ob_lookback=ob_lookback)
+                        if ob is not None and ob.get("direction") == bias:
+                            zone_top, zone_bottom = ob["high"], ob["low"]
+                            zone_type = "OB"
 
-            if zone_top is None:
-                bos_bar = None
-                for k in range(i, max(0, i - 10), -1):
-                    if df.iloc[k].get("bos_bull") and bias == "BULLISH":
-                        bos_bar = k
+                if zone_top is None or zone_bottom is None:
+                    continue
+
+                for j in range(i, min(len(df), i + 20)):
+                    if j >= len(df):
                         break
-                    if df.iloc[k].get("bos_bear") and bias == "BEARISH":
-                        bos_bar = k
+                    r = df.iloc[j]
+                    rng = r["high"] - r["low"]
+                    if rng <= 0:
+                        continue
+                    touched = (zone_bottom <= r["low"] <= zone_top) or (zone_bottom <= r["high"] <= zone_top)
+                    if not touched:
+                        continue
+                    lower_wick = min(r["open"], r["close"]) - r["low"]
+                    upper_wick = r["high"] - max(r["open"], r["close"])
+                    body = abs(r["close"] - r["open"])
+                    if bias == "BULLISH" and (lower_wick / rng >= wick_pct or (body / rng >= body_pct and r["close"] > r["open"])):
+                        zone_found = True
+                        zone_proof = {"zone_top": zone_top, "zone_bottom": zone_bottom, "zone_type": zone_type, "bar_idx": j, "timestamp": df.index[j]}
                         break
-                if bos_bar is not None:
-                    ob = identify_order_block(df, bos_bar, ob_lookback=ob_lookback)
-                    if ob is not None and ob.get("direction") == bias:
-                        zone_top, zone_bottom = ob["high"], ob["low"]
-                        zone_type = "OB"
-
-            if zone_top is None or zone_bottom is None:
-                continue
-
-            for j in range(i, min(len(df), i + 20)):
-                if j >= len(df):
+                    if bias == "BEARISH" and (upper_wick / rng >= wick_pct or (body / rng >= body_pct and r["close"] < r["open"])):
+                        zone_found = True
+                        zone_proof = {"zone_top": zone_top, "zone_bottom": zone_bottom, "zone_type": zone_type, "bar_idx": j, "timestamp": df.index[j]}
+                        break
+                if zone_found:
                     break
-                r = df.iloc[j]
-                rng = r["high"] - r["low"]
-                if rng <= 0:
-                    continue
-                touched = (zone_bottom <= r["low"] <= zone_top) or (zone_bottom <= r["high"] <= zone_top)
-                if not touched:
-                    continue
-                lower_wick = min(r["open"], r["close"]) - r["low"]
-                upper_wick = r["high"] - max(r["open"], r["close"])
-                body = abs(r["close"] - r["open"])
-                if bias == "BULLISH" and (lower_wick / rng >= wick_pct or (body / rng >= body_pct and r["close"] > r["open"])):
-                    return bias, {
-                        "zone_top": zone_top,
-                        "zone_bottom": zone_bottom,
-                        "zone_type": zone_type,
-                        "bar_idx": j,
-                        "timestamp": df.index[j],
-                    }
-                if bias == "BEARISH" and (upper_wick / rng >= wick_pct or (body / rng >= body_pct and r["close"] < r["open"])):
-                    return bias, {
-                        "zone_top": zone_top,
-                        "zone_bottom": zone_bottom,
-                        "zone_type": zone_type,
-                        "bar_idx": j,
-                        "timestamp": df.index[j],
-                    }
+
+        sweep_found = self._h1_has_liquidity_sweep(df, bias) if need_sweep else False
+        if zone_found:
+            return bias, zone_proof
+        if need_sweep and sweep_found:
+            return bias, {"zone_type": "H1_SWEEP"}
         return None, None
 
     def _h1_has_liquidity_sweep(

@@ -115,8 +115,8 @@ LIVE_SYMBOLS = {
 # Trading Loop Settings
 LIVE_CHECK_INTERVAL = 5  # Seconds between strategy checks
 # Live only: consider only the last N bars (1 = current bar only, best practice). None = full history (backtest)
-VESTER_LIVE_ONLY_LAST_N_BARS = 1
-VEE_LIVE_ONLY_LAST_N_BARS = 1
+VESTER_LIVE_ONLY_LAST_N_BARS = 3
+VEE_LIVE_ONLY_LAST_N_BARS = 3
 # Backtest only: max minutes between setup bar and entry bar (used when BACKTEST_APPLY_SIGNAL_MAX_AGE=True)
 VESTER_SIGNAL_MAX_AGE_MINUTES = 3
 VEE_SIGNAL_MAX_AGE_MINUTES = 10
@@ -227,7 +227,7 @@ TREND_VESTER_BACKTEST_SYMBOL = 'GC=F'
 TREND_VESTER_LIVE_SYMBOL = 'XAUUSDm'
 TREND_VESTER_MAX_TRADES_PER_SETUP = 3
 TREND_VESTER_MAX_TRADES_PER_SESSION = 5
-TREND_VESTER_LIVE_ONLY_LAST_N_BARS = 1
+TREND_VESTER_LIVE_ONLY_LAST_N_BARS = 3
 
 # VeeStrategy: 1H bias -> 15m CHOCH -> OB+FVG -> entry on return to OB zone; SL beyond OB, TP 3R
 VEE_BACKTEST_SYMBOL = 'GC=F'

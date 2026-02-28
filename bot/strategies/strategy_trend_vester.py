@@ -19,14 +19,19 @@ class TrendVesterStrategy(VesterStrategy):
     """
 
     def _get_trend_bias(self, df_h1_slice: pd.DataFrame) -> Optional[str]:
-        """Current trend from last H1 BOS only. No zone confirmation, no liquidity sweep."""
+        """Current trend from most recent H1 BOS in lookback. No zone confirmation, no liquidity sweep."""
         if df_h1_slice is None or df_h1_slice.empty or len(df_h1_slice) < 3:
             return None
-        last = df_h1_slice.iloc[-1]
-        if last.get("bos_bull"):
-            return "BULLISH"
-        if last.get("bos_bear"):
-            return "BEARISH"
+        end = len(df_h1_slice)
+        lookback = min(50, end)
+        for i in range(end - 1, max(0, end - lookback) - 1, -1):
+            if i < 0:
+                break
+            row = df_h1_slice.iloc[i]
+            if row.get("bos_bull"):
+                return "BULLISH"
+            if row.get("bos_bear"):
+                return "BEARISH"
         return None
 
     def run_backtest(self, only_last_n_bars: Optional[int] = None) -> pd.DataFrame:
